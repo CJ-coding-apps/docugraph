@@ -9,6 +9,13 @@ Embeddings reuse the docugraph embedder (fastembed by default) via
 GraphitiEmbedderAdapter, so graph ingestion needs no embedding service —
 only the entity-extraction LLM (Graphiti design).
 
+Graphiti also wants a cross-encoder for search reranking; its default
+(OpenAIRerankerClient) requires an OpenAI key even in an Ollama-only setup,
+and its only bundled offline alternative (BGERerankerClient) pulls in
+sentence-transformers/torch. We supply NoopCrossEncoder so graph ingestion
+works offline with no key and no implicit large download — consistent with
+docugraph's opt-in reranking philosophy.
+
 Uses the standalone LLM abstraction from docugraph.core.llm.
 """
 
@@ -26,9 +33,40 @@ from docugraph.core.embeddings import EmbeddingProviderBase, get_embedder
 from docugraph.core.llm import get_graphiti_llm_client
 from docugraph.core.models import Entity, EntityType, RelationshipType
 
+# Graphiti 0.30 validates injected clients with pydantic is_instance_of, so
+# our adapters must actually subclass its base classes (duck-typing no longer
+# passes). graphiti-core is a hard dependency; the guard only keeps the module
+# importable if it is somehow absent, matching the lazy-degradation elsewhere.
+try:
+    from graphiti_core.cross_encoder.client import CrossEncoderClient as _CrossEncoderBase
+    from graphiti_core.embedder.client import EmbedderClient as _EmbedderBase
+except ImportError:  # pragma: no cover - graphiti-core is a hard dependency
+    _EmbedderBase = object  # type: ignore[assignment,misc]
+    _CrossEncoderBase = object  # type: ignore[assignment,misc]
 
-class GraphitiEmbedderAdapter:
-    """Duck-typed Graphiti EmbedderClient backed by a docugraph embedder.
+
+class NoopCrossEncoder(_CrossEncoderBase):
+    """Graphiti CrossEncoderClient that preserves input order (no reranking).
+
+    Graphiti's default cross-encoder (OpenAIRerankerClient) needs an OpenAI
+    key, and its offline BGERerankerClient needs sentence-transformers/torch.
+    Neither fits a torch-free, key-optional setup, so this no-op keeps graph
+    search working: it returns passages in their original order with a simple
+    descending pseudo-score. Retrieval relevance still comes from the
+    embedding + graph-distance search; only the extra rerank step is skipped.
+    """
+
+    async def rank(
+        self,
+        query: str,  # noqa: ARG002 -- interface-mandated; no-op ignores the query
+        passages: list[str],
+    ) -> list[tuple[str, float]]:
+        n = len(passages)
+        return [(passage, float(n - i)) for i, passage in enumerate(passages)]
+
+
+class GraphitiEmbedderAdapter(_EmbedderBase):
+    """Graphiti EmbedderClient backed by a docugraph embedder.
 
     Lets the doc knowledge graph reuse the same embedding backend as the
     vector store (fastembed by default) instead of requiring a separate
@@ -40,9 +78,11 @@ class GraphitiEmbedderAdapter:
     def __init__(self, embedder: EmbeddingProviderBase | None = None):
         self._embedder = embedder or get_embedder()
 
-    async def create(self, input_data: str) -> list[float]:
+    async def create(self, input_data: Any) -> list[float]:
         """Embed a single text (Graphiti uses this for entity names)."""
-        return await asyncio.to_thread(self._embedder.embed_query, input_data)
+        # Graphiti may hand us a str or a list; normalize to the query path.
+        text = input_data if isinstance(input_data, str) else " ".join(map(str, input_data))
+        return await asyncio.to_thread(self._embedder.embed_query, text)
 
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
         """Embed a batch of texts."""
@@ -135,16 +175,25 @@ class GraphStore:
         # Create Kuzu driver
         kuzu_db_path = str(self._db_path / "graphiti.kuzu")
         self._driver = KuzuDriver(db=kuzu_db_path)
+        # graphiti-core 0.30's deprecated Kuzu backend never sets `_database`,
+        # but Graphiti._resolve_request_scope reads it for any non-default
+        # group_id (AttributeError otherwise). Kuzu's clone() is a no-op, so
+        # seeding it with the Kuzu default group id is a safe workaround.
+        if not hasattr(self._driver, "_database"):
+            self._driver._database = ""
 
         # Get LLM client and embedder based on config (LLM-agnostic)
         llm_client = get_graphiti_llm_client()
         embedder = _get_embedder()
 
-        # Initialize Graphiti with custom clients
+        # Initialize Graphiti with custom clients. cross_encoder is set to a
+        # no-op so ingestion doesn't require an OpenAI key (Graphiti's default
+        # reranker) or sentence-transformers/torch (its BGE reranker).
         self._graphiti = Graphiti(
             graph_driver=self._driver,
             llm_client=llm_client,
             embedder=embedder,
+            cross_encoder=NoopCrossEncoder(),
         )
 
         # Build indices for optimal performance
