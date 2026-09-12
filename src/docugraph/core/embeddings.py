@@ -46,26 +46,27 @@ class FastembedEmbedder(EmbeddingProviderBase):
 
     def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", model: Any | None = None):
         self._model_name = model_name
-        self._model = model
         self._dimensions: int | None = None
-        if self._model is None:
+        if model is None:
             # Lazy import so environments without fastembed degrade via the chain.
             from fastembed import TextEmbedding
 
-            self._model = TextEmbedding(model_name)
+            model = TextEmbedding(model_name)
+        # Stored only once non-None so mypy can narrow the attribute.
+        self._model: Any = model
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed a list of texts (passages/documents)."""
         if not texts:
             return []
         # fastembed yields numpy arrays; convert to plain float lists.
-        return [[float(x) for x in vec] for vec in self._model.embed(texts)]
+        vectors: list[list[float]] = [[float(x) for x in vec] for vec in self._model.embed(texts)]
+        return vectors
 
     def embed_query(self, query: str) -> list[float]:
         """Embed a retrieval query, applying the bge instruction prefix."""
-        if "bge" in self._model_name.lower():
-            query = self.BGE_QUERY_PREFIX + query
-        return self.embed([query])[0]
+        prefixed = self.BGE_QUERY_PREFIX + query if "bge" in self._model_name.lower() else query
+        return self.embed([prefixed])[0]
 
     @property
     def dimensions(self) -> int:
@@ -98,7 +99,8 @@ class SentenceTransformersEmbedder(EmbeddingProviderBase):
         from sentence_transformers import SentenceTransformer
 
         self._model = SentenceTransformer(model_name, device=device)
-        self._dimensions = self._model.get_sentence_embedding_dimension()
+        detected = self._model.get_sentence_embedding_dimension()
+        self._dimensions: int = int(detected) if detected is not None else 384
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed a list of texts."""
@@ -108,12 +110,14 @@ class SentenceTransformersEmbedder(EmbeddingProviderBase):
             show_progress_bar=len(texts) > 100,
             convert_to_numpy=True,
         )
-        return embeddings.tolist()
+        vectors: list[list[float]] = embeddings.tolist()
+        return vectors
 
     def embed_query(self, query: str) -> list[float]:
         """Embed a single query."""
         embedding = self._model.encode(query, convert_to_numpy=True)
-        return embedding.tolist()
+        vector: list[float] = embedding.tolist()
+        return vector
 
     @property
     def dimensions(self) -> int:
@@ -335,7 +339,7 @@ def get_embedder(config: EmbeddingConfig | None = None) -> EmbeddingProviderBase
                 pass
         try:
             return FastembedEmbedder(model_name=config.model)
-        except Exception:
+        except Exception:  # nosec B110 -- provider chain: try the next backend
             pass
         try:
             return SentenceTransformersEmbedder(

@@ -1,16 +1,13 @@
 """Unit tests for core data models."""
 
-import pytest
-from datetime import datetime, timezone
-
 from docugraph.core.models import (
-    Document,
     Chunk,
+    Document,
     Entity,
     EntityType,
+    MemoryEntry,
     Relationship,
     RelationshipType,
-    MemoryEntry,
 )
 
 

@@ -14,8 +14,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from docugraph.ingestion.local_files import LocalFileIndexer, LocalFileConfig
 from docugraph.ingestion.chunker import Chunker
+from docugraph.ingestion.local_files import LocalFileConfig, LocalFileIndexer
 from docugraph.storage.vector_store import VectorStore
 
 
@@ -107,7 +107,7 @@ def main():
             print("   No results found")
 
     print("\nDone!")
-    print(f"\nYou can now search with: docugraph search '<your query>'")
+    print("\nYou can now search with: docugraph search '<your query>'")
 
 
 if __name__ == "__main__":

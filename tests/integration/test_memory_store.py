@@ -1,8 +1,9 @@
 """Integration tests for MemoryStore."""
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
 
 from docugraph.storage.memory_store import MemoryStore
 

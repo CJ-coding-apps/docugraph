@@ -1,29 +1,21 @@
-# DocuGraph AI - Root Docker Compose
+# DocuGraph AI v1 - Root Docker Compose
 # Convenience wrapper for docker/docker-compose.yml
 #
 # Usage:
-#   docker-compose up -d          # Start API server
 #   docker-compose run cli crawl https://example.com
+#   docker-compose run cli index local /path/to/docs
 #   docker-compose run cli search "my query"
-#   docker-compose --profile mcp up -d  # Start MCP server too
+#   # MCP stdio server (not a compose service — run it directly):
+#   docker run -i --rm -v docugraph-data:/data/docugraph \
+#     $(docker-compose build -q cli) docugraph-mcp
 
 version: '3.8'
 
 services:
-  docugraph:
-    extends:
-      file: docker/docker-compose.yml
-      service: docugraph
-
   cli:
     extends:
       file: docker/docker-compose.yml
       service: cli
-
-  mcp-server:
-    extends:
-      file: docker/docker-compose.yml
-      service: mcp-server
 
 volumes:
   docugraph-data:

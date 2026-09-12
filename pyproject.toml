@@ -44,8 +44,9 @@ dependencies = [
     "click>=8.1.0",
     "typer>=0.9.0",
 
-    # MCP Protocol
-    "mcp>=1.0.0",
+    # MCP Protocol (<2: the 2.x SDK removed the low-level Server
+    # list_tools/call_tool decorators mcp_server.py is built on)
+    "mcp>=1.0.0,<2",
 
     # Utilities
     "httpx>=0.27.0",
@@ -72,9 +73,10 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
-    "ruff>=0.3.0",
+    "ruff>=0.16.0",
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
+    "types-pyyaml",
 ]
 
 # All optional dependencies
@@ -130,8 +132,27 @@ module = [
     "graphiti_core.*",
     "fastembed.*",
     "mcp.*",
+    "pyarrow.*",
+    "pandas.*",
 ]
 ignore_missing_imports = true
+
+# Optional extras: packages only present when the user installs cloud/ollama.
+[[tool.mypy.overrides]]
+module = [
+    "ollama.*",
+    "cohere.*",
+    "sentence_transformers.*",
+    "anthropic.*",
+]
+ignore_missing_imports = true
+
+# The MCP SDK's list_tools/call_tool decorators are untyped in the pinned
+# release; don't penalize the handlers they wrap.
+[[tool.mypy.overrides]]
+module = "docugraph.interfaces.mcp_server"
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

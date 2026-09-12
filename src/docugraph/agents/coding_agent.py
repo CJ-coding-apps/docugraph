@@ -12,13 +12,13 @@ LLM-agnostic: Works with Ollama (local), OpenAI, or Anthropic.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
-from docugraph.core.config import get_config
-from docugraph.core.llm import get_llm_provider
+from docugraph.core.llm import LLMProviderBase, get_llm_provider
 
 
 class AgentAction(Enum):
@@ -51,7 +51,7 @@ class AgentMessage:
 
     role: str  # "user", "assistant", "system", "tool"
     content: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     tool_name: str | None = None
     tool_result: Any = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -117,13 +117,13 @@ class CodingAgent:
         self._config = config or AgentConfig()
         self._context = context or AgentContext()
         self._messages: list[AgentMessage] = []
-        self._llm = None
-        self._tools: dict[str, Callable] = {}
+        self._llm: LLMProviderBase | None = None
+        self._tools: dict[str, Callable[..., Any]] = {}
 
         # Register default tools
         self._register_default_tools()
 
-    def _get_llm(self) -> Any:
+    def _get_llm(self) -> LLMProviderBase:
         """Lazy load LLM provider."""
         if self._llm is None:
             self._llm = get_llm_provider()
@@ -131,22 +131,22 @@ class CodingAgent:
 
     def _register_default_tools(self) -> None:
         """Register the default tools."""
-        from docugraph.agents.tools import (
-            graph_query,
-            memory_ops,
-            search_code,
-            search_docs,
-        )
+        # Import via explicit submodule paths — the tools package re-exports
+        # same-named functions that shadow the module names.
+        from docugraph.agents.tools.graph_query import graph_query
+        from docugraph.agents.tools.memory_ops import memory_recall, memory_store
+        from docugraph.agents.tools.search_code import search_code
+        from docugraph.agents.tools.search_docs import search_docs
 
         self._tools = {
-            "search_docs": search_docs.search_docs,
-            "search_code": search_code.search_code,
-            "graph_query": graph_query.graph_query,
-            "memory_store": memory_ops.memory_store,
-            "memory_recall": memory_ops.memory_recall,
+            "search_docs": search_docs,
+            "search_code": search_code,
+            "graph_query": graph_query,
+            "memory_store": memory_store,
+            "memory_recall": memory_recall,
         }
 
-    def register_tool(self, name: str, func: Callable) -> None:
+    def register_tool(self, name: str, func: Callable[..., Any]) -> None:
         """Register a custom tool.
 
         Args:
@@ -260,9 +260,7 @@ class CodingAgent:
             if name == "search_docs":
                 tools_desc.append("- search_docs(query, top_k): Search indexed documentation")
             elif name == "search_code":
-                tools_desc.append(
-                    "- search_code(query, language, top_k): Search for code examples"
-                )
+                tools_desc.append("- search_code(query, language, top_k): Search for code examples")
             elif name == "graph_query":
                 tools_desc.append("- graph_query(query): Query knowledge graph for relationships")
             elif name == "memory_store":
@@ -278,8 +276,8 @@ Your capabilities:
 Context:
 - Repository: {self._context.repository}
 - Branch: {self._context.branch}
-- Language: {self._context.language or 'Not specified'}
-- Framework: {self._context.framework or 'Not specified'}
+- Language: {self._context.language or "Not specified"}
+- Framework: {self._context.framework or "Not specified"}
 
 Guidelines:
 1. Search documentation before answering technical questions
@@ -322,9 +320,7 @@ After receiving tool results, synthesize the information into a helpful response
             return AgentAction.GRAPH_QUERY, {"query": user_input}
 
         # Default: Search docs for technical questions
-        if "?" in user_input or any(
-            kw in user_lower for kw in ["explain", "describe", "tell me"]
-        ):
+        if "?" in user_input or any(kw in user_lower for kw in ["explain", "describe", "tell me"]):
             return AgentAction.SEARCH_DOCS, {"query": user_input}
 
         # Otherwise, respond directly
@@ -478,7 +474,7 @@ Provide a clear, helpful response to the user's question."""
             elif tool_name == "graph_query":
                 # Format graph results
                 parts = []
-                for i, item in enumerate(data[:10], 1):
+                for item in data[:10]:
                     if isinstance(item, dict):
                         fact = item.get("fact", str(item))
                         parts.append(f"- {fact}")

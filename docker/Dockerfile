@@ -1,5 +1,8 @@
-# DocuGraph AI - Multi-stage Dockerfile
+# DocuGraph AI v1 - Multi-stage Dockerfile
 # Supports both development and production builds
+#
+# The MCP stdio server is the shipping surface. There are no HTTP ports:
+# clients run the MCP server with `docker run -i`.
 
 # ============================================================
 # Stage 1: Base image with Python and system dependencies
@@ -53,23 +56,19 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
-# Install CPU-only PyTorch first (avoid heavy CUDA deps in Docker)
-RUN uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
-
-# Install dependencies including dev extras
+# Install dependencies including dev extras (no torch anywhere in v1)
 RUN uv pip install --system -e ".[dev]"
 
 # Install Playwright browsers for Crawl4AI
 RUN playwright install chromium --with-deps
 
 # Create data directory
-RUN mkdir -p /data/docugraph
+RUN mkdir -p /data/docugraph /data/docugraph/models
 
-# Set data directory environment variable
-ENV DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph
-
-# Expose ports
-EXPOSE 8000 3000
+# Data + fastembed model cache (bge-small ~130 MB embedder; the opt-in
+# bge-reranker-v2-m3 reranker adds ~2.3 GB if used)
+ENV DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph \
+    FASTEMBED_CACHE_PATH=/data/docugraph/models
 
 # Default command
 CMD ["docugraph", "--help"]
@@ -85,10 +84,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
-# Install CPU-only PyTorch first (avoid heavy CUDA deps in Docker)
-RUN uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
-
-# Install only production dependencies
+# Install only production dependencies (no torch anywhere in v1)
 RUN uv pip install --system -e .
 
 # Install Playwright browsers for Crawl4AI
@@ -96,20 +92,18 @@ RUN playwright install chromium --with-deps
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash docugraph \
-    && mkdir -p /data/docugraph \
+    && mkdir -p /data/docugraph /data/docugraph/models \
     && chown -R docugraph:docugraph /app /data/docugraph
 
 USER docugraph
 
-# Set data directory environment variable
-ENV DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph
+# Data + fastembed model cache, persisted via the mounted data volume
+ENV DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph \
+    FASTEMBED_CACHE_PATH=/data/docugraph/models
 
-# Expose ports
-EXPOSE 8000 3000
-
-# Health check
+# Health check (stdio MCP server has no HTTP port)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD docugraph stats || exit 1
 
-# Default command: run the API server
-CMD ["docugraph", "serve", "--host", "0.0.0.0", "--port", "8000"]
+# Default command: MCP stdio server — run with `docker run -i`
+CMD ["docugraph-mcp"]

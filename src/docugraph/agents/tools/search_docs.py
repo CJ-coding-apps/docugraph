@@ -14,7 +14,7 @@ def search_docs(
     mode: str = "hybrid",
     include_graph: bool = False,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Search indexed documentation.
 
@@ -79,7 +79,7 @@ async def search_docs_async(
     mode: str = "hybrid",
     include_graph: bool = False,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Async version of search_docs.
 
@@ -101,7 +101,7 @@ async def search_docs_async(
         mode=mode,
         include_graph=include_graph,
         _context=_context,
-        **kwargs,
+        **_kwargs,
     )
 
 
@@ -110,7 +110,7 @@ def search_by_source(
     source_pattern: str,
     top_k: int = 10,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Search documentation filtered by source pattern.
 

@@ -10,20 +10,18 @@ Supports:
 
 from __future__ import annotations
 
-import re
 import shutil
-import subprocess
-import tempfile
+import subprocess  # nosec B404 -- git CLI wrapper; argv is a list, never shell
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from docugraph.core.config import get_config
 from docugraph.core.models import Document
 from docugraph.ingestion.chunker import Chunker, ChunkerConfig
 from docugraph.ingestion.local_files import (
-    FileType,
     IndexedFile,
     LocalFileConfig,
     LocalFileIndexer,
@@ -187,7 +185,7 @@ class GitIndexer:
         timeout = timeout or self._config.clone_timeout
 
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 -- argv list, no shell; git only
                 cmd,
                 cwd=cwd,
                 capture_output=True,
@@ -295,7 +293,7 @@ class GitIndexer:
             local_path=local_path,
             branch=self._get_current_branch(local_path),
             commit_hash=self._get_current_commit(local_path),
-            clone_time=datetime.now(timezone.utc),
+            clone_time=datetime.now(UTC),
             metadata={"url": url, "ref": ref},
         )
 
@@ -340,7 +338,7 @@ class GitIndexer:
             local_path=repo_path,
             branch=self._get_current_branch(repo_path),
             commit_hash=self._get_current_commit(repo_path),
-            clone_time=datetime.now(timezone.utc),
+            clone_time=datetime.now(UTC),
             metadata={"updated": True},
         )
 
@@ -398,12 +396,14 @@ class GitIndexer:
         for indexed_file in indexer.index_directory(repo_path, recursive=True):
             # Add repository metadata
             if repo_info:
-                indexed_file.metadata.update({
-                    "repo_url": repo_info.url,
-                    "repo_name": repo_info.name,
-                    "branch": repo_info.branch,
-                    "commit": repo_info.commit_hash,
-                })
+                indexed_file.metadata.update(
+                    {
+                        "repo_url": repo_info.url,
+                        "repo_name": repo_info.name,
+                        "branch": repo_info.branch,
+                        "commit": repo_info.commit_hash,
+                    }
+                )
 
             yield indexed_file
 
@@ -517,9 +517,7 @@ class GitIndexer:
                         local_path=path,
                         branch=self._get_current_branch(path),
                         commit_hash=self._get_current_commit(path),
-                        clone_time=datetime.fromtimestamp(
-                            path.stat().st_mtime, tz=timezone.utc
-                        ),
+                        clone_time=datetime.fromtimestamp(path.stat().st_mtime, tz=UTC),
                     )
                 )
 

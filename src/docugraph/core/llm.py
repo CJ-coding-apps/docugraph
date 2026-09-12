@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -121,7 +121,8 @@ class OllamaLLM(LLMProviderBase):
                 timeout=120.0,
             )
             response.raise_for_status()
-            return response.json()["message"]["content"]
+            content: str = response.json()["message"]["content"]
+            return content
 
     def get_graphiti_client(self) -> Any:
         """Get Graphiti-compatible Ollama client."""
@@ -176,18 +177,19 @@ class OpenAILLM(LLMProviderBase):
             raise ImportError("openai package required: pip install openai") from e
 
         client = AsyncOpenAI(api_key=self._api_key)
-        messages = []
+        messages: list[dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
         response = await client.chat.completions.create(
             model=self._model,
-            messages=messages,
+            messages=cast("Any", messages),
             temperature=temperature or self._temperature,
             max_tokens=max_tokens,
         )
-        return response.choices[0].message.content or ""
+        content: str = response.choices[0].message.content or ""
+        return content
 
     def get_graphiti_client(self) -> Any:
         """Get Graphiti-compatible OpenAI client."""
@@ -248,7 +250,8 @@ class AnthropicLLM(LLMProviderBase):
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature or self._temperature,
         )
-        return response.content[0].text
+        text: str = response.content[0].text
+        return text
 
     def get_graphiti_client(self) -> Any:
         """Get Graphiti-compatible Anthropic client."""
@@ -294,7 +297,7 @@ def get_available_ollama_models(base_url: str = "http://localhost:11434") -> lis
         if response.status_code == 200:
             data = response.json()
             return [model["name"] for model in data.get("models", [])]
-    except Exception:
+    except Exception:  # nosec B110 -- Ollama may be down; empty list is the answer
         pass
     return []
 

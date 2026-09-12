@@ -1,7 +1,7 @@
 """Configuration management for DocuGraph AI."""
 
 import os
-from enum import Enum
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class EmbeddingProvider(str, Enum):
+class EmbeddingProvider(StrEnum):
     """Supported embedding providers."""
 
     AUTO = "auto"
@@ -22,7 +22,7 @@ class EmbeddingProvider(str, Enum):
     COHERE = "cohere"
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     """Supported LLM providers."""
 
     AUTO = "auto"

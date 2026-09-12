@@ -1,7 +1,7 @@
 """Core data models for DocuGraph AI."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
@@ -13,7 +13,7 @@ def generate_id() -> str:
     return str(uuid4())
 
 
-class ContentType(str, Enum):
+class ContentType(StrEnum):
     """Type of document content."""
 
     MARKDOWN = "markdown"
@@ -22,7 +22,7 @@ class ContentType(str, Enum):
     TEXT = "text"
 
 
-class EntityType(str, Enum):
+class EntityType(StrEnum):
     """Type of knowledge graph entity."""
 
     FUNCTION = "function"
@@ -36,7 +36,7 @@ class EntityType(str, Enum):
     DOCUMENTATION = "documentation"
 
 
-class RelationshipType(str, Enum):
+class RelationshipType(StrEnum):
     """Type of relationship between entities."""
 
     CALLS = "CALLS"

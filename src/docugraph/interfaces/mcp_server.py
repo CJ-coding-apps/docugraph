@@ -257,8 +257,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="graph_add",
             description=(
-                "Add content to the knowledge graph. "
-                "Extracts entities and relationships using LLM."
+                "Add content to the knowledge graph. Extracts entities and relationships using LLM."
             ),
             inputSchema={
                 "type": "object",
@@ -342,7 +341,9 @@ async def _search_docs(arguments: dict[str, Any]) -> CallToolResult:
 
         for i, result in enumerate(results, 1):
             chunk = result.chunk
-            source = chunk.metadata.get("source_url") or chunk.metadata.get("source_path", "Unknown")
+            source = chunk.metadata.get("source_url") or chunk.metadata.get(
+                "source_path", "Unknown"
+            )
             title = chunk.metadata.get("title", "Untitled")
             section = chunk.metadata.get("section_title", "")
 
@@ -425,7 +426,9 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
 
         for i, result in enumerate(results, 1):
             chunk = result.chunk
-            source = chunk.metadata.get("source_url") or chunk.metadata.get("source_path", "Unknown")
+            source = chunk.metadata.get("source_url") or chunk.metadata.get(
+                "source_path", "Unknown"
+            )
             title = chunk.metadata.get("title", "Untitled")
 
             output_parts.append(f"\n--- Result {i} (score: {result.score:.4f}) ---")
@@ -617,13 +620,16 @@ async def _memory_recall(arguments: dict[str, Any]) -> CallToolResult:
             keys = store.list_keys(repository=repository, branch=branch)
             if not keys:
                 return CallToolResult(
-                    content=[TextContent(type="text", text=f"No memories found in {repository}/{branch}")],
+                    content=[
+                        TextContent(type="text", text=f"No memories found in {repository}/{branch}")
+                    ],
                 )
             return CallToolResult(
                 content=[
                     TextContent(
                         type="text",
-                        text=f"Memory keys in {repository}/{branch}:\n" + "\n".join(f"  - {k}" for k in keys),
+                        text=f"Memory keys in {repository}/{branch}:\n"
+                        + "\n".join(f"  - {k}" for k in keys),
                     )
                 ],
             )
@@ -636,10 +642,7 @@ async def _memory_recall(arguments: dict[str, Any]) -> CallToolResult:
             )
 
         # Format value
-        if isinstance(value, (dict, list)):
-            value_str = json.dumps(value, indent=2)
-        else:
-            value_str = str(value)
+        value_str = json.dumps(value, indent=2) if isinstance(value, (dict, list)) else str(value)
 
         return CallToolResult(
             content=[
@@ -786,7 +789,7 @@ async def _graph_add(arguments: dict[str, Any]) -> CallToolResult:
         )
 
 
-async def _get_stats(arguments: dict[str, Any]) -> CallToolResult:
+async def _get_stats(_arguments: dict[str, Any]) -> CallToolResult:
     """Get indexing statistics."""
     try:
         from docugraph.core.config import get_config

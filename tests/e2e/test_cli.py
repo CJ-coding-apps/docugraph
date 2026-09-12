@@ -1,8 +1,9 @@
 """End-to-end tests for the CLI interface."""
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
 from click.testing import CliRunner
 
 from docugraph.interfaces.cli import main as cli

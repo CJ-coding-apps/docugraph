@@ -17,14 +17,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from docugraph.core.config import EmbeddingProvider, get_config
 from docugraph.core.embeddings import EmbeddingProviderBase, get_embedder
 from docugraph.core.llm import get_graphiti_llm_client
-from docugraph.core.models import Entity, EntityType, Relationship, RelationshipType
+from docugraph.core.models import Entity, EntityType, RelationshipType
 
 
 class GraphitiEmbedderAdapter:
@@ -118,10 +118,10 @@ class GraphStore:
         self._driver: Any | None = None
         self._initialized = False
 
-    async def _ensure_initialized(self) -> None:
-        """Lazily initialize Graphiti with Kuzu driver and configured LLM/embedder."""
+    async def _ensure_initialized(self) -> Any:
+        """Lazily initialize Graphiti; returns the ready Graphiti instance."""
         if self._initialized:
-            return
+            return self._graphiti
 
         try:
             from graphiti_core import Graphiti
@@ -152,9 +152,11 @@ class GraphStore:
             await self._graphiti.build_indices_and_constraints()
         except Exception as e:
             import logging
+
             logging.debug(f"Could not build indices (may already exist): {e}")
 
         self._initialized = True
+        return self._graphiti
 
     async def close(self) -> None:
         """Close the graph store and release resources."""
@@ -189,16 +191,16 @@ class GraphStore:
         Returns:
             Dict with episode info, extracted entities, and relationships
         """
-        await self._ensure_initialized()
+        graphiti = await self._ensure_initialized()
 
         from graphiti_core.nodes import EpisodeType
 
         episode_type = EpisodeType.json if source_type == "json" else EpisodeType.text
 
         if reference_time is None:
-            reference_time = datetime.now(timezone.utc)
+            reference_time = datetime.now(UTC)
 
-        result = await self._graphiti.add_episode(
+        result = await graphiti.add_episode(
             name=name,
             episode_body=content,
             source=episode_type,
@@ -215,10 +217,7 @@ class GraphStore:
                 {"uuid": n.uuid, "name": n.name, "labels": getattr(n, "labels", [])}
                 for n in result.nodes
             ],
-            "relationships": [
-                {"uuid": e.uuid, "fact": e.fact}
-                for e in result.edges
-            ],
+            "relationships": [{"uuid": e.uuid, "fact": e.fact} for e in result.edges],
         }
 
     async def add_entity(self, entity: Entity) -> str:
@@ -233,7 +232,7 @@ class GraphStore:
         Returns:
             Entity UUID from Graphiti
         """
-        await self._ensure_initialized()
+        graphiti = await self._ensure_initialized()
 
         # Create an episode with structured data representing the entity
         entity_data = {
@@ -244,7 +243,7 @@ class GraphStore:
             "properties": entity.properties,
         }
 
-        result = await self._graphiti.add_episode(
+        result = await graphiti.add_episode(
             name=f"entity_{entity.id}",
             episode_body=json.dumps(entity_data),
             source="json",
@@ -253,7 +252,8 @@ class GraphStore:
             group_id="entities",
         )
 
-        return result.episode.uuid
+        episode_uuid: str = result.episode.uuid
+        return episode_uuid
 
     async def add_entities(self, entities: list[Entity]) -> int:
         """Add multiple entities to the graph.
@@ -288,7 +288,7 @@ class GraphStore:
         Returns:
             List of matching facts/relationships with metadata
         """
-        await self._ensure_initialized()
+        graphiti = await self._ensure_initialized()
 
         search_kwargs: dict[str, Any] = {
             "query": query,
@@ -301,10 +301,11 @@ class GraphStore:
         # Apply entity type filter if specified
         if entity_types:
             from graphiti_core.search.search_filters import SearchFilters
+
             entity_labels = [et.value for et in entity_types]
             search_kwargs["search_filter"] = SearchFilters(entity_labels=entity_labels)
 
-        results = await self._graphiti.search(**search_kwargs)
+        results = await graphiti.search(**search_kwargs)
 
         return [
             {
@@ -315,7 +316,7 @@ class GraphStore:
                 "valid_at": edge.valid_at.isoformat() if edge.valid_at else None,
                 "invalid_at": edge.invalid_at.isoformat() if edge.invalid_at else None,
                 "created_at": edge.created_at.isoformat() if edge.created_at else None,
-                "episodes": [ep for ep in edge.episodes] if hasattr(edge, "episodes") else [],
+                "episodes": list(edge.episodes) if hasattr(edge, "episodes") else [],
             }
             for edge in results
         ]
@@ -375,22 +376,23 @@ class GraphStore:
         Args:
             entity_uuid: UUID of the center entity
             relationship_types: Optional filter by relationship types
-            depth: Traversal depth (not directly supported, uses reranking)
+            depth: How deep to look — widens the result pool per hop
             limit: Maximum results
 
         Returns:
             List of related facts/edges
         """
-        await self._ensure_initialized()
+        graphiti = await self._ensure_initialized()
 
-        # Use center_node_uuid for graph-distance based retrieval
-        results = await self._graphiti.search(
+        # Use center_node_uuid for graph-distance based retrieval; deeper
+        # traversals pull a proportionally wider pool of connected facts.
+        results = await graphiti.search(
             query="*",  # Wildcard to get all connected
             center_node_uuid=entity_uuid,
-            num_results=limit,
+            num_results=limit * max(1, depth),
         )
 
-        return [
+        facts = [
             {
                 "uuid": edge.uuid,
                 "fact": edge.fact,
@@ -399,6 +401,13 @@ class GraphStore:
             }
             for edge in results
         ]
+
+        # Post-filter by relationship type (edge facts carry the type as text).
+        if relationship_types:
+            wanted = {rt.value.lower().replace("_", " ") for rt in relationship_types}
+            facts = [f for f in facts if any(w in f["fact"].lower() for w in wanted)]
+
+        return facts
 
     async def delete_episode(self, episode_uuid: str) -> bool:
         """Delete an episode and its associated data.
@@ -413,7 +422,7 @@ class GraphStore:
 
         # Graphiti doesn't have direct episode deletion in the public API
         raise NotImplementedError(
-            "Episode deletion not yet supported. "
+            f"Episode deletion ({episode_uuid}) not yet supported. "
             "Use clear() to reset the entire graph."
         )
 
@@ -422,6 +431,7 @@ class GraphStore:
         await self.close()
 
         import shutil
+
         if self._db_path.exists():
             shutil.rmtree(self._db_path)
         self._db_path.mkdir(parents=True, exist_ok=True)

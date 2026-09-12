@@ -12,8 +12,8 @@ Usage:
 
 import asyncio
 
-from docugraph.ingestion.crawler import DocCrawler
 from docugraph.ingestion.chunker import Chunker
+from docugraph.ingestion.crawler import DocCrawler
 from docugraph.storage.vector_store import VectorStore
 
 

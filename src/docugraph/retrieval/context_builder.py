@@ -10,7 +10,7 @@ Handles:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from docugraph.core.models import Chunk, MemoryEntry, SearchResult
@@ -18,7 +18,7 @@ from docugraph.retrieval.hybrid_search import HybridResult
 from docugraph.retrieval.reranker import RerankResult
 
 
-class ContextFormat(str, Enum):
+class ContextFormat(StrEnum):
     """Output format for context."""
 
     MARKDOWN = "markdown"  # Markdown with headers and code blocks
@@ -158,10 +158,7 @@ class ContextBuilder:
         sources: list[ContextSource] = []
 
         for result in results:
-            if isinstance(result, SearchResult):
-                chunk = result.chunk
-                score = result.score
-            elif isinstance(result, HybridResult):
+            if isinstance(result, (SearchResult, HybridResult)):
                 chunk = result.chunk
                 score = result.score
             elif isinstance(result, RerankResult):

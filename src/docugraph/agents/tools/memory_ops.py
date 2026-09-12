@@ -6,9 +6,19 @@ and other information scoped by repository and branch.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
+
+def _scope_or_defaults(
+    repository: str | None,
+    branch: str | None,
+    _context: Any,
+) -> tuple[str, str]:
+    """Resolve repository/branch scope: explicit arg, then context, then defaults."""
+    repo = repository or (getattr(_context, "repository", "default") if _context else "default")
+    br = branch or (getattr(_context, "branch", "main") if _context else "main")
+    return str(repo), str(br)
 
 
 def memory_store(
@@ -17,7 +27,7 @@ def memory_store(
     repository: str | None = None,
     branch: str | None = None,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> dict[str, Any]:
     """Store a value in agent memory.
 
@@ -35,12 +45,7 @@ def memory_store(
     from docugraph.storage.memory_store import MemoryStore
 
     # Get scope from context or defaults
-    if _context:
-        repository = repository or getattr(_context, "repository", "default")
-        branch = branch or getattr(_context, "branch", "main")
-    else:
-        repository = repository or "default"
-        branch = branch or "main"
+    repository, branch = _scope_or_defaults(repository, branch, _context)
 
     store = MemoryStore()
     entry = store.set(
@@ -65,7 +70,7 @@ def memory_recall(
     branch: str | None = None,
     default: Any = None,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> Any:
     """Retrieve a value from agent memory.
 
@@ -83,12 +88,7 @@ def memory_recall(
     from docugraph.storage.memory_store import MemoryStore
 
     # Get scope from context or defaults
-    if _context:
-        repository = repository or getattr(_context, "repository", "default")
-        branch = branch or getattr(_context, "branch", "main")
-    else:
-        repository = repository or "default"
-        branch = branch or "main"
+    repository, branch = _scope_or_defaults(repository, branch, _context)
 
     store = MemoryStore()
 
@@ -115,7 +115,7 @@ def memory_delete(
     repository: str | None = None,
     branch: str | None = None,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> dict[str, Any]:
     """Delete a value from agent memory.
 
@@ -132,12 +132,7 @@ def memory_delete(
     from docugraph.storage.memory_store import MemoryStore
 
     # Get scope from context or defaults
-    if _context:
-        repository = repository or getattr(_context, "repository", "default")
-        branch = branch or getattr(_context, "branch", "main")
-    else:
-        repository = repository or "default"
-        branch = branch or "main"
+    repository, branch = _scope_or_defaults(repository, branch, _context)
 
     store = MemoryStore()
     deleted = store.delete(key, repository=repository, branch=branch)
@@ -155,7 +150,7 @@ def memory_search(
     repository: str | None = None,
     branch: str | None = None,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Search memory keys by pattern.
 
@@ -172,12 +167,7 @@ def memory_search(
     from docugraph.storage.memory_store import MemoryStore
 
     # Get scope from context or defaults
-    if _context:
-        repository = repository or getattr(_context, "repository", "default")
-        branch = branch or getattr(_context, "branch", "main")
-    else:
-        repository = repository or "default"
-        branch = branch or "main"
+    repository, branch = _scope_or_defaults(repository, branch, _context)
 
     store = MemoryStore()
     keys = store.list_keys(repository=repository, branch=branch)
@@ -210,7 +200,7 @@ def store_decision(
     reasoning: str,
     context: dict[str, Any] | None = None,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> dict[str, Any]:
     """Store a decision with reasoning for future reference.
 
@@ -225,14 +215,14 @@ def store_decision(
         Stored decision entry
     """
     # Generate a unique key for the decision
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     key = f"decision_{timestamp}"
 
     value = {
         "decision": decision,
         "reasoning": reasoning,
         "context": context or {},
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     return memory_store(key=key, value=value, _context=_context)
@@ -241,7 +231,7 @@ def store_decision(
 def recall_decisions(
     limit: int = 10,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Recall recent decisions.
 
@@ -278,7 +268,7 @@ def store_context(
     context_type: str,
     data: dict[str, Any],
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> dict[str, Any]:
     """Store contextual information.
 
@@ -298,7 +288,7 @@ def store_context(
 def recall_context(
     context_type: str,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> dict[str, Any] | None:
     """Recall contextual information.
 
@@ -311,4 +301,5 @@ def recall_context(
         Context data or None if not found
     """
     key = f"context_{context_type}"
-    return memory_recall(key=key, default=None, _context=_context)
+    result: dict[str, Any] | None = memory_recall(key=key, default=None, _context=_context)
+    return result

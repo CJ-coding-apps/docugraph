@@ -14,7 +14,7 @@ def search_code(
     top_k: int = 10,
     include_context: bool = True,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Search for code examples in indexed documentation.
 
@@ -97,7 +97,7 @@ def search_symbols(
     language: str | None = None,
     top_k: int = 10,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Search for code symbols (functions, classes, methods).
 

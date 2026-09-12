@@ -1,7 +1,5 @@
 """Unit tests for the chunker module."""
 
-import pytest
-
 from docugraph.core.models import Document
 from docugraph.ingestion.chunker import (
     Chunker,

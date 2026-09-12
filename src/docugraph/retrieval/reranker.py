@@ -8,15 +8,16 @@ Supports multiple reranking strategies:
 
 from __future__ import annotations
 
+import contextlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from docugraph.core.models import Chunk, SearchResult
 
 
-class RerankerType(str, Enum):
+class RerankerType(StrEnum):
     """Available reranker types."""
 
     FASTEMBED = "fastembed"
@@ -98,14 +99,15 @@ class FastembedReranker(RerankerBase):
         """
         self._model_name = model_name
         self._score_weight = score_weight
-        self._model = model
-        if self._model is None:
+        if model is None:
             from fastembed.rerank.cross_encoder import TextCrossEncoder
 
             if model_name == self.DEFAULT_MODEL:
                 self._register_v2m3(TextCrossEncoder)
 
-            self._model = TextCrossEncoder(model_name=model_name)
+            model = TextCrossEncoder(model_name=model_name)
+        # Stored only once non-None so mypy can narrow the attribute.
+        self._model: Any = model
 
     @classmethod
     def _register_v2m3(cls, encoder_cls: Any) -> None:
@@ -114,10 +116,10 @@ class FastembedReranker(RerankerBase):
         No-op if the installed fastembed already lists it (upstream
         qdrant/fastembed#494).
         """
-        from fastembed.common.model_description import ModelSource
-
-        source: ModelSource = {"hf": cls._V2M3_HF_REPO}
-        try:
+        source = {"hf": cls._V2M3_HF_REPO}
+        with contextlib.suppress(ValueError):
+            # Already-registered raises ValueError (either natively or by a
+            # prior call) — the end state is identical either way.
             encoder_cls.add_custom_model(
                 model=cls.DEFAULT_MODEL,
                 sources=source,
@@ -127,9 +129,6 @@ class FastembedReranker(RerankerBase):
                 size_in_gb=2.27,
                 additional_files=["onnx/model.onnx_data"],
             )
-        except ValueError:
-            # Already registered (either natively or by a prior call).
-            pass
 
     @property
     def name(self) -> str:
@@ -166,11 +165,9 @@ class FastembedReranker(RerankerBase):
 
         # Combine with original scores
         reranked: list[RerankResult] = []
-        for result, rerank_score in zip(results, normalized_scores):
+        for result, rerank_score in zip(results, normalized_scores, strict=False):
             original_weight = 1.0 - self._score_weight
-            final_score = (
-                self._score_weight * rerank_score + original_weight * result.score
-            )
+            final_score = self._score_weight * rerank_score + original_weight * result.score
             reranked.append(
                 RerankResult(
                     chunk=result.chunk,
@@ -217,9 +214,7 @@ class CohereReranker(RerankerBase):
         self._client: Any = None
 
         if not self._api_key:
-            raise ValueError(
-                "COHERE_API_KEY environment variable required for Cohere reranking"
-            )
+            raise ValueError("COHERE_API_KEY environment variable required for Cohere reranking")
 
     def _ensure_client(self) -> Any:
         """Lazy load Cohere client."""
@@ -229,9 +224,7 @@ class CohereReranker(RerankerBase):
         try:
             import cohere
         except ImportError as e:
-            raise ImportError(
-                "cohere package required. Install with: pip install cohere"
-            ) from e
+            raise ImportError("cohere package required. Install with: pip install cohere") from e
 
         self._client = cohere.Client(self._api_key)
         return self._client
@@ -273,15 +266,14 @@ class CohereReranker(RerankerBase):
         )
 
         # Build results map
-        result_map = {i: r for i, r in enumerate(results)}
+        result_map = dict(enumerate(results))
 
         reranked: list[RerankResult] = []
         for item in response.results:
             original = result_map[item.index]
             original_weight = 1.0 - self._score_weight
             final_score = (
-                self._score_weight * item.relevance_score
-                + original_weight * original.score
+                self._score_weight * item.relevance_score + original_weight * original.score
             )
             reranked.append(
                 RerankResult(
@@ -348,9 +340,7 @@ class LLMReranker(RerankerBase):
                 import concurrent.futures
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(
-                        asyncio.run, self._rerank_async(query, results, top_k)
-                    )
+                    future = executor.submit(asyncio.run, self._rerank_async(query, results, top_k))
                     return future.result()
             return loop.run_until_complete(self._rerank_async(query, results, top_k))
         except RuntimeError:
@@ -374,11 +364,9 @@ class LLMReranker(RerankerBase):
             batch = results[i : i + self._batch_size]
             scores = await self._score_batch(llm, query, batch)
 
-            for result, score in zip(batch, scores):
+            for result, score in zip(batch, scores, strict=False):
                 original_weight = 1.0 - self._score_weight
-                final_score = (
-                    self._score_weight * score + original_weight * result.score
-                )
+                final_score = self._score_weight * score + original_weight * result.score
                 reranked.append(
                     RerankResult(
                         chunk=result.chunk,
@@ -414,8 +402,7 @@ class LLMReranker(RerankerBase):
         """
         # Build prompt for relevance scoring
         documents = "\n\n".join(
-            f"Document {i+1}:\n{r.chunk.content[:500]}"
-            for i, r in enumerate(results)
+            f"Document {i + 1}:\n{r.chunk.content[:500]}" for i, r in enumerate(results)
         )
 
         prompt = f"""Rate the relevance of each document to the query on a scale of 0-10.
@@ -464,7 +451,7 @@ class PassthroughReranker(RerankerBase):
 
     def rerank(
         self,
-        query: str,
+        query: str,  # noqa: ARG002 -- interface-mandated; a passthrough never uses it
         results: list[SearchResult],
         top_k: int | None = None,
     ) -> list[RerankResult]:

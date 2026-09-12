@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 from docugraph.core.config import get_config
 from docugraph.core.models import MemoryEntry
@@ -98,7 +99,7 @@ class MemoryStore:
         Returns:
             The created/updated MemoryEntry
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         context = context or {}
 
         # Serialize value and context
@@ -127,13 +128,23 @@ class MemoryStore:
             else:
                 # Insert new
                 from docugraph.core.models import generate_id
+
                 entry_id = generate_id()
                 conn.execute(
                     """
                     INSERT INTO memories (id, repository, branch, key, value, context, created_at, accessed_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (entry_id, repository, branch, key, value_json, context_json, now.isoformat(), now.isoformat()),
+                    (
+                        entry_id,
+                        repository,
+                        branch,
+                        key,
+                        value_json,
+                        context_json,
+                        now.isoformat(),
+                        now.isoformat(),
+                    ),
                 )
 
             conn.commit()
@@ -180,7 +191,7 @@ class MemoryStore:
                 return default
 
             # Update accessed_at
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             conn.execute(
                 "UPDATE memories SET accessed_at = ? WHERE id = ?",
                 (now.isoformat(), row["id"]),
@@ -216,7 +227,7 @@ class MemoryStore:
                 return None
 
             # Update accessed_at
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             conn.execute(
                 "UPDATE memories SET accessed_at = ? WHERE id = ?",
                 (now.isoformat(), row["id"]),
@@ -429,7 +440,8 @@ class MemoryStore:
                     "SELECT COUNT(*) as cnt FROM memories WHERE repository = ? AND branch = ?",
                     (repository, branch),
                 )
-            return cursor.fetchone()["cnt"]
+            count: int = int(cursor.fetchone()["cnt"])
+            return count
 
     def list_repositories(self) -> list[str]:
         """List all repositories with stored memories.
@@ -438,9 +450,7 @@ class MemoryStore:
             List of repository names
         """
         with self._get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT DISTINCT repository FROM memories ORDER BY repository"
-            )
+            cursor = conn.execute("SELECT DISTINCT repository FROM memories ORDER BY repository")
             return [row["repository"] for row in cursor.fetchall()]
 
     def list_branches(self, repository: str) -> list[str]:
@@ -493,13 +503,14 @@ class MemoryStore:
             if not keep_ids:
                 return 0
 
-            # Delete everything else
+            # Delete everything else (placeholders is a generated "?," list;
+            # all values are parameterized — not user-interpolated SQL)
             placeholders = ",".join("?" * len(keep_ids))
             cursor = conn.execute(
                 f"""
                 DELETE FROM memories
                 WHERE repository = ? AND branch = ? AND id NOT IN ({placeholders})
-                """,
+                """,  # nosec B608
                 (repository, branch, *keep_ids),
             )
             conn.commit()

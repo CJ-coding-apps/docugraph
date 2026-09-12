@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import lancedb
 import pyarrow as pa
@@ -41,17 +40,19 @@ class VectorStore:
 
     def _get_schema(self) -> pa.Schema:
         """Get PyArrow schema for the chunks table."""
-        return pa.schema([
-            pa.field("id", pa.string()),
-            pa.field("document_id", pa.string()),
-            pa.field("content", pa.string()),
-            pa.field("vector", pa.list_(pa.float32(), self._embedder.dimensions)),
-            pa.field("start_char", pa.int64()),
-            pa.field("end_char", pa.int64()),
-            pa.field("metadata", pa.string()),  # JSON string
-            pa.field("created_at", pa.string()),  # ISO format
-            pa.field("embedding_model", pa.string()),  # Model that produced the vectors
-        ])
+        return pa.schema(
+            [
+                pa.field("id", pa.string()),
+                pa.field("document_id", pa.string()),
+                pa.field("content", pa.string()),
+                pa.field("vector", pa.list_(pa.float32(), self._embedder.dimensions)),
+                pa.field("start_char", pa.int64()),
+                pa.field("end_char", pa.int64()),
+                pa.field("metadata", pa.string()),  # JSON string
+                pa.field("created_at", pa.string()),  # ISO format
+                pa.field("embedding_model", pa.string()),  # Model that produced the vectors
+            ]
+        )
 
     def _validate_existing_table(self, table: lancedb.table.Table) -> None:
         """Guard against opening a store embedded with a different model.
@@ -130,7 +131,7 @@ class VectorStore:
 
         if texts_to_embed:
             embeddings = self._embedder.embed(texts_to_embed)
-            for idx, embedding in zip(indices_to_embed, embeddings):
+            for idx, embedding in zip(indices_to_embed, embeddings, strict=False):
                 chunks[idx].embedding = embedding
 
         # Convert to records
@@ -138,17 +139,19 @@ class VectorStore:
 
         records = []
         for chunk in chunks:
-            records.append({
-                "id": chunk.id,
-                "document_id": chunk.document_id,
-                "content": chunk.content,
-                "vector": chunk.embedding,
-                "start_char": chunk.start_char,
-                "end_char": chunk.end_char,
-                "metadata": json.dumps(chunk.metadata),
-                "created_at": chunk.created_at.isoformat(),
-                "embedding_model": self._embedder.model_name,
-            })
+            records.append(
+                {
+                    "id": chunk.id,
+                    "document_id": chunk.document_id,
+                    "content": chunk.content,
+                    "vector": chunk.embedding,
+                    "start_char": chunk.start_char,
+                    "end_char": chunk.end_char,
+                    "metadata": json.dumps(chunk.metadata),
+                    "created_at": chunk.created_at.isoformat(),
+                    "embedding_model": self._embedder.model_name,
+                }
+            )
 
         table.add(records)
         return len(records)
@@ -195,7 +198,9 @@ class VectorStore:
                 id=row["id"],
                 document_id=row["document_id"],
                 content=row["content"],
-                embedding=row["vector"].tolist() if hasattr(row["vector"], "tolist") else row["vector"],
+                embedding=row["vector"].tolist()
+                if hasattr(row["vector"], "tolist")
+                else row["vector"],
                 start_char=row["start_char"],
                 end_char=row["end_char"],
                 metadata=json.loads(row["metadata"]) if row["metadata"] else {},
@@ -214,16 +219,14 @@ class VectorStore:
         self,
         query: str,
         top_k: int = 10,
-        vector_weight: float = 0.7,
-        text_weight: float = 0.3,
+        filter_expr: str | None = None,
     ) -> list[SearchResult]:
-        """Hybrid search combining vector and full-text search.
+        """Hybrid search combining vector and full-text search (LanceDB-native fusion).
 
         Args:
             query: Search query text.
             top_k: Number of results to return.
-            vector_weight: Weight for vector search scores.
-            text_weight: Weight for text search scores.
+            filter_expr: Optional SQL-like filter expression.
 
         Returns:
             List of search results with combined scores.
@@ -235,14 +238,13 @@ class VectorStore:
 
         # LanceDB hybrid search
         try:
-            results = (
-                table.search(query_embedding, query_type="hybrid")
-                .limit(top_k)
-                .to_pandas()
-            )
+            search_query = table.search(query_embedding, query_type="hybrid").limit(top_k)
+            if filter_expr:
+                search_query = search_query.where(filter_expr)
+            results = search_query.to_pandas()
         except Exception:
             # Fall back to vector-only search if hybrid not available
-            return self.search(query, top_k)
+            return self.search(query, top_k, filter_expr)
 
         if results.empty:
             return []
@@ -255,7 +257,9 @@ class VectorStore:
                 id=row["id"],
                 document_id=row["document_id"],
                 content=row["content"],
-                embedding=row["vector"].tolist() if hasattr(row["vector"], "tolist") else row["vector"],
+                embedding=row["vector"].tolist()
+                if hasattr(row["vector"], "tolist")
+                else row["vector"],
                 start_char=row["start_char"],
                 end_char=row["end_char"],
                 metadata=json.loads(row["metadata"]) if row["metadata"] else {},
@@ -330,9 +334,7 @@ class VectorStore:
         table = self._ensure_table()
 
         # Count before delete
-        count = len(
-            table.search().where(f"document_id = '{document_id}'").to_pandas()
-        )
+        count = len(table.search().where(f"document_id = '{document_id}'").to_pandas())
 
         table.delete(f"document_id = '{document_id}'")
 
@@ -341,7 +343,7 @@ class VectorStore:
     def count(self) -> int:
         """Get the total number of chunks."""
         table = self._ensure_table()
-        return table.count_rows()
+        return int(table.count_rows())
 
     def clear(self) -> None:
         """Clear all chunks from the store."""

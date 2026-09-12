@@ -13,7 +13,7 @@ async def graph_query(
     num_results: int = 10,
     group_id: str | None = None,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Query the knowledge graph for facts and relationships.
 
@@ -49,7 +49,7 @@ async def graph_add_content(
     group_id: str = "default",
     source_type: str = "text",
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> dict[str, Any]:
     """Add content to the knowledge graph.
 
@@ -86,14 +86,14 @@ async def find_related_entities(
     relationship_type: str | None = None,
     max_depth: int = 2,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Find entities related to a given entity.
 
     Args:
         entity_name: Name of the entity to start from
         relationship_type: Filter by relationship type (USES, DEPENDS_ON, etc.)
-        max_depth: Maximum traversal depth
+        max_depth: How deep to look — widens the result pool per hop
         _context: Agent execution context (injected)
         **kwargs: Additional arguments
 
@@ -105,9 +105,10 @@ async def find_related_entities(
     if relationship_type:
         query = f"What does {entity_name} {relationship_type.lower().replace('_', ' ')}?"
 
+    # Deeper searches pull a proportionally wider pool of graph facts.
     results = await graph_query(
         query=query,
-        num_results=20,
+        num_results=10 * max(1, max_depth),
         _context=_context,
     )
 
@@ -127,7 +128,7 @@ async def get_entity_context(
     entity_name: str,
     include_relationships: bool = True,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> dict[str, Any]:
     """Get comprehensive context about an entity.
 
@@ -180,7 +181,7 @@ def query_entities_sync(
     num_results: int = 10,
     group_id: str | None = None,
     _context: Any = None,
-    **kwargs: Any,
+    **_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Synchronous wrapper for graph_query.
 
@@ -209,9 +210,7 @@ def query_entities_sync(
                 )
                 return future.result()
         else:
-            return loop.run_until_complete(
-                graph_query(query, num_results, group_id, _context)
-            )
+            return loop.run_until_complete(graph_query(query, num_results, group_id, _context))
     except RuntimeError:
         # No event loop, create one
         return asyncio.run(graph_query(query, num_results, group_id, _context))

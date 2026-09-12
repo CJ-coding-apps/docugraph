@@ -3,8 +3,6 @@
 import asyncio
 import hashlib
 from datetime import datetime
-from pathlib import Path
-from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from docugraph.core.config import CrawlerConfig, get_config
@@ -126,7 +124,9 @@ class DocCrawler:
             document = Document(
                 source_url=url,
                 title=title,
-                content=result.markdown.fit_markdown if hasattr(result.markdown, "fit_markdown") else result.markdown,
+                content=result.markdown.fit_markdown
+                if hasattr(result.markdown, "fit_markdown")
+                else result.markdown,
                 content_type=ContentType.MARKDOWN,
                 metadata={
                     "raw_html_length": len(result.html) if result.html else 0,
@@ -182,7 +182,7 @@ class DocCrawler:
         # Parse base domain for filtering
         parsed_start = urlparse(start_url)
         base_domain = parsed_start.netloc
-        base_path = parsed_start.path.rsplit("/", 1)[0] if "/" in parsed_start.path else ""
+        parsed_start.path.rsplit("/", 1)[0] if "/" in parsed_start.path else ""
 
         visited: set[str] = set()
         to_visit: list[str] = [start_url]
@@ -224,7 +224,11 @@ class DocCrawler:
                                 title = line[2:].strip()
                                 break
 
-                    content = result.markdown.fit_markdown if hasattr(result.markdown, "fit_markdown") else result.markdown
+                    content = (
+                        result.markdown.fit_markdown
+                        if hasattr(result.markdown, "fit_markdown")
+                        else result.markdown
+                    )
 
                     document = Document(
                         source_url=url,

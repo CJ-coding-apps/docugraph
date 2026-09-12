@@ -10,20 +10,20 @@ Supports:
 from __future__ import annotations
 
 import fnmatch
-import mimetypes
 import os
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from docugraph.core.models import Document
 from docugraph.ingestion.chunker import Chunker, ChunkerConfig
 
 
-class FileType(str, Enum):
+class FileType(StrEnum):
     """Supported file types."""
 
     MARKDOWN = "markdown"
@@ -38,9 +38,7 @@ class LocalFileConfig:
     """Configuration for local file indexing."""
 
     # File patterns to include
-    include_patterns: list[str] = field(
-        default_factory=lambda: ["*.md", "*.mdx", "*.rst", "*.txt"]
-    )
+    include_patterns: list[str] = field(default_factory=lambda: ["*.md", "*.mdx", "*.rst", "*.txt"])
 
     # File patterns to exclude
     exclude_patterns: list[str] = field(
@@ -193,9 +191,7 @@ class LocalFileIndexer:
         """
         if dir_name in self._config.skip_dirs:
             return True
-        if not self._config.include_hidden and dir_name.startswith("."):
-            return True
-        return False
+        return bool(not self._config.include_hidden and dir_name.startswith("."))
 
     def _should_index_file(self, path: Path) -> bool:
         """Check if file should be indexed.
@@ -245,7 +241,9 @@ class LocalFileIndexer:
             end = content.find("---", 3)
             if end > 0:
                 frontmatter = content[3:end]
-                title_match = re.search(r"^title:\s*[\"']?(.+?)[\"']?\s*$", frontmatter, re.MULTILINE)
+                title_match = re.search(
+                    r"^title:\s*[\"']?(.+?)[\"']?\s*$", frontmatter, re.MULTILINE
+                )
                 if title_match:
                     return title_match.group(1).strip()
 
@@ -368,7 +366,7 @@ class LocalFileIndexer:
             content=content,
             title=title,
             size=stat.st_size,
-            modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+            modified_at=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
             metadata={
                 "encoding": self._config.encoding,
             },
@@ -394,9 +392,7 @@ class LocalFileIndexer:
             raise ValueError(f"Not a directory: {directory}")
 
         if recursive:
-            for root, dirs, files in os.walk(
-                directory, followlinks=self._config.follow_symlinks
-            ):
+            for root, dirs, files in os.walk(directory, followlinks=self._config.follow_symlinks):
                 # Filter directories in place
                 dirs[:] = [d for d in dirs if not self._should_skip_dir(d)]
 
@@ -479,9 +475,7 @@ class LocalFileIndexer:
 
         directory = Path(directory).resolve()
 
-        for root, dirs, files in os.walk(
-            directory, followlinks=self._config.follow_symlinks
-        ):
+        for root, dirs, files in os.walk(directory, followlinks=self._config.follow_symlinks):
             dirs[:] = [d for d in dirs if not self._should_skip_dir(d)]
 
             for filename in files:

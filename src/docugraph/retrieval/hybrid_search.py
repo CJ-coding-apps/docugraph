@@ -9,14 +9,13 @@ Implements multiple fusion strategies:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
-from docugraph.core.config import get_config
 from docugraph.core.models import Chunk, SearchResult
 
 
-class FusionStrategy(str, Enum):
+class FusionStrategy(StrEnum):
     """Strategy for combining search results."""
 
     RRF = "rrf"  # Reciprocal Rank Fusion
@@ -24,7 +23,7 @@ class FusionStrategy(str, Enum):
     INTERLEAVED = "interleaved"  # Alternating results
 
 
-class SearchMode(str, Enum):
+class SearchMode(StrEnum):
     """Search modes available."""
 
     VECTOR = "vector"  # Vector similarity only
@@ -116,7 +115,7 @@ class HybridRetriever:
                 from docugraph.storage.graph_store import GraphStore
 
                 self._graph_store = GraphStore()
-            except Exception:
+            except Exception:  # nosec B110 -- graph is optional; degrade to vector/keyword
                 # Graph store may not be available
                 pass
         return self._graph_store
@@ -169,16 +168,12 @@ class HybridRetriever:
                     import concurrent.futures
 
                     with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(
-                            asyncio.run, self._graph_search(query, top_k * 2)
-                        )
+                        future = executor.submit(asyncio.run, self._graph_search(query, top_k * 2))
                         graph_results = future.result()
                 else:
-                    graph_results = loop.run_until_complete(
-                        self._graph_search(query, top_k * 2)
-                    )
+                    graph_results = loop.run_until_complete(self._graph_search(query, top_k * 2))
                 results_by_source["graph"] = graph_results
-            except Exception:
+            except Exception:  # nosec B110 -- graph search may fail if not configured
                 # Graph search may fail if not configured
                 pass
 
@@ -194,9 +189,9 @@ class HybridRetriever:
         if cfg.deduplicate:
             fused = self._deduplicate(fused)
 
-        # Apply minimum score filter
+        # Apply minimum score filter (fused tuples are (chunk_id, score, sources))
         if cfg.min_score > 0:
-            fused = [r for r in fused if r.score >= cfg.min_score]
+            fused = [r for r in fused if r[1] >= cfg.min_score]
 
         # Retrieve full chunks and build results
         return self._build_results(fused, results_by_source, top_k)
@@ -230,11 +225,11 @@ class HybridRetriever:
             List of (chunk_id, score) tuples
         """
         store = self._get_vector_store()
+        filter_expr = self._build_filter_expr(filters) if filters else None
 
-        # Use hybrid search with keyword emphasis
-        results = store.search_hybrid(
-            query, top_k=top_k, vector_weight=0.0, text_weight=1.0
-        )
+        # Keyword-side source: LanceDB native hybrid (vector+FTS) with any
+        # filters applied, so keyword mode respects the same scoping as vector.
+        results = store.search_hybrid(query, top_k=top_k, filter_expr=filter_expr)
         return [(r.chunk.id, r.score) for r in results]
 
     async def _graph_search(
@@ -346,9 +341,7 @@ class HybridRetriever:
         fused: list[tuple[str, float, list[str]]] = []
 
         # Get iterators for each source
-        iterators = {
-            source: iter(results) for source, results in results_by_source.items()
-        }
+        iterators = {source: iter(results) for source, results in results_by_source.items()}
 
         # Round-robin interleave
         rank = 0
@@ -418,7 +411,7 @@ class HybridRetriever:
         # Build lookup for per-source scores
         source_scores: dict[str, dict[str, float]] = {}
         for source, results in results_by_source.items():
-            source_scores[source] = {doc_id: score for doc_id, score in results}
+            source_scores[source] = dict(results)
 
         # Get chunks from vector store
         store = self._get_vector_store()

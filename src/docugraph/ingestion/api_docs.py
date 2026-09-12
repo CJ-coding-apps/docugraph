@@ -15,14 +15,14 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from docugraph.core.models import Document
 
 
-class APIDocType(str, Enum):
+class APIDocType(StrEnum):
     """Type of API documentation."""
 
     OPENAPI = "openapi"
@@ -210,7 +210,15 @@ class APIDocParser:
         paths = spec.get("paths", {})
         for path, methods in paths.items():
             for method, details in methods.items():
-                if method.upper() not in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
+                if method.upper() not in (
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "DELETE",
+                    "PATCH",
+                    "HEAD",
+                    "OPTIONS",
+                ):
                     continue
 
                 if details.get("deprecated", False) and not self._config.include_deprecated:
@@ -270,7 +278,7 @@ class APIDocParser:
             raw_spec=spec,
         )
 
-    def _parse_openapi_fallback(self, content: str, source_path: str | None) -> ParsedAPISpec:
+    def _parse_openapi_fallback(self, content: str, _source_path: str | None) -> ParsedAPISpec:
         """Fallback OpenAPI parsing using regex.
 
         Args:
@@ -311,7 +319,7 @@ class APIDocParser:
             raw_spec=content,
         )
 
-    def _parse_graphql(self, content: str, source_path: str | None = None) -> ParsedAPISpec:
+    def _parse_graphql(self, content: str, _source_path: str | None = None) -> ParsedAPISpec:
         """Parse GraphQL SDL schema.
 
         Args:
@@ -350,7 +358,9 @@ class APIDocParser:
                 for field_match in re.finditer(field_pattern, body):
                     gql_type.fields.append(
                         {
-                            "description": field_match.group(1).strip() if field_match.group(1) else None,
+                            "description": field_match.group(1).strip()
+                            if field_match.group(1)
+                            else None,
                             "name": field_match.group(2),
                             "type": field_match.group(3).strip(),
                         }
@@ -473,7 +483,7 @@ class APIDocParser:
 
         return documents
 
-    def _endpoint_to_markdown(self, endpoint: APIEndpoint, spec: ParsedAPISpec) -> str:
+    def _endpoint_to_markdown(self, endpoint: APIEndpoint, _spec: ParsedAPISpec) -> str:
         """Convert endpoint to markdown.
 
         Args:
@@ -502,7 +512,9 @@ class APIDocParser:
             for param in endpoint.parameters:
                 required = " (required)" if param.required else ""
                 desc = f" - {param.description}" if param.description else ""
-                parts.append(f"- `{param.name}` ({param.location}, {param.param_type}){required}{desc}")
+                parts.append(
+                    f"- `{param.name}` ({param.location}, {param.param_type}){required}{desc}"
+                )
 
         if endpoint.request_body:
             parts.append("\n### Request Body")
@@ -543,7 +555,9 @@ class APIDocParser:
             parts.append("\n### Properties")
             for prop_name, prop_details in schema.properties.items():
                 required = " (required)" if prop_name in schema.required_fields else ""
-                prop_type = prop_details.get("type", "any") if isinstance(prop_details, dict) else "any"
+                prop_type = (
+                    prop_details.get("type", "any") if isinstance(prop_details, dict) else "any"
+                )
                 desc = prop_details.get("description", "") if isinstance(prop_details, dict) else ""
                 parts.append(f"- `{prop_name}` ({prop_type}){required}: {desc}")
 

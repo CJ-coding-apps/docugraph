@@ -92,7 +92,9 @@ def crawl(url: str, max_pages: int, pattern: str | None, no_cache: bool) -> None
 
             progress.update(task, description="Done!")
 
-        console.print(f"\n[green]Successfully indexed {count} chunks from {len(documents)} pages[/green]")
+        console.print(
+            f"\n[green]Successfully indexed {count} chunks from {len(documents)} pages[/green]"
+        )
         console.print(f"[dim]Total chunks in store: {vector_store.count()}[/dim]")
 
     asyncio.run(_crawl())
@@ -294,7 +296,7 @@ def memory_set(key: str, value: str, repo: str, branch: str) -> None:
     except json.JSONDecodeError:
         parsed_value = value
 
-    entry = store.set(key, parsed_value, repository=repo, branch=branch)
+    store.set(key, parsed_value, repository=repo, branch=branch)
     console.print(f"[green]Stored:[/green] {key} = {value}")
     console.print(f"[dim]Scope: {repo}/{branch}[/dim]")
 
@@ -522,9 +524,13 @@ def graph_add(content: str, name: str | None, group: str, source_type: str) -> N
             console.print(f"[red]Error: {e}[/red]")
             console.print("\n[bold]To use the knowledge graph, you need an LLM:[/bold]")
             console.print("  [cyan]Local (recommended):[/cyan] Install Ollama: https://ollama.ai")
-            console.print("    ollama pull llama3.2 && ollama pull nomic-embed-text && ollama serve")
+            console.print(
+                "    ollama pull llama3.2 && ollama pull nomic-embed-text && ollama serve"
+            )
             console.print("  [cyan]Cloud:[/cyan] Set OPENAI_API_KEY or ANTHROPIC_API_KEY")
-            console.print("\n[dim]For local-only vector search (no LLM), use 'docugraph search'[/dim]")
+            console.print(
+                "\n[dim]For local-only vector search (no LLM), use 'docugraph search'[/dim]"
+            )
         finally:
             await store.close()
 
@@ -568,9 +574,13 @@ def graph_search(query: str, limit: int, group: str | None) -> None:
             console.print(f"[red]Error: {e}[/red]")
             console.print("\n[bold]To use the knowledge graph, you need an LLM:[/bold]")
             console.print("  [cyan]Local (recommended):[/cyan] Install Ollama: https://ollama.ai")
-            console.print("    ollama pull llama3.2 && ollama pull nomic-embed-text && ollama serve")
+            console.print(
+                "    ollama pull llama3.2 && ollama pull nomic-embed-text && ollama serve"
+            )
             console.print("  [cyan]Cloud:[/cyan] Set OPENAI_API_KEY or ANTHROPIC_API_KEY")
-            console.print("\n[dim]For local-only vector search (no LLM), use 'docugraph search'[/dim]")
+            console.print(
+                "\n[dim]For local-only vector search (no LLM), use 'docugraph search'[/dim]"
+            )
         finally:
             await store.close()
 
@@ -791,9 +801,7 @@ def index_git(
         try:
             # Clone repository
             repo_info = indexer.clone(url, name=name, ref=ref)
-            progress.update(
-                task, description=f"Cloned to {repo_info.local_path.name}"
-            )
+            progress.update(task, description=f"Cloned to {repo_info.local_path.name}")
 
             # Stats only mode
             if stats_only:

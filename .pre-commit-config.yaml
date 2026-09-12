@@ -4,27 +4,29 @@
 
 repos:
   # Ruff - Fast Python linter and formatter
+  # rev matches the dev-extra ruff so hook and CI agree (v0.3.0's rules
+  # predate UP038's removal and would flag code modern ruff accepts)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.0
+    rev: v0.16.7
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
         types_or: [python, pyi]
       - id: ruff-format
         types_or: [python, pyi]
 
-  # MyPy - Static type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+  # MyPy - Static type checking.
+  # Runs in the project venv (uv) so mypy sees the real dependency set;
+  # the isolated mirrors-mypy env lacks click/typer/lancedb and produced
+  # false "untyped decorator" errors on every CLI command.
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - pydantic>=2.6.0
-          - pydantic-settings>=2.2.0
-          - types-PyYAML
-        args: [--config-file=pyproject.toml]
+        name: mypy (project venv)
+        entry: uv run mypy src/
+        language: system
         pass_filenames: false
-        entry: mypy src/
+        types_or: [python, pyi]
 
   # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks

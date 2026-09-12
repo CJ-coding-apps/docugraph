@@ -2,13 +2,12 @@
 
 import re
 from dataclasses import dataclass
-from enum import Enum
-from typing import Iterator
+from enum import StrEnum
 
 from docugraph.core.models import Chunk, Document
 
 
-class ChunkingStrategy(str, Enum):
+class ChunkingStrategy(StrEnum):
     """Available chunking strategies."""
 
     FIXED = "fixed"  # Fixed size with overlap
@@ -129,17 +128,19 @@ class Chunker:
                 if section_lines:
                     section_content = "\n".join(section_lines).strip()
                     if section_content:
-                        sections.append((
-                            current_section_start,
-                            current_level,
-                            current_title,
-                            section_content,
-                        ))
+                        sections.append(
+                            (
+                                current_section_start,
+                                current_level,
+                                current_title,
+                                section_content,
+                            )
+                        )
 
                 # Start new section
                 current_level = len(match.group(1))
                 current_title = match.group(2).strip()
-                current_section_start = sum(len(l) + 1 for l in lines[:i])
+                current_section_start = sum(len(line) + 1 for line in lines[:i])
                 section_lines = [line]
             else:
                 section_lines.append(line)
@@ -148,12 +149,14 @@ class Chunker:
         if section_lines:
             section_content = "\n".join(section_lines).strip()
             if section_content:
-                sections.append((
-                    current_section_start,
-                    current_level,
-                    current_title,
-                    section_content,
-                ))
+                sections.append(
+                    (
+                        current_section_start,
+                        current_level,
+                        current_title,
+                        section_content,
+                    )
+                )
 
         # Convert sections to chunks, splitting large ones
         for start, level, title, section_content in sections:
