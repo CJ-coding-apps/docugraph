@@ -72,6 +72,136 @@ class LLMProviderBase(ABC):
         ...
 
 
+def _make_resilient_graphiti_client(llm_config: Any) -> Any:
+    """Build a Graphiti OpenAIGenericClient that tolerates loose JSON shapes.
+
+    Graphiti parses each extraction response as ``Model(**json.loads(text))``.
+    Many OpenAI-compatible endpoints (Ollama/llama.cpp-served models) do not
+    strictly honor the requested ``json_schema`` and return a bare JSON array
+    (e.g. ``[{...}]``) instead of the wrapping object
+    (``{"extracted_entities": [...]}``). That makes ``Model(**list)`` raise
+    ``TypeError: argument after ** must be a mapping, not list``.
+
+    This subclass coerces such a bare list back into the single list-typed
+    field the target ``response_model`` declares, so local-LLM graph
+    extraction works without requiring a strict-schema cloud model.
+    """
+    from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+
+    class ResilientGraphitiClient(OpenAIGenericClient):
+        async def _generate_response(
+            self,
+            messages: Any,
+            response_model: Any = None,
+            max_tokens: Any = None,
+            model_size: Any = None,  # noqa: ARG002 -- Graphiti-mandated signature
+        ) -> dict[str, Any]:
+            # Reimplements the parent request loop with tolerant JSON parsing:
+            # OpenAI-compatible models served via Ollama/llama.cpp often wrap
+            # their output in prose or a ```json fence, or emit a bare list,
+            # which the parent's strict json.loads(...) + Model(**result) path
+            # can't handle. We extract the JSON payload and coerce its shape.
+            import openai as _openai
+            from graphiti_core.llm_client.errors import EmptyResponseError, RateLimitError
+
+            openai_messages: list[dict[str, str]] = []
+            for m in messages:
+                m.content = self._clean_input(m.content)
+                if m.role in ("user", "system"):
+                    openai_messages.append({"role": m.role, "content": m.content})
+
+            token_limit: int = int(max_tokens or self.max_tokens)
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model or "gpt-4.1-mini",
+                    messages=cast("Any", openai_messages),
+                    temperature=self.temperature,
+                    max_tokens=token_limit,
+                    response_format=cast("Any", self._build_response_format(response_model)),
+                )
+                text = response.choices[0].message.content or ""
+                if not text:
+                    raise EmptyResponseError("LLM returned an empty response")
+                parsed = self._loads_tolerant(self._strip_code_fences(text))
+                return self._coerce_to_schema(parsed, response_model)
+            except _openai.RateLimitError as e:
+                raise RateLimitError from e
+
+        @staticmethod
+        def _loads_tolerant(text: str) -> Any:
+            """json.loads, but fall back to the first JSON value embedded in prose."""
+            import json as _json
+            import re as _re
+
+            try:
+                return _json.loads(text)
+            except _json.JSONDecodeError:
+                # Grab the outermost {...} or [...] block a chatty model wrapped
+                # its answer in (e.g. a reasoning preamble before the JSON).
+                match = _re.search(r"(\{.*\}|\[.*\])", text, _re.DOTALL)
+                if match:
+                    return _json.loads(match.group(1))
+                raise
+
+        @classmethod
+        def _coerce_to_schema(cls, result: Any, response_model: Any) -> dict[str, Any]:
+            if response_model is None:
+                return result if isinstance(result, dict) else {}
+
+            # Find the model's sole list-typed field and its item model, if any.
+            list_field, item_model = cls._list_field(response_model)
+
+            # A bare list: attach it to that list field.
+            if isinstance(result, list):
+                if list_field is None:
+                    return {}
+                result = {list_field: result}
+
+            if not isinstance(result, dict):
+                return {}
+
+            # Normalize each list item's keys to the item model's field names
+            # (e.g. models that emit `entity_name` where the schema wants
+            # `name`). Only *missing* fields are filled, so exact-match fields
+            # like `source_entity_name` are never disturbed.
+            if list_field and item_model and isinstance(result.get(list_field), list):
+                result[list_field] = [
+                    cls._normalize_item(item, item_model) if isinstance(item, dict) else item
+                    for item in result[list_field]
+                ]
+            return result
+
+        @staticmethod
+        def _list_field(model: Any) -> tuple[str | None, Any]:
+            import typing
+
+            for name, field in model.model_fields.items():
+                ann = field.annotation
+                if "list" in str(ann).lower():
+                    args = typing.get_args(ann)
+                    item_model = args[0] if args and hasattr(args[0], "model_fields") else None
+                    return name, item_model
+            return None, None
+
+        @staticmethod
+        def _normalize_item(item: dict[str, Any], item_model: Any) -> dict[str, Any]:
+            fields = set(item_model.model_fields)
+            present = {k for k in item if k in fields}
+            out = dict(item)
+            for field_name in fields - present:
+                # Find an unclaimed key that clearly aliases this field, e.g.
+                # `entity_name` -> `name`. Suffix match keeps it conservative.
+                for key in list(out):
+                    if key in fields:
+                        continue
+                    if key.endswith("_" + field_name) or key == field_name:
+                        out[field_name] = out.pop(key)
+                        break
+            return out
+
+    return ResilientGraphitiClient(config=llm_config)
+
+
 class OllamaLLM(LLMProviderBase):
     """Ollama LLM provider for local inference."""
 
@@ -127,7 +257,6 @@ class OllamaLLM(LLMProviderBase):
     def get_graphiti_client(self) -> Any:
         """Get Graphiti-compatible Ollama client."""
         from graphiti_core.llm_client.config import LLMConfig
-        from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
         llm_config = LLMConfig(
             api_key="ollama",
@@ -136,7 +265,7 @@ class OllamaLLM(LLMProviderBase):
             base_url=f"{self._base_url}/v1",
             temperature=self._temperature,
         )
-        return OpenAIGenericClient(config=llm_config)
+        return _make_resilient_graphiti_client(llm_config)
 
 
 class OpenAILLM(LLMProviderBase):

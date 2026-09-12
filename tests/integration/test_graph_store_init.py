@@ -93,6 +93,15 @@ async def test_graph_store_initializes_without_cloud_keys(tmp_path, monkeypatch)
         # The _database workaround must be in place for non-default group_ids.
         assert hasattr(store._driver, "_database")
 
+        # The FTS indexes Graphiti's Kuzu backend fails to create must be
+        # present, or edge-dedup search during add_episode would raise
+        # "Table RelatesToNode_ doesn't have an index with name
+        # edge_name_and_fact".
+        records, _, _ = await store._driver.execute_query("CALL SHOW_INDEXES() RETURN *;")
+        index_names = {row.get("index_name") for row in (records or [])}
+        assert "edge_name_and_fact" in index_names
+        assert "node_name_and_summary" in index_names
+
         # A non-default group_id would previously AttributeError in
         # _resolve_request_scope; with an empty extraction it completes.
         result = await store.add_episode(
@@ -101,6 +110,11 @@ async def test_graph_store_initializes_without_cloud_keys(tmp_path, monkeypatch)
             group_id="default",
         )
         assert "episode_uuid" in result
+
+        # Re-initializing an existing graph must not recreate indexes (no
+        # "already exists" churn) — a second init stays clean.
+        store._initialized = False
+        await store._ensure_fts_indexes()
     finally:
         await store.close()
 

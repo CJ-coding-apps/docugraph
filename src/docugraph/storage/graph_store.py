@@ -204,8 +204,58 @@ class GraphStore:
 
             logging.debug(f"Could not build indices (may already exist): {e}")
 
+        # graphiti-core 0.30's deprecated Kuzu backend does not actually create
+        # the full-text search indexes (build_indices_and_constraints returns
+        # without error but SHOW_INDEXES is empty), so the edge-dedup search
+        # during add_episode fails with "Table RelatesToNode_ doesn't have an
+        # index with name edge_name_and_fact". Create them explicitly here.
+        await self._ensure_fts_indexes()
+
         self._initialized = True
         return self._graphiti
+
+    # Kuzu FTS indexes Graphiti's search path expects (table, index, columns).
+    _KUZU_FTS_INDEXES = (
+        ("Episodic", "episode_content", ("content", "source", "source_description")),
+        ("Entity", "node_name_and_summary", ("name", "summary")),
+        ("Community", "community_name", ("name",)),
+        ("RelatesToNode_", "edge_name_and_fact", ("name", "fact")),
+    )
+
+    async def _ensure_fts_indexes(self) -> None:
+        """Create any missing Kuzu full-text indexes.
+
+        Checks SHOW_INDEXES first and only creates the ones that are absent, so
+        re-initializing an existing graph produces no error-log noise from
+        Graphiti's driver (which logs before raising on "already exists").
+        """
+        import logging
+
+        driver = self._driver
+        assert driver is not None  # noqa: S101 -- set by _ensure_initialized before this runs
+
+        existing: set[str] = set()
+        try:
+            records, _, _ = await driver.execute_query("CALL SHOW_INDEXES() RETURN *;")
+            for row in records or []:
+                name = row.get("index_name")
+                if name:
+                    existing.add(str(name))
+        except Exception as e:
+            logging.debug(f"Could not enumerate existing indexes: {e}")
+
+        for table, index_name, columns in self._KUZU_FTS_INDEXES:
+            if index_name in existing:
+                continue
+            col_list = ", ".join(f"'{c}'" for c in columns)
+            query = f"CALL CREATE_FTS_INDEX('{table}', '{index_name}', [{col_list}]);"
+            try:
+                await driver.execute_query(query)
+            except Exception as e:
+                # "already exists" is a benign race; anything else is non-fatal
+                # (search degrades, ingestion still works).
+                if "already exists" not in str(e).lower():
+                    logging.debug(f"Could not create FTS index {index_name}: {e}")
 
     async def close(self) -> None:
         """Close the graph store and release resources."""
