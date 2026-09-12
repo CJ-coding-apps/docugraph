@@ -14,11 +14,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class EmbeddingProvider(str, Enum):
     """Supported embedding providers."""
 
+    AUTO = "auto"
+    FASTEMBED = "fastembed"
     SENTENCE_TRANSFORMERS = "sentence-transformers"
     OLLAMA = "ollama"
     OPENAI = "openai"
     COHERE = "cohere"
-    HUGGINGFACE = "huggingface"
 
 
 class LLMProvider(str, Enum):
@@ -42,38 +43,18 @@ class StorageConfig(BaseModel):
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
 
-class EmbeddingFallback(BaseModel):
-    """Fallback embedding provider configuration."""
-
-    provider: EmbeddingProvider
-    model: str
-
-
 class EmbeddingConfig(BaseModel):
-    """Embedding configuration (local-first, LLM-agnostic)."""
+    """Embedding configuration (local-first, LLM-agnostic).
 
-    provider: EmbeddingProvider = EmbeddingProvider.SENTENCE_TRANSFORMERS
-    model: str = "all-MiniLM-L6-v2"
+    provider=auto resolves: OpenAI (if OPENAI_API_KEY set and the openai
+    package is installed) -> fastembed (local, pure ONNX, no torch)
+    -> sentence-transformers (only if already installed, requires torch).
+    """
+
+    provider: EmbeddingProvider = EmbeddingProvider.AUTO
+    model: str = "BAAI/bge-small-en-v1.5"  # fastembed default; used by auto/fastembed
     dimensions: int | None = None  # Auto-detected from model
     batch_size: int = 32
-    device: str = "auto"  # auto, cpu, cuda, mps
-    fallback: list[EmbeddingFallback] = Field(default_factory=list)
-
-    def get_device(self) -> str:
-        """Determine the best available device."""
-        if self.device != "auto":
-            return self.device
-
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                return "cuda"
-            if torch.backends.mps.is_available():
-                return "mps"
-        except ImportError:
-            pass
-        return "cpu"
 
 
 class LLMConfig(BaseModel):

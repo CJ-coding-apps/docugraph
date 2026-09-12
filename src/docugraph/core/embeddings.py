@@ -32,13 +32,63 @@ class EmbeddingProviderBase(ABC):
         ...
 
 
+class FastembedEmbedder(EmbeddingProviderBase):
+    """Local embeddings via fastembed (pure ONNX, no torch).
+
+    Default model BAAI/bge-small-en-v1.5 (384 dims). Weights download on
+    first use and are cached under FASTEMBED_CACHE_PATH (default
+    ~/.cache/fastembed).
+    """
+
+    # bge-en-v1.5 models are trained with a query/passage asymmetry; retrieval
+    # queries should carry this instruction prefix for best relevance.
+    BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", model: Any | None = None):
+        self._model_name = model_name
+        self._model = model
+        self._dimensions: int | None = None
+        if self._model is None:
+            # Lazy import so environments without fastembed degrade via the chain.
+            from fastembed import TextEmbedding
+
+            self._model = TextEmbedding(model_name)
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Embed a list of texts (passages/documents)."""
+        if not texts:
+            return []
+        # fastembed yields numpy arrays; convert to plain float lists.
+        return [[float(x) for x in vec] for vec in self._model.embed(texts)]
+
+    def embed_query(self, query: str) -> list[float]:
+        """Embed a retrieval query, applying the bge instruction prefix."""
+        if "bge" in self._model_name.lower():
+            query = self.BGE_QUERY_PREFIX + query
+        return self.embed([query])[0]
+
+    @property
+    def dimensions(self) -> int:
+        if self._dimensions is None:
+            self._dimensions = len(self.embed(["dimension probe"])[0])
+        return self._dimensions
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+
 class SentenceTransformersEmbedder(EmbeddingProviderBase):
-    """Local embeddings using sentence-transformers (default)."""
+    """Local embeddings using sentence-transformers (optional; requires torch).
+
+    Not a managed dependency anymore — works if the user has
+    sentence-transformers installed independently.
+    """
 
     def __init__(
         self,
         model_name: str = "all-MiniLM-L6-v2",
-        device: str = "auto",
+        device: str = "cpu",
         batch_size: int = 32,
     ):
         self._model_name = model_name
@@ -46,11 +96,6 @@ class SentenceTransformersEmbedder(EmbeddingProviderBase):
 
         # Lazy load to avoid import overhead
         from sentence_transformers import SentenceTransformer
-
-        # Determine device
-        if device == "auto":
-            config = get_config()
-            device = config.embeddings.get_device()
 
         self._model = SentenceTransformer(model_name, device=device)
         self._dimensions = self._model.get_sentence_embedding_dimension()
@@ -254,17 +299,21 @@ class CohereEmbedder(EmbeddingProviderBase):
 def get_embedder(config: EmbeddingConfig | None = None) -> EmbeddingProviderBase:
     """Factory function to get the configured embedder.
 
-    Returns the embedder based on configuration, with local-first priority.
+    Local-first priority. With provider=auto: OpenAI (if OPENAI_API_KEY is
+    set and the openai package is installed) -> fastembed (local, pure ONNX)
+    -> sentence-transformers (only if already installed). Explicit providers
+    construct directly and fail loudly on missing packages/keys.
     """
     if config is None:
         config = get_config().embeddings
 
     provider = config.provider
 
-    if provider == EmbeddingProvider.SENTENCE_TRANSFORMERS:
+    if provider == EmbeddingProvider.FASTEMBED:
+        return FastembedEmbedder(model_name=config.model)
+    elif provider == EmbeddingProvider.SENTENCE_TRANSFORMERS:
         return SentenceTransformersEmbedder(
             model_name=config.model,
-            device=config.device,
             batch_size=config.batch_size,
         )
     elif provider == EmbeddingProvider.OLLAMA:
@@ -274,9 +323,28 @@ def get_embedder(config: EmbeddingConfig | None = None) -> EmbeddingProviderBase
     elif provider == EmbeddingProvider.COHERE:
         return CohereEmbedder(model_name=config.model)
     else:
-        # Default to local sentence-transformers
-        return SentenceTransformersEmbedder(
-            model_name=config.model,
-            device=config.device,
-            batch_size=config.batch_size,
-        )
+        # AUTO: resolve the best available backend (CF-v1 try-chain idiom).
+        import os
+
+        if os.environ.get("OPENAI_API_KEY"):
+            try:
+                import openai  # noqa: F401
+
+                return OpenAIEmbedder(model_name="text-embedding-3-small")
+            except ImportError:
+                pass
+        try:
+            return FastembedEmbedder(model_name=config.model)
+        except Exception:
+            pass
+        try:
+            return SentenceTransformersEmbedder(
+                model_name=config.model,
+                batch_size=config.batch_size,
+            )
+        except ImportError as e:
+            raise RuntimeError(
+                "No embedding provider available. Install fastembed "
+                "(pip install fastembed) for local ONNX embeddings, or set "
+                "OPENAI_API_KEY with the 'cloud' extra for OpenAI embeddings."
+            ) from e

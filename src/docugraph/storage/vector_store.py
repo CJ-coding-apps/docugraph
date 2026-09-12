@@ -50,7 +50,43 @@ class VectorStore:
             pa.field("end_char", pa.int64()),
             pa.field("metadata", pa.string()),  # JSON string
             pa.field("created_at", pa.string()),  # ISO format
+            pa.field("embedding_model", pa.string()),  # Model that produced the vectors
         ])
+
+    def _validate_existing_table(self, table: lancedb.table.Table) -> None:
+        """Guard against opening a store embedded with a different model.
+
+        Dimensions alone are insufficient (all-MiniLM-L6-v2 and
+        bge-small-en-v1.5 are both 384-dim but live in different spaces);
+        model identity is checked too.
+        """
+        schema = table.schema
+        vector_field = schema.field("vector")
+        existing_dims = vector_field.type.list_size
+
+        if existing_dims != self._embedder.dimensions:
+            raise RuntimeError(
+                f"Vector store was built with {existing_dims}-dim embeddings, but "
+                f"'{self._embedder.model_name}' produces {self._embedder.dimensions}-dim "
+                "vectors. Run 'docugraph clear' and re-index to rebuild the store."
+            )
+
+        if "embedding_model" not in schema.names:
+            raise RuntimeError(
+                "Vector store predates per-model tracking (no 'embedding_model' column) "
+                "and may have been built with a different model. Run 'docugraph clear' "
+                "and re-index to rebuild the store."
+            )
+
+        # Check the model recorded on the first row (stores are homogeneous).
+        if table.count_rows() > 0:
+            existing_model = table.to_arrow().column("embedding_model")[0].as_py()
+            if existing_model != self._embedder.model_name:
+                raise RuntimeError(
+                    f"Vector store was built with '{existing_model}', but the configured "
+                    f"embedder is '{self._embedder.model_name}'. Run 'docugraph clear' "
+                    "and re-index to rebuild the store."
+                )
 
     def _ensure_table(self) -> lancedb.table.Table:
         """Ensure the table exists and return it."""
@@ -59,6 +95,7 @@ class VectorStore:
 
         if self.TABLE_NAME in self._db.table_names():
             self._table = self._db.open_table(self.TABLE_NAME)
+            self._validate_existing_table(self._table)
         else:
             # Create empty table with schema
             self._table = self._db.create_table(
@@ -110,6 +147,7 @@ class VectorStore:
                 "end_char": chunk.end_char,
                 "metadata": json.dumps(chunk.metadata),
                 "created_at": chunk.created_at.isoformat(),
+                "embedding_model": self._embedder.model_name,
             })
 
         table.add(records)
