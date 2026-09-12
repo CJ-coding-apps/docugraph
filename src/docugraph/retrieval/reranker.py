@@ -116,7 +116,12 @@ class FastembedReranker(RerankerBase):
         No-op if the installed fastembed already lists it (upstream
         qdrant/fastembed#494).
         """
-        source = {"hf": cls._V2M3_HF_REPO}
+        # add_custom_model wants a ModelSource dataclass (not a dict); the
+        # download path reads `model.sources.hf`, so a bare dict crashes at
+        # fetch time even though registration appears to succeed.
+        from fastembed.common.model_description import ModelSource
+
+        source = ModelSource(hf=cls._V2M3_HF_REPO)
         with contextlib.suppress(ValueError):
             # Already-registered raises ValueError (either natively or by a
             # prior call) — the end state is identical either way.

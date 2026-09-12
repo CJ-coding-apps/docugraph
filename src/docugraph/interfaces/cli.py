@@ -143,12 +143,14 @@ def search(query: str, top_k: int, show_content: bool, rerank: bool) -> None:
         results = vector_store.search(query, top_k=top_k)
         if rerank and results:
             progress.update(task, description="Reranking...")
+            from docugraph.core.models import SearchResult
             from docugraph.retrieval.reranker import FastembedReranker
 
             reranker = FastembedReranker()
             reranked = reranker.rerank(query=query, results=results, top_k=top_k)
-            by_id = {r.chunk.id: r for r in results}
-            results = [by_id[rr.chunk.id] for rr in reranked if rr.chunk.id in by_id]
+            # Surface the blended rerank score (not the stale retrieval score),
+            # so displayed scores match the reranked order.
+            results = [SearchResult(chunk=rr.chunk, score=rr.final_score) for rr in reranked]
         progress.update(task, description="Done!")
 
     if not results:

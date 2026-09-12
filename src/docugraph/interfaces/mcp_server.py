@@ -414,8 +414,17 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
                 results=[r.to_search_result() for r in results],
                 top_k=top_k,
             )
+            # Reorder the HybridResult objects (which carry source attribution)
+            # and update each score to the blended rerank score so the reported
+            # score matches the reranked order.
             by_id = {r.chunk.id: r for r in results}
-            results = [by_id[rr.chunk.id] for rr in reranked if rr.chunk.id in by_id]
+            reordered = []
+            for rr in reranked:
+                hit = by_id.get(rr.chunk.id)
+                if hit is not None:
+                    hit.score = rr.final_score
+                    reordered.append(hit)
+            results = reordered
 
         if not results:
             return CallToolResult(

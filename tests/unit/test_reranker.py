@@ -1,7 +1,14 @@
 """Unit tests for the reranker: fastembed cross-encoder + factory default.
 
 Uses an injected fake TextCrossEncoder so no ONNX weights are downloaded.
+The one live-inference test is gated on the ~1.8 GB model already being
+cached, so it never triggers a download in CI.
 """
+
+import os
+from pathlib import Path
+
+import pytest
 
 from docugraph.core.models import Chunk, SearchResult
 from docugraph.retrieval.reranker import (
@@ -10,6 +17,12 @@ from docugraph.retrieval.reranker import (
     RerankerType,
     get_reranker,
 )
+
+
+def _v2m3_cached() -> bool:
+    """True if the bge-reranker-v2-m3 ONNX weights are already on disk."""
+    cache = Path(os.environ.get("FASTEMBED_CACHE_PATH", Path.home() / ".cache" / "fastembed"))
+    return cache.exists() and any("bge-reranker-v2-m3" in p.name.lower() for p in cache.glob("*"))
 
 
 class FakeCrossEncoder:
@@ -91,6 +104,60 @@ class TestRegisterV2M3:
         FastembedReranker._register_v2m3(Encoder)
         FastembedReranker._register_v2m3(Encoder)
         assert calls["n"] == 2
+
+    def test_registration_passes_a_real_modelsource(self):
+        """sources must be a fastembed ModelSource, not a dict.
+
+        fastembed's download path reads `model.sources.hf`, so a plain dict
+        registers fine but crashes at fetch time — regression guard.
+        """
+        from fastembed.common.model_description import ModelSource
+
+        captured = {}
+
+        class Encoder:
+            @staticmethod
+            def add_custom_model(*, sources, **_kwargs):
+                captured["sources"] = sources
+
+        FastembedReranker._register_v2m3(Encoder)
+        assert isinstance(captured["sources"], ModelSource)
+        assert captured["sources"].hf == FastembedReranker._V2M3_HF_REPO
+
+
+@pytest.mark.skipif(
+    not _v2m3_cached(),
+    reason="bge-reranker-v2-m3 (~1.8 GB) not cached; skipping live-inference test",
+)
+class TestFastembedRerankerLive:
+    def test_real_model_reorders_and_scores(self):
+        """End-to-end with the real ONNX cross-encoder (no fakes).
+
+        The clearly on-topic passage must rank first with a higher blended
+        score than an unrelated one — proves registration, download wiring
+        (ModelSource), and inference all work together.
+        """
+        results = [
+            SearchResult(
+                chunk=Chunk(document_id="d", content="Bananas are a yellow tropical fruit."),
+                score=0.5,
+            ),
+            SearchResult(
+                chunk=Chunk(
+                    document_id="d",
+                    content=(
+                        "Reranking reorders search results with a cross-encoder "
+                        "to improve precision."
+                    ),
+                ),
+                score=0.5,
+            ),
+        ]
+        reranker = FastembedReranker()  # default bge-reranker-v2-m3
+        reranked = reranker.rerank("how does reranking improve precision", results)
+
+        assert "Reranking" in reranked[0].chunk.content
+        assert reranked[0].final_score > reranked[1].final_score
 
 
 class TestGetReranker:
