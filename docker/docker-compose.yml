@@ -1,0 +1,100 @@
+# DocuGraph AI - Docker Compose Configuration
+#
+# Usage:
+#   Development:  docker-compose up -d
+#   Production:   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# For macOS x86_64 (Intel Macs) where LanceDB has no native wheels,
+# this is the recommended development approach.
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # DocuGraph API Server
+  # ===========================================
+  docugraph:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
+    container_name: docugraph-api
+    ports:
+      - "8000:8000"   # REST API
+      - "3000:3000"   # MCP Server (optional)
+    volumes:
+      # Mount source code for hot-reloading in development
+      - ../src:/app/src:ro
+      # Persist data between container restarts
+      - docugraph-data:/data/docugraph
+      # Mount config if exists
+      - ~/.docugraph:/home/docugraph/.docugraph:ro
+    environment:
+      - DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph
+      - DOCUGRAPH_SERVER__HOST=0.0.0.0
+      - DOCUGRAPH_SERVER__PORT=8000
+      - DOCUGRAPH_SERVER__DEBUG=true
+      # Optional: API keys for cloud providers
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    command: ["docugraph", "serve", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ===========================================
+  # DocuGraph CLI (for one-off commands)
+  # ===========================================
+  cli:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
+    container_name: docugraph-cli
+    volumes:
+      - ../src:/app/src:ro
+      - ../tests:/app/tests:ro
+      - ../pyproject.toml:/app/pyproject.toml:ro
+      - docugraph-data:/data/docugraph
+      - ~/.docugraph:/home/docugraph/.docugraph:ro
+    environment:
+      - DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    profiles:
+      - cli  # Only start when explicitly requested
+    entrypoint: ["docugraph"]
+    command: ["--help"]
+
+  # ===========================================
+  # DocuGraph MCP Server (for Claude Code integration)
+  # ===========================================
+  mcp-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
+    container_name: docugraph-mcp
+    volumes:
+      - ../src:/app/src:ro
+      - docugraph-data:/data/docugraph
+      - ~/.docugraph:/home/docugraph/.docugraph:ro
+    environment:
+      - DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph
+      - DOCUGRAPH_MCP__TRANSPORT=http
+      - DOCUGRAPH_MCP__PORT=3000
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    ports:
+      - "3001:3000"
+    profiles:
+      - mcp  # Only start when explicitly requested
+    command: ["docugraph", "mcp-server"]
+
+volumes:
+  docugraph-data:
+    driver: local
