@@ -1,34 +1,42 @@
-# DocuGraph AI Quickstart
+# DocuGraph AI v1 Quickstart
 
 Get started with DocuGraph AI in under 5 minutes.
 
 ## Installation
 
-### Using pip
-
-```bash
-pip install docugraph-ai
-```
-
 ### Using uv (recommended)
 
 ```bash
-uv pip install docugraph-ai
+uv pip install docugraph-ai-v1
 ```
+
+### Using pip
+
+```bash
+pip install docugraph-ai-v1
+```
+
+First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
+~130 MB, pure ONNX — no torch) into `FASTEMBED_CACHE_PATH`
+(default `~/.cache/fastembed`).
 
 ### For macOS Intel (x86_64)
 
-LanceDB doesn't have native wheels for macOS Intel. Use Docker instead:
+LanceDB and onnxruntime wheel coverage for macOS Intel is limited on newer
+releases; the dependency pins target versions with x86_64 wheels. If you hit
+install issues, use Docker:
 
 ```bash
-git clone https://github.com/yourorg/docugraph-ai.git
-cd docugraph-ai
-docker-compose up -d
+git clone https://github.com/docugraph/docugraph-ai-v1.git
+cd docugraph-ai-v1
+# Bootstrap an index into the shared volume:
+docker compose run --rm cli index local /path/to/docs
+# Run the MCP stdio server (see the Docker section below)
 ```
 
-## Basic Usage
+## Basic usage
 
-### 1. Index Documentation
+### 1. Index documentation
 
 #### From a URL
 
@@ -40,24 +48,24 @@ docugraph crawl https://fastapi.tiangolo.com/tutorial/first-steps/
 docugraph crawl https://docs.python.org/3/library/asyncio.html --max-pages 10
 ```
 
-#### From Local Files
+#### From local files
 
 ```bash
-# Index a directory
-docugraph index-local ./docs
+# Index a directory (recursive by default)
+docugraph index local ./docs
 
 # Index with specific patterns
-docugraph index-local ./docs --patterns "*.md" --patterns "*.rst"
+docugraph index local ./docs --pattern "*.md" --pattern "*.rst"
 ```
 
-#### From a Git Repository
+#### From a git repository
 
 ```bash
 # Clone and index
-docugraph index-git https://github.com/tiangolo/fastapi.git
+docugraph index git https://github.com/tiangolo/fastapi.git
 
-# Include code files
-docugraph index-git https://github.com/yourorg/yourrepo.git --include-code
+# Include code files, pin a ref
+docugraph index git https://github.com/yourorg/yourrepo.git --ref main --include-code
 ```
 
 ### 2. Search
@@ -66,73 +74,87 @@ docugraph index-git https://github.com/yourorg/yourrepo.git --include-code
 # Basic search
 docugraph search "how to handle async errors"
 
-# With more results
+# More results
 docugraph search "authentication" --top-k 10
+
+# Rerank with the local multilingual cross-encoder
+# (downloads bge-reranker-v2-m3, ~1.8 GB, on first use)
+docugraph search "authentication" --rerank
 ```
 
-### 3. Check Stats
+### 3. Check stats
 
 ```bash
 docugraph stats
 ```
 
-## Using with Claude Code / MCP
+## Using with Claude Code / MCP (primary surface)
 
-DocuGraph AI can be used as an MCP server with Claude Code, Cursor, or other MCP-compatible clients.
+DocuGraph AI is designed to run as an MCP stdio server for Claude Code,
+Cursor, or any MCP-compatible client.
 
 ### Configuration
 
-Add to your MCP configuration (e.g., `~/.claude/claude_desktop_config.json`):
+Add to your MCP configuration (e.g. `~/.claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "docugraph": {
-      "command": "docugraph",
-      "args": ["mcp-server"]
+      "command": "docugraph-mcp",
+      "env": {}
     }
   }
 }
 ```
 
-### Available Tools
+(`docugraph mcp-server` is an equivalent alias if you prefer the subcommand
+form.)
 
-Once configured, you can use natural language to:
+### Available tools
+
+Nine tools are exposed. In natural language you can:
 
 - **Search documentation**: "Search my docs for error handling patterns"
-- **Crawl new content**: "Index the React documentation"
+- **Hybrid search**: "Find auth docs across vector and keyword search"
+- **Crawl / index**: "Index the React documentation", "Index this git repo"
 - **Store context**: "Remember that we're using JWT for auth"
-- **Query the knowledge graph**: "What entities are related to FastAPI?"
+- **Query the doc graph**: "What entities are related to FastAPI?" *(needs an LLM — see [configuration.md](configuration.md))*
 
-## REST API
-
-Start the API server:
+## Documentation knowledge graph
 
 ```bash
-docugraph serve --port 8000
+# Requires an LLM for entity extraction (Ollama, or an OpenAI/Anthropic key).
+docugraph graph add "FastAPI depends on Starlette and Pydantic."
+docugraph graph search "what does FastAPI depend on?"
 ```
 
-### Endpoints
+Graph *embeddings* are served locally by fastembed (no embedding service).
+Only entity **extraction** needs an LLM; without one, graph tools return a
+clear guidance message and vector/keyword search continue to work.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/v1/stats` | GET | Get indexing statistics |
-| `/v1/search` | POST | Search documents |
-| `/v1/search/hybrid` | POST | Hybrid search |
-| `/v1/crawl` | POST | Crawl and index URL |
-| `/v1/index/local` | POST | Index local files |
-| `/v1/index/git` | POST | Index git repository |
-| `/v1/memory` | POST/GET | Store/retrieve memory |
-| `/v1/graph/search` | POST | Query knowledge graph |
-
-### Example: Search
+## Agent memory
 
 ```bash
-curl -X POST http://localhost:8000/v1/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "async error handling", "top_k": 5}'
+docugraph memory set build.status green
+docugraph memory get build.status
+docugraph memory list
 ```
+
+Memory is scoped by repository and branch.
+
+## Docker
+
+The MCP server speaks stdio — it is not an HTTP service. Run it with
+`docker run -i`:
+
+```bash
+IMG=$(docker compose build -q cli)
+docker run -i --rm -v docugraph-data:/data/docugraph "$IMG" docugraph-mcp
+```
+
+Use the `cli` compose service for one-off index bootstrapping into the shared
+`docugraph-data` volume.
 
 ## Python API
 
@@ -141,18 +163,17 @@ from docugraph.storage.vector_store import VectorStore
 from docugraph.ingestion.crawler import DocCrawler
 from docugraph.ingestion.chunker import Chunker
 
-# Initialize
 crawler = DocCrawler()
 chunker = Chunker()
-vector_store = VectorStore()
+vector_store = VectorStore()  # embeds with fastembed by default
 
-# Crawl and index
+
 async def index_docs():
     doc = await crawler.crawl_single("https://example.com/docs")
     chunks = chunker.chunk_document(doc)
     vector_store.add_chunks(chunks)
 
-# Search
+
 results = vector_store.search("my query", top_k=5)
 for result in results:
     print(f"Score: {result.score}")
@@ -164,19 +185,12 @@ for result in results:
 Create `~/.docugraph/config.yaml`:
 
 ```yaml
-# Storage
 storage:
   data_dir: ~/.docugraph/data
 
-# Embeddings (local-first)
 embeddings:
-  provider: sentence-transformers
-  model: all-MiniLM-L6-v2
-
-# Server
-server:
-  host: 0.0.0.0
-  port: 8000
+  provider: auto                 # auto | fastembed | openai | ollama | cohere | sentence-transformers
+  model: BAAI/bge-small-en-v1.5
 ```
 
 Or use environment variables:
@@ -186,8 +200,11 @@ export DOCUGRAPH_STORAGE__DATA_DIR=/custom/path
 export DOCUGRAPH_EMBEDDINGS__MODEL=BAAI/bge-base-en-v1.5
 ```
 
-## Next Steps
+> **Note:** changing the embedding model after indexing will fail loudly at
+> search time (the store records which model wrote its vectors). Run
+> `docugraph clear` and re-index when you switch models.
+
+## Next steps
 
 - [Configuration Reference](configuration.md)
-- [API Reference](api-reference.md)
 - [Examples](../examples/)
