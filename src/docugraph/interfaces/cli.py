@@ -233,19 +233,6 @@ def config_init(path: str | None) -> None:
     console.print(f"[green]Configuration saved to {actual_path}[/green]")
 
 
-@main.command()
-@click.option("--port", "-p", default=8000, help="Port to run the server on")
-@click.option("--host", "-h", default="0.0.0.0", help="Host to bind to")
-def serve(port: int, host: str) -> None:
-    """Start the REST API server."""
-    import uvicorn
-
-    from docugraph.interfaces.api.main import app
-
-    console.print(f"[green]Starting DocuGraph API server on {host}:{port}[/green]")
-    uvicorn.run(app, host=host, port=port)
-
-
 @main.command("mcp-server")
 def mcp_server() -> None:
     """Start the MCP server for Claude Code integration."""

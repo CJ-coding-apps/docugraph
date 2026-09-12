@@ -1,1 +1,1 @@
-"""User interfaces: CLI, REST API, and MCP server."""
+"""User interfaces: CLI and MCP server."""

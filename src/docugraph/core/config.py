@@ -105,22 +105,6 @@ class CrawlerConfig(BaseModel):
     timeout: int = 30  # seconds
 
 
-class ServerConfig(BaseModel):
-    """REST API server configuration."""
-
-    host: str = "0.0.0.0"
-    port: int = 8000
-    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
-    debug: bool = False
-
-
-class MCPConfig(BaseModel):
-    """MCP server configuration."""
-
-    transport: str = "stdio"  # stdio or http
-    port: int = 3000
-
-
 class Config(BaseSettings):
     """Main configuration for DocuGraph AI."""
 
@@ -134,8 +118,6 @@ class Config(BaseSettings):
     embeddings: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     crawler: CrawlerConfig = Field(default_factory=CrawlerConfig)
-    server: ServerConfig = Field(default_factory=ServerConfig)
-    mcp: MCPConfig = Field(default_factory=MCPConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Config":

@@ -127,12 +127,6 @@ class TestIndexCommands:
 class TestServerCommands:
     """Tests for server-related CLI commands."""
 
-    def test_serve_help(self, runner):
-        """Test serve command help."""
-        result = runner.invoke(cli, ["serve", "--help"])
-        assert result.exit_code == 0
-        assert "host" in result.output.lower() or "port" in result.output.lower()
-
     def test_mcp_server_help(self, runner):
         """Test MCP server command help."""
         result = runner.invoke(cli, ["mcp-server", "--help"])
