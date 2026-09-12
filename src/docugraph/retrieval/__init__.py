@@ -18,7 +18,7 @@ from docugraph.retrieval.hybrid_search import (
 )
 from docugraph.retrieval.reranker import (
     CohereReranker,
-    CrossEncoderReranker,
+    FastembedReranker,
     LLMReranker,
     PassthroughReranker,
     RerankerBase,
@@ -39,7 +39,7 @@ __all__ = [
     "RerankerType",
     "RerankResult",
     "RerankerBase",
-    "CrossEncoderReranker",
+    "FastembedReranker",
     "CohereReranker",
     "LLMReranker",
     "PassthroughReranker",

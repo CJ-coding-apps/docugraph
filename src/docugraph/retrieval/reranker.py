@@ -1,7 +1,7 @@
 """Reranking module for improving search result relevance.
 
 Supports multiple reranking strategies:
-- Cross-encoder (sentence-transformers) - high quality, local
+- fastembed cross-encoder (pure ONNX, no torch) - high quality, local
 - Cohere Rerank API - cloud-based
 - LLM-based reranking - flexible but expensive
 """
@@ -19,10 +19,10 @@ from docugraph.core.models import Chunk, SearchResult
 class RerankerType(str, Enum):
     """Available reranker types."""
 
-    CROSS_ENCODER = "cross-encoder"
+    FASTEMBED = "fastembed"
     COHERE = "cohere"
     LLM = "llm"
-    NONE = "none"  # Pass-through, no reranking
+    NONE = "none"  # Pass-through, no reranking (default)
 
 
 @dataclass
@@ -65,73 +65,44 @@ class RerankerBase(ABC):
         ...
 
 
-class CrossEncoderReranker(RerankerBase):
-    """Cross-encoder reranker using sentence-transformers.
+class FastembedReranker(RerankerBase):
+    """Cross-encoder reranker via fastembed (pure ONNX, no torch).
 
     Cross-encoders jointly encode query and document for more accurate
     relevance scoring than bi-encoders (used in initial retrieval).
 
-    Default model: ms-marco-MiniLM-L-6-v2 (fast, good quality)
-    Alternative: ms-marco-MiniLM-L-12-v2 (slower, better quality)
+    Default model: BAAI/bge-reranker-v2-m3 (multilingual, ~1.8 GB —
+    downloads on first use, cached under FASTEMBED_CACHE_PATH). Because
+    of the download size this reranker is always an explicit opt-in;
+    the factory default is NONE.
     """
+
+    DEFAULT_MODEL = "BAAI/bge-reranker-v2-m3"
 
     def __init__(
         self,
-        model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
-        device: str = "auto",
-        batch_size: int = 32,
+        model_name: str = DEFAULT_MODEL,
         score_weight: float = 0.7,
+        model: Any | None = None,
     ) -> None:
-        """Initialize cross-encoder reranker.
+        """Initialize fastembed reranker.
 
         Args:
-            model_name: HuggingFace model name for cross-encoder
-            device: Device to run on (auto, cpu, cuda, mps)
-            batch_size: Batch size for inference
+            model_name: fastembed-supported cross-encoder model name
             score_weight: Weight for rerank score in final score (0-1)
+            model: Injectable TextCrossEncoder-like object (tests)
         """
         self._model_name = model_name
-        self._device = device
-        self._batch_size = batch_size
         self._score_weight = score_weight
-        self._model: Any = None
+        self._model = model
+        if self._model is None:
+            from fastembed.rerank.cross_encoder import TextCrossEncoder
 
-    def _get_device(self) -> str:
-        """Determine best device."""
-        if self._device != "auto":
-            return self._device
-
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                return "cuda"
-            if torch.backends.mps.is_available():
-                return "mps"
-        except ImportError:
-            pass
-        return "cpu"
-
-    def _ensure_model(self) -> Any:
-        """Lazy load the cross-encoder model."""
-        if self._model is not None:
-            return self._model
-
-        try:
-            from sentence_transformers import CrossEncoder
-        except ImportError as e:
-            raise ImportError(
-                "sentence-transformers required for cross-encoder reranking. "
-                "Install with: pip install sentence-transformers"
-            ) from e
-
-        device = self._get_device()
-        self._model = CrossEncoder(self._model_name, device=device)
-        return self._model
+            self._model = TextCrossEncoder(model_name=model_name)
 
     @property
     def name(self) -> str:
-        return f"cross-encoder:{self._model_name}"
+        return f"fastembed-reranker:{self._model_name}"
 
     def rerank(
         self,
@@ -139,7 +110,7 @@ class CrossEncoderReranker(RerankerBase):
         results: list[SearchResult],
         top_k: int | None = None,
     ) -> list[RerankResult]:
-        """Rerank using cross-encoder.
+        """Rerank using the fastembed cross-encoder.
 
         Args:
             query: Search query
@@ -152,13 +123,8 @@ class CrossEncoderReranker(RerankerBase):
         if not results:
             return []
 
-        model = self._ensure_model()
-
-        # Prepare query-document pairs
-        pairs = [(query, r.chunk.content) for r in results]
-
-        # Get cross-encoder scores
-        scores = model.predict(pairs, batch_size=self._batch_size)
+        documents = [r.chunk.content for r in results]
+        scores = [float(s) for s in self._model.rerank(query, documents)]
 
         # Normalize scores to 0-1 range (cross-encoder scores can be any range)
         min_score = min(scores)
@@ -489,10 +455,13 @@ class PassthroughReranker(RerankerBase):
 
 
 def get_reranker(
-    reranker_type: RerankerType = RerankerType.CROSS_ENCODER,
+    reranker_type: RerankerType = RerankerType.NONE,
     **kwargs: Any,
 ) -> RerankerBase:
     """Factory function to get a reranker instance.
+
+    Default is NONE (passthrough): the fastembed reranker's default model
+    is ~1.8 GB and must never download implicitly — opt in explicitly.
 
     Args:
         reranker_type: Type of reranker to use
@@ -501,8 +470,8 @@ def get_reranker(
     Returns:
         Reranker instance
     """
-    if reranker_type == RerankerType.CROSS_ENCODER:
-        return CrossEncoderReranker(**kwargs)
+    if reranker_type == RerankerType.FASTEMBED:
+        return FastembedReranker(**kwargs)
     elif reranker_type == RerankerType.COHERE:
         return CohereReranker(**kwargs)
     elif reranker_type == RerankerType.LLM:

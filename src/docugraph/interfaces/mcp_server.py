@@ -97,6 +97,15 @@ async def list_tools() -> list[Tool]:
                         "description": "Include knowledge graph search (default: false)",
                         "default": False,
                     },
+                    "rerank": {
+                        "type": "boolean",
+                        "description": (
+                            "Rerank fused results with the local cross-encoder "
+                            "(BAAI/bge-reranker-v2-m3, multilingual). Downloads "
+                            "~1.8 GB on first use. Opt-in; off by default."
+                        ),
+                        "default": False,
+                    },
                 },
                 "required": ["query"],
             },
@@ -361,6 +370,7 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
     top_k = arguments.get("top_k", 10)
     mode = arguments.get("mode", "hybrid")
     include_graph = arguments.get("include_graph", False)
+    rerank = arguments.get("rerank", False)
 
     if not query:
         return CallToolResult(
@@ -392,6 +402,19 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
             mode=mode_map.get(mode, SearchMode.HYBRID),
             fusion=FusionStrategy.RRF,
         )
+
+        if rerank and results:
+            # Opt-in cross-encoder rerank (downloads ~1.8 GB on first use).
+            from docugraph.retrieval.reranker import FastembedReranker
+
+            reranker = FastembedReranker()
+            reranked = reranker.rerank(
+                query=query,
+                results=[r.to_search_result() for r in results],
+                top_k=top_k,
+            )
+            by_id = {r.chunk.id: r for r in results}
+            results = [by_id[rr.chunk.id] for rr in reranked if rr.chunk.id in by_id]
 
         if not results:
             return CallToolResult(

@@ -112,12 +112,21 @@ def crawl(url: str, max_pages: int, pattern: str | None, no_cache: bool) -> None
     is_flag=True,
     help="Show full chunk content",
 )
-def search(query: str, top_k: int, show_content: bool) -> None:
+@click.option(
+    "--rerank",
+    is_flag=True,
+    help=(
+        "Rerank results with the local cross-encoder "
+        "(BAAI/bge-reranker-v2-m3, multilingual; downloads ~1.8 GB on first use)"
+    ),
+)
+def search(query: str, top_k: int, show_content: bool, rerank: bool) -> None:
     """Search indexed documentation.
 
     Examples:
         docugraph search "how to create a FastAPI endpoint"
         docugraph search "async error handling" --top-k 10
+        docugraph search "path operations" --rerank
     """
     from docugraph.storage.vector_store import VectorStore
 
@@ -130,6 +139,14 @@ def search(query: str, top_k: int, show_content: bool) -> None:
     ) as progress:
         task = progress.add_task("Searching...", total=None)
         results = vector_store.search(query, top_k=top_k)
+        if rerank and results:
+            progress.update(task, description="Reranking...")
+            from docugraph.retrieval.reranker import FastembedReranker
+
+            reranker = FastembedReranker()
+            reranked = reranker.rerank(query=query, results=results, top_k=top_k)
+            by_id = {r.chunk.id: r for r in results}
+            results = [by_id[rr.chunk.id] for rr in reranked if rr.chunk.id in by_id]
         progress.update(task, description="Done!")
 
     if not results:
