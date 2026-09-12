@@ -5,6 +5,10 @@ Supports LLM-agnostic configuration with local-first priority:
 - OpenAI (cloud)
 - Anthropic (cloud)
 
+Embeddings reuse the docugraph embedder (fastembed by default) via
+GraphitiEmbedderAdapter, so graph ingestion needs no embedding service —
+only the entity-extraction LLM (Graphiti design).
+
 Uses the standalone LLM abstraction from docugraph.core.llm.
 """
 
@@ -17,26 +21,51 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from docugraph.core.config import get_config
-from docugraph.core.llm import get_graphiti_llm_client, is_ollama_available
+from docugraph.core.config import EmbeddingProvider, get_config
+from docugraph.core.embeddings import EmbeddingProviderBase, get_embedder
+from docugraph.core.llm import get_graphiti_llm_client
 from docugraph.core.models import Entity, EntityType, Relationship, RelationshipType
+
+
+class GraphitiEmbedderAdapter:
+    """Duck-typed Graphiti EmbedderClient backed by a docugraph embedder.
+
+    Lets the doc knowledge graph reuse the same embedding backend as the
+    vector store (fastembed by default) instead of requiring a separate
+    Ollama/OpenAI embedding service. Implements Graphiti's async
+    ``create``/``create_batch`` interface; the sync docugraph embedder runs
+    in a worker thread.
+    """
+
+    def __init__(self, embedder: EmbeddingProviderBase | None = None):
+        self._embedder = embedder or get_embedder()
+
+    async def create(self, input_data: str) -> list[float]:
+        """Embed a single text (Graphiti uses this for entity names)."""
+        return await asyncio.to_thread(self._embedder.embed_query, input_data)
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        """Embed a batch of texts."""
+        if not input_data_list:
+            return []
+        return await asyncio.to_thread(self._embedder.embed, input_data_list)
 
 
 def _get_embedder() -> Any:
     """Create an embedder based on configuration.
 
-    Uses Graphiti's embedder interface, configured to match our embedding provider.
+    Ollama/OpenAI use Graphiti's own service-backed embedder; every other
+    provider (fastembed default, sentence-transformers, cohere, auto)
+    reuses the docugraph embedder via GraphitiEmbedderAdapter.
 
     Returns:
         Graphiti-compatible embedder
     """
     from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 
-    config = get_config()
-    emb_config = config.embeddings
+    emb_config = get_config().embeddings
 
-    # For Ollama embeddings
-    if emb_config.provider.value == "ollama":
+    if emb_config.provider == EmbeddingProvider.OLLAMA:
         embedder_config = OpenAIEmbedderConfig(
             api_key="ollama",
             embedding_model=emb_config.model or "nomic-embed-text",
@@ -45,8 +74,7 @@ def _get_embedder() -> Any:
         )
         return OpenAIEmbedder(config=embedder_config)
 
-    # For OpenAI embeddings
-    elif emb_config.provider.value == "openai":
+    elif emb_config.provider == EmbeddingProvider.OPENAI:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY required for OpenAI embeddings")
@@ -58,35 +86,10 @@ def _get_embedder() -> Any:
         )
         return OpenAIEmbedder(config=embedder_config)
 
-    # For sentence-transformers (local) - use Ollama with compatible model
-    elif emb_config.provider.value == "sentence-transformers":
-        # Check if Ollama is available for embeddings
-        if is_ollama_available():
-            embedder_config = OpenAIEmbedderConfig(
-                api_key="ollama",
-                embedding_model="nomic-embed-text",
-                embedding_dim=768,
-                base_url="http://localhost:11434/v1",
-            )
-            return OpenAIEmbedder(config=embedder_config)
-        # Fall back to OpenAI if available
-        elif os.environ.get("OPENAI_API_KEY"):
-            embedder_config = OpenAIEmbedderConfig(
-                api_key=os.environ["OPENAI_API_KEY"],
-                embedding_model="text-embedding-3-small",
-                embedding_dim=1536,
-            )
-            return OpenAIEmbedder(config=embedder_config)
-        else:
-            raise RuntimeError(
-                "GraphStore requires embeddings. Options:\n"
-                "  1. Start Ollama with: ollama pull nomic-embed-text && ollama serve\n"
-                "  2. Set OPENAI_API_KEY for cloud embeddings\n"
-                "  3. Configure embeddings.provider in config"
-            )
-
     else:
-        raise ValueError(f"Unsupported embedding provider for GraphStore: {emb_config.provider}")
+        # fastembed / sentence-transformers / cohere / auto: reuse the
+        # docugraph embedder — no embedding service required.
+        return GraphitiEmbedderAdapter()
 
 
 class GraphStore:
