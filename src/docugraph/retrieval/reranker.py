@@ -78,6 +78,10 @@ class FastembedReranker(RerankerBase):
     """
 
     DEFAULT_MODEL = "BAAI/bge-reranker-v2-m3"
+    # fastembed's registry (0.8.0) doesn't list v2-m3 yet; use the
+    # transformers.js org's ONNX conversion. Weights ~2.3 GB (fp32,
+    # external data file).
+    _V2M3_HF_REPO = "onnx-community/bge-reranker-v2-m3-ONNX"
 
     def __init__(
         self,
@@ -98,7 +102,34 @@ class FastembedReranker(RerankerBase):
         if self._model is None:
             from fastembed.rerank.cross_encoder import TextCrossEncoder
 
+            if model_name == self.DEFAULT_MODEL:
+                self._register_v2m3(TextCrossEncoder)
+
             self._model = TextCrossEncoder(model_name=model_name)
+
+    @classmethod
+    def _register_v2m3(cls, encoder_cls: Any) -> None:
+        """Register bge-reranker-v2-m3 in fastembed's cross-encoder registry.
+
+        No-op if the installed fastembed already lists it (upstream
+        qdrant/fastembed#494).
+        """
+        from fastembed.common.model_description import ModelSource
+
+        source: ModelSource = {"hf": cls._V2M3_HF_REPO}
+        try:
+            encoder_cls.add_custom_model(
+                model=cls.DEFAULT_MODEL,
+                sources=source,
+                model_file="onnx/model.onnx",
+                description="BAAI bge-reranker-v2-m3 (multilingual) ONNX conversion",
+                license="apache-2.0",
+                size_in_gb=2.27,
+                additional_files=["onnx/model.onnx_data"],
+            )
+        except ValueError:
+            # Already registered (either natively or by a prior call).
+            pass
 
     @property
     def name(self) -> str:

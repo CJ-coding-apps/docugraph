@@ -1,14 +1,14 @@
 [project]
-name = "docugraph-ai"
-version = "0.1.0"
-description = "Intelligent coding assistant with knowledge graphs, vector search, and agent memory for custom documentation RAG"
+name = "docugraph-ai-v1"
+version = "1.0.0"
+description = "Documentation RAG for coding agents: vector search, knowledge graph, agent memory, and an MCP server — torch-free local embeddings via fastembed"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "DocuGraph AI Team" }]
 keywords = ["rag", "knowledge-graph", "vector-search", "coding-agent", "mcp", "documentation"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
@@ -24,12 +24,13 @@ dependencies = [
     "pyyaml>=6.0",
     "rich>=13.7.0",
 
-    # Embeddings (local-first)
-    "sentence-transformers>=2.5.0",
-    "torch>=2.0.0",
+    # Embeddings + reranking (local, pure ONNX — no torch)
+    # (onnxruntime <1.24: newer releases dropped macOS x86_64 wheels)
+    "fastembed>=0.4.0",
+    "onnxruntime<1.24",
 
-    # Vector Database
-    "lancedb>=0.6.0",
+    # Vector Database (<0.26: newer releases dropped macOS x86_64 wheels)
+    "lancedb>=0.6.0,<0.26",
     "pyarrow>=15.0.0",
     "pandas>=2.0.0",
 
@@ -43,10 +44,6 @@ dependencies = [
     "click>=8.1.0",
     "typer>=0.9.0",
 
-    # API
-    "fastapi>=0.110.0",
-    "uvicorn[standard]>=0.29.0",
-
     # MCP Protocol
     "mcp>=1.0.0",
 
@@ -58,11 +55,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# GraphRAG for batch entity extraction
-graphrag = [
-    "graphrag>=0.3.0",
-]
-
 # Cloud LLM providers
 cloud = [
     "openai>=1.12.0",
@@ -73,19 +65,6 @@ cloud = [
 # Local LLM via Ollama
 ollama = [
     "ollama>=0.1.0",
-]
-
-# GPU acceleration
-gpu = [
-    "torch>=2.0.0",
-]
-
-# Code parsing
-code = [
-    "tree-sitter>=0.21.0",
-    "tree-sitter-python>=0.21.0",
-    "tree-sitter-javascript>=0.21.0",
-    "tree-sitter-typescript>=0.21.0",
 ]
 
 # Development
@@ -100,18 +79,12 @@ dev = [
 
 # All optional dependencies
 all = [
-    "docugraph-ai[graphrag,cloud,ollama,code,dev]",
+    "docugraph-ai-v1[cloud,ollama,dev]",
 ]
 
 [project.scripts]
 docugraph = "docugraph.interfaces.cli:main"
 docugraph-mcp = "docugraph.interfaces.mcp_server:main"
-docugraph-server = "docugraph.interfaces.api.main:run"
-
-[project.urls]
-Homepage = "https://github.com/docugraph/docugraph-ai"
-Documentation = "https://docugraph-ai.readthedocs.io"
-Repository = "https://github.com/docugraph/docugraph-ai"
 
 [build-system]
 requires = ["hatchling"]
@@ -155,7 +128,7 @@ module = [
     "lancedb.*",
     "crawl4ai.*",
     "graphiti_core.*",
-    "sentence_transformers.*",
+    "fastembed.*",
     "mcp.*",
 ]
 ignore_missing_imports = true
