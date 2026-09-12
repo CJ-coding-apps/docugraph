@@ -110,19 +110,44 @@ class TestIndexCommands:
         assert result.exit_code != 0
 
     def test_index_local_dir(self, runner, temp_data_dir, monkeypatch):
-        """Test indexing a local directory."""
+        """Index a local directory and verify the content becomes searchable.
+
+        This exercises the real fastembed backend (downloads bge-small once,
+        then cached). On a cold cache with no network the download can fail;
+        in that case we only assert the CLI degraded cleanly rather than
+        crashing, so the test never silently always-passes on success.
+        """
         monkeypatch.setenv("DOCUGRAPH_STORAGE__DATA_DIR", temp_data_dir)
+        # Ensure config picks up the env-var data dir (get_config is cached).
+        from docugraph.core.config import reset_config
+
+        reset_config()
 
         # Create a test directory with a file
         test_dir = Path(temp_data_dir) / "docs"
         test_dir.mkdir()
+        # Content must exceed the chunker's min_chunk_size (100 chars) to
+        # produce a chunk.
         test_file = test_dir / "test.md"
-        test_file.write_text("# Test Document\n\nThis is test content for indexing.")
+        test_file.write_text(
+            "# Widget Configuration\n\n"
+            "To configure a widget, set the sprocket tension to eleven. "
+            "The sprocket assembly controls widget alignment and must be "
+            "calibrated before the widget is placed into production service."
+        )
 
         result = runner.invoke(cli, ["index", "local", str(test_dir)])
-        # May succeed or fail depending on environment
-        # Just ensure it doesn't crash unexpectedly
-        assert result.exit_code in [0, 1, 2]
+
+        if result.exit_code == 0:
+            # Indexing succeeded — the content must be searchable.
+            reset_config()
+            search = runner.invoke(cli, ["search", "how do I configure a widget"])
+            assert search.exit_code == 0
+            assert "sprocket" in search.output.lower() or "widget" in search.output.lower()
+        else:
+            # Degraded environment (e.g. no cached model + offline): the CLI
+            # must fail gracefully, not raise an unhandled exception.
+            assert result.exit_code in (1, 2)
 
 
 class TestServerCommands:
