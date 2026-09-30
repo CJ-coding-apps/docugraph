@@ -83,6 +83,67 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/unit/ tests/integration/ tests/e2e/ -v --tb=short
 
+  docker:
+    # Builds the image but never publishes it: docker-publish.yml owns pushing,
+    # and that only triggers on a tag. This job exists so a dependency change
+    # cannot break the image without anyone noticing between releases.
+    name: Docker (production image)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build the production target
+        run: docker build --file docker/Dockerfile --target production --tag docugraph:ci .
+
+      - name: Handshake over stdio
+        # Initialise, then let stdin close. A missing LLM does not stop the
+        # server from identifying itself -- that is the point of the
+        # degradation work -- so this needs no credentials.
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci-handshake","version":"0"}}}' \
+            | timeout 300 docker run -i --rm docugraph:ci \
+                > /tmp/handshake.jsonl 2> /tmp/handshake.err \
+            || echo "docker run exit: $?"
+          echo "--- container stderr (tail) ---"
+          tail -20 /tmp/handshake.err || true
+
+      - name: Assert the handshake
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+
+          EXPECTED = "0.1.0"  # the version this repo publishes; pinned deliberately
+          raw = pathlib.Path("/tmp/handshake.jsonl").read_text()
+
+          # stdout carries the JSON-RPC stream and nothing else. A stray line
+          # here corrupts the protocol, so it fails rather than being skipped.
+          messages = []
+          for n, line in enumerate(raw.splitlines(), 1):
+              if not line.strip():
+                  continue
+              try:
+                  messages.append(json.loads(line))
+              except json.JSONDecodeError as e:
+                  sys.exit(f"stdout line {n} is not JSON: {line[:160]!r} ({e})")
+
+          infos = [
+              m["result"]["serverInfo"]
+              for m in messages
+              if isinstance(m.get("result"), dict) and "serverInfo" in m["result"]
+          ]
+          if not infos:
+              sys.exit(f"no serverInfo in {len(messages)} message(s): {messages!r}")
+          if infos[0].get("version") != EXPECTED:
+              sys.exit(f"serverInfo.version is {infos[0].get('version')!r}, expected {EXPECTED!r}")
+
+          print(f"stdout: {len(messages)} JSON-RPC message(s), 0 stray lines")
+          print(f"serverInfo: {infos[0]}")
+          PY
+
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
