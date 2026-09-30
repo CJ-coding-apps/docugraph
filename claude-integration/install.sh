@@ -35,7 +35,7 @@ echo "Checking prerequisites..."
 # Check for docugraph
 if ! command -v docugraph &> /dev/null; then
     echo -e "${YELLOW}Warning: docugraph not found in PATH${NC}"
-    echo "  Install with: pip install docugraph-ai"
+    echo "  Install with: pip install -e .   # from a checkout of this repository"
     echo ""
 fi
 

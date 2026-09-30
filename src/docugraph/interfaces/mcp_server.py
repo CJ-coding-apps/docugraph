@@ -8,6 +8,7 @@ Provides tools for Claude Code and other MCP-compatible clients:
 - memory_store: Store values in agent memory
 - memory_recall: Retrieve values from agent memory
 - graph_query: Query the knowledge graph
+- graph_add: Add content to the knowledge graph
 - get_stats: Get indexing statistics
 """
 
@@ -21,6 +22,7 @@ from mcp.types import (
     CallToolResult,
     TextContent,
     Tool,
+    ToolAnnotations,
 )
 
 from docugraph.storage.vector_store import VectorStore
@@ -40,10 +42,42 @@ def get_vector_store() -> VectorStore:
     return _vector_store
 
 
+# MCP annotations, one per tool. An MCP client uses these hints to decide
+# whether a call needs human approval, so they must describe what the tool
+# actually does. None of the nine tools deletes data: the writers only append
+# (indexed chunks, graph episodes) or update the single record a caller names by
+# key -- nothing is removed, and nothing is replaced wholesale. Re-check this
+# table whenever a tool's behaviour changes.
+TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {
+    # Performs no writes.
+    "search_docs": ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    "hybrid_search": ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    "memory_recall": ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    "graph_query": ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    "get_stats": ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+    # Writes, additively.
+    "crawl_url": ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+    "index_git": ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+    "memory_store": ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+    "graph_add": ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+}
+
+
+def _annotate(tools: list[Tool]) -> list[Tool]:
+    """Attach the declared annotation to every tool.
+
+    Raises KeyError (rather than defaulting) if a tool was added without a
+    classification: an unclassified tool must not reach a client.
+    """
+    for tool in tools:
+        tool.annotations = TOOL_ANNOTATIONS[tool.name]
+    return tools
+
+
 @server.list_tools()
 async def list_tools() -> list[Tool]:
     """List available tools."""
-    return [
+    return _annotate([
         # Search tools
         Tool(
             name="search_docs",
@@ -288,7 +322,7 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
             },
         ),
-    ]
+    ])
 
 
 @server.call_tool()

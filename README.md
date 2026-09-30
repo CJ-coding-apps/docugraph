@@ -22,17 +22,18 @@ Code and other MCP clients. The CLI is for out-of-band index bootstrapping
 ### Installation
 
 ```bash
+# Clone this repository, then from its root:
+
 # With uv (recommended)
-uv pip install docugraph-ai-v1
+uv sync --extra dev
 
 # Or with pip
-pip install docugraph-ai-v1
-
-# For development
-git clone https://github.com/docugraph/docugraph-ai-v1
-cd docugraph-ai-v1
-uv sync --extra dev
+python -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'
 ```
+
+> Not yet published to PyPI, so there is no `pip install docugraph-ai-v1` yet —
+> install from a checkout as above.
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
 ~130 MB ONNX) and caches it under `FASTEMBED_CACHE_PATH` (default
@@ -165,6 +166,15 @@ required**. However, Graphiti performs entity extraction with an **LLM**, so
 OpenAI/Anthropic key). Without one, the graph tools degrade gracefully with a
 clear message; vector and keyword search are unaffected.
 
+### KuzuDB version
+
+`kuzu` is pinned to `==0.11.3` in `pyproject.toml` (reached through
+`graphiti-core[kuzu]`, which requires `kuzu>=0.11.3`). Kuzu is archived upstream —
+0.11.3 is the final release — and its on-disk format is not stable before 1.0, so a
+database written by one Kuzu version may not be readable by another. Treat the pin
+as a migration boundary, not a floor: to move versions, upgrade and then re-ingest
+rather than pointing the new version at the old graph file.
+
 ## Architecture
 
 ```
@@ -194,4 +204,4 @@ clear message; vector and keyword search are unaffected.
 
 ## License
 
-MIT
+Apache-2.0 — see `LICENSE`.

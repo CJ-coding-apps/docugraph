@@ -63,11 +63,12 @@ This prevents common issues during long sessions:
 
 ## Prerequisites
 
-1. **DocuGraph AI installed and configured:**
+1. **DocuGraph AI installed and configured** (not yet published to PyPI, so
+   install from a checkout of this repository):
    ```bash
-   pip install docugraph-ai
+   pip install -e .
    # or
-   uv pip install docugraph-ai
+   uv sync
    ```
 
 2. **DocuGraph MCP server configured** in `~/.claude/claude_desktop_config.json`:

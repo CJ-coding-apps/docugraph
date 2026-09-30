@@ -6,8 +6,10 @@ leaks; the default fastembed model downloads once (cached), so these tests
 touch the network on a cold cache.
 """
 
+import json
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -17,17 +19,41 @@ mcp = pytest.importorskip("mcp")
 from mcp import ClientSession, StdioServerParameters  # noqa: E402
 from mcp.client.stdio import stdio_client  # noqa: E402
 
-EXPECTED_TOOLS = {
-    "search_docs",
-    "hybrid_search",
-    "crawl_url",
-    "index_git",
-    "memory_store",
-    "memory_recall",
-    "graph_query",
-    "graph_add",
-    "get_stats",
-}
+# The frozen tool surface, captured from the real stdio wire. Regenerate
+# deliberately (and say so in the commit) when the surface really changes — a
+# rename or schema edit must not pass silently, which is why the comparison is
+# exact rather than a membership test.
+SNAPSHOT_PATH = Path(__file__).parent / "tools_snapshot.json"
+
+
+def _tool_surface(tool) -> dict:
+    """The frozen part of one tool: what a client sees and classifies on.
+
+    Descriptions are deliberately excluded — the published fingerprint is names,
+    schemas and annotations. Extend this deliberately, not by accident.
+    """
+    annotations = tool.annotations
+    return {
+        "name": tool.name,
+        "inputSchema": tool.inputSchema,
+        "annotations": (
+            None
+            if annotations is None
+            else {
+                "readOnlyHint": annotations.readOnlyHint,
+                "destructiveHint": annotations.destructiveHint,
+            }
+        ),
+    }
+
+
+def _live_surface(tools) -> list:
+    """The advertised surface, in the same order/shape as the snapshot."""
+    return sorted((_tool_surface(t) for t in tools), key=lambda t: t["name"])
+
+
+def _saved_surface() -> list:
+    return json.loads(SNAPSHOT_PATH.read_text())
 
 
 def _text(result) -> str:
@@ -59,17 +85,41 @@ def server_params(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_lists_exactly_nine_tools(server_params):
+async def test_tool_surface_matches_frozen_snapshot(server_params):
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        live = _live_surface((await session.list_tools()).tools)
+
+    saved = _saved_surface()
+    assert [t["name"] for t in live] == [t["name"] for t in saved], (
+        "The set of advertised tools changed. If that is intended, "
+        f"re-freeze {SNAPSHOT_PATH.name}."
+    )
+    for live_tool, saved_tool in zip(live, saved):
+        assert live_tool == saved_tool, (
+            f"Tool {live_tool['name']!r} no longer matches {SNAPSHOT_PATH.name}. "
+            "If the change is intended, re-freeze the snapshot."
+        )
+
+
+@pytest.mark.asyncio
+async def test_every_tool_is_annotated(server_params):
+    """A tool with no approval hints would reach a client unclassified."""
     async with (
         stdio_client(server_params) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
         tools = (await session.list_tools()).tools
-        names = {t.name for t in tools}
 
-    assert names == EXPECTED_TOOLS
-    assert len(tools) == 9
+    for tool in tools:
+        assert tool.annotations is not None, f"Tool {tool.name!r} has no annotations"
+        assert tool.annotations.readOnlyHint is not None, (
+            f"Tool {tool.name!r} does not declare readOnlyHint"
+        )
 
 
 @pytest.mark.asyncio

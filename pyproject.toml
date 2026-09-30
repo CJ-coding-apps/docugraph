@@ -4,13 +4,13 @@ version = "1.0.0"
 description = "Documentation RAG for coding agents: vector search, knowledge graph, agent memory, and an MCP server — torch-free local embeddings via fastembed"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "DocuGraph AI Team" }]
 keywords = ["rag", "knowledge-graph", "vector-search", "coding-agent", "mcp", "documentation"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Documentation",
@@ -36,6 +36,11 @@ dependencies = [
 
     # Knowledge Graph
     "graphiti-core[kuzu]>=0.5.0",
+    # Pinned exactly: kuzu is archived upstream (0.11.3 is the final release) and
+    # its file format is not stable pre-1.0, so an unpinned upgrade can make an
+    # existing graph unreadable. graphiti-core[kuzu] requires kuzu>=0.11.3, so
+    # this pin is compatible. Do not widen it without a migration step.
+    "kuzu==0.11.3",
 
     # Web Crawling
     "crawl4ai>=0.7.8",

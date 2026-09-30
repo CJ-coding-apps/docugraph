@@ -1,0 +1,262 @@
+[
+  {
+    "name": "crawl_url",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL to crawl and index"
+        },
+        "max_pages": {
+          "type": "integer",
+          "description": "Maximum pages to crawl (default: 1)",
+          "default": 1
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "get_stats",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "graph_add",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "Content to extract entities from"
+        },
+        "name": {
+          "type": "string",
+          "description": "Episode name (optional)"
+        },
+        "group_id": {
+          "type": "string",
+          "description": "Group ID for scoping (default: 'default')",
+          "default": "default"
+        }
+      },
+      "required": [
+        "content"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "graph_query",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query for the knowledge graph"
+        },
+        "num_results": {
+          "type": "integer",
+          "description": "Maximum results to return (default: 10)",
+          "default": 10
+        },
+        "group_id": {
+          "type": "string",
+          "description": "Group ID to filter by (optional)"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "hybrid_search",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "The search query"
+        },
+        "top_k": {
+          "type": "integer",
+          "description": "Number of results to return (default: 10)",
+          "default": 10
+        },
+        "mode": {
+          "type": "string",
+          "description": "Search mode: vector, keyword, hybrid, or all (default: hybrid)",
+          "enum": [
+            "vector",
+            "keyword",
+            "hybrid",
+            "all"
+          ],
+          "default": "hybrid"
+        },
+        "include_graph": {
+          "type": "boolean",
+          "description": "Include knowledge graph search (default: false)",
+          "default": false
+        },
+        "rerank": {
+          "type": "boolean",
+          "description": "Rerank fused results with the local cross-encoder (BAAI/bge-reranker-v2-m3, multilingual). Downloads ~1.8 GB on first use. Opt-in; off by default.",
+          "default": false
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "index_git",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Git repository URL (HTTPS or SSH)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Custom name for the repository (optional)"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Branch, tag, or commit to checkout (optional)"
+        },
+        "include_code": {
+          "type": "boolean",
+          "description": "Include code files, not just docs (default: false)",
+          "default": false
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "memory_recall",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Key to retrieve (or pattern with % wildcard)"
+        },
+        "repository": {
+          "type": "string",
+          "description": "Repository scope (default: 'default')",
+          "default": "default"
+        },
+        "branch": {
+          "type": "string",
+          "description": "Branch scope (default: 'main')",
+          "default": "main"
+        },
+        "list_all": {
+          "type": "boolean",
+          "description": "List all keys instead of getting a specific value",
+          "default": false
+        }
+      },
+      "required": [
+        "key"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "memory_store",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Key to store the value under"
+        },
+        "value": {
+          "type": "string",
+          "description": "Value to store (can be JSON for complex data)"
+        },
+        "repository": {
+          "type": "string",
+          "description": "Repository scope (default: 'default')",
+          "default": "default"
+        },
+        "branch": {
+          "type": "string",
+          "description": "Branch scope (default: 'main')",
+          "default": "main"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false
+    }
+  },
+  {
+    "name": "search_docs",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "The search query to find relevant documentation"
+        },
+        "top_k": {
+          "type": "integer",
+          "description": "Number of results to return (default: 5)",
+          "default": 5
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false
+    }
+  }
+]

@@ -4,16 +4,21 @@ Get started with DocuGraph AI in under 5 minutes.
 
 ## Installation
 
+Not yet published to PyPI — install from a checkout of this repository.
+
 ### Using uv (recommended)
 
 ```bash
-uv pip install docugraph-ai-v1
+# From the repository root
+uv sync --extra dev
 ```
 
 ### Using pip
 
 ```bash
-pip install docugraph-ai-v1
+# From the repository root
+python -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'
 ```
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
@@ -27,8 +32,7 @@ releases; the dependency pins target versions with x86_64 wheels. If you hit
 install issues, use Docker:
 
 ```bash
-git clone https://github.com/docugraph/docugraph-ai-v1.git
-cd docugraph-ai-v1
+# From a checkout of this repository:
 # Bootstrap an index into the shared volume:
 docker compose run --rm cli index local /path/to/docs
 # Run the MCP stdio server (see the Docker section below)

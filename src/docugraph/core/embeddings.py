@@ -149,7 +149,7 @@ class OllamaEmbedder(EmbeddingProviderBase):
         except ImportError as e:
             raise ImportError(
                 "Ollama support requires the 'ollama' package. "
-                "Install with: pip install docugraph-ai[ollama]"
+                "Install with: pip install 'docugraph-ai-v1[ollama]'"
             ) from e
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -213,7 +213,7 @@ class OpenAIEmbedder(EmbeddingProviderBase):
         except ImportError as e:
             raise ImportError(
                 "OpenAI support requires the 'openai' package. "
-                "Install with: pip install docugraph-ai[cloud]"
+                "Install with: pip install 'docugraph-ai-v1[cloud]'"
             ) from e
 
     def embed(self, texts: list[str]) -> list[list[float]]:
@@ -268,7 +268,7 @@ class CohereEmbedder(EmbeddingProviderBase):
         except ImportError as e:
             raise ImportError(
                 "Cohere support requires the 'cohere' package. "
-                "Install with: pip install docugraph-ai[cloud]"
+                "Install with: pip install 'docugraph-ai-v1[cloud]'"
             ) from e
 
     def embed(self, texts: list[str]) -> list[list[float]]:
