@@ -25,6 +25,18 @@ First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
 ~130 MB, pure ONNX — no torch) into `FASTEMBED_CACHE_PATH`
 (default `~/.cache/fastembed`).
 
+**URL crawling needs a browser the Python install does not include.** Crawl4AI
+drives Playwright's Chromium, so run this once before any crawl:
+
+```bash
+uv run playwright install chromium
+# On Linux, add the browser's system libraries too:
+#   uv run playwright install --with-deps chromium
+```
+
+Local indexing, search, memory and stats do not need it — only crawling a URL
+does.
+
 ### For macOS Intel (x86_64)
 
 LanceDB and onnxruntime wheel coverage for macOS Intel is limited on newer
@@ -105,7 +117,26 @@ Add to your MCP configuration (e.g. `~/.claude/claude_desktop_config.json`):
 {
   "mcpServers": {
     "docugraph": {
-      "command": "docugraph-mcp",
+      "command": "/absolute/path/to/docugraph-ai-v1/.venv/bin/docugraph-mcp",
+      "env": {}
+    }
+  }
+}
+```
+
+Use the absolute path to the installed script: an MCP client launches the
+server directly rather than through a shell, so a bare `"docugraph-mcp"` is not
+found on the client's `PATH` and the server fails to start. `uv sync` installs
+it at `.venv/bin/docugraph-mcp` in the repository
+(`Scripts\docugraph-mcp.exe` on Windows). This is equivalent and does not
+hardcode the path:
+
+```json
+{
+  "mcpServers": {
+    "docugraph": {
+      "command": "uv",
+      "args": ["--directory", "/absolute/path/to/docugraph-ai-v1", "run", "docugraph-mcp"],
       "env": {}
     }
   }
@@ -193,7 +224,7 @@ storage:
   data_dir: ~/.docugraph/data
 
 embeddings:
-  provider: auto                 # auto | fastembed | openai | ollama | cohere | sentence-transformers
+  provider: auto                 # auto | fastembed | openai | ollama | cohere
   model: BAAI/bge-small-en-v1.5
 ```
 

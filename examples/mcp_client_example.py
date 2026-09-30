@@ -20,10 +20,15 @@ The server exposes nine tools:
 Run:
     python examples/mcp_client_example.py
 
-MCP client configuration (Claude Code / Cursor) — add to your MCP config:
+MCP client configuration (Claude Code / Cursor) — add to your MCP config.
+The absolute path is required: MCP clients launch the server directly rather
+than through a shell, so a bare "docugraph-mcp" is not on their PATH.
     {
       "mcpServers": {
-        "docugraph": { "command": "docugraph-mcp", "env": {} }
+        "docugraph": {
+          "command": "/absolute/path/to/docugraph-ai-v1/.venv/bin/docugraph-mcp",
+          "env": {}
+        }
       }
     }
 
@@ -46,6 +51,7 @@ import asyncio
 import contextlib
 import json
 import os
+import sys
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -62,7 +68,12 @@ def _text(result: object) -> str:
 
 
 async def main() -> None:
-    # Spawn the installed `docugraph-mcp` console script over stdio.
+    # Spawn the server with the interpreter running this script, via `-m`.
+    # Naming the `docugraph-mcp` console script directly would depend on its
+    # directory being on PATH, which is not true for a plain `uv sync` — and
+    # `sys.executable` is the interpreter that has docugraph installed, so this
+    # works whether or not the virtualenv was activated.
+    #
     # The SDK launches the child with a scrubbed environment, so pass through
     # the vars the server actually reads (data dir, model cache, API keys) —
     # otherwise DOCUGRAPH_* set in your shell won't reach the server.
@@ -72,7 +83,11 @@ async def main() -> None:
         if key.startswith("DOCUGRAPH_")
         or key in {"FASTEMBED_CACHE_PATH", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"}
     }
-    params = StdioServerParameters(command="docugraph-mcp", args=[], env=passthrough or None)
+    params = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "docugraph.interfaces.mcp_server"],
+        env=passthrough or None,
+    )
 
     async with (
         stdio_client(params) as (read, write),

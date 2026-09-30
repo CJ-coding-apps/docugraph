@@ -39,6 +39,19 @@ First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
 ~130 MB ONNX) and caches it under `FASTEMBED_CACHE_PATH` (default
 `~/.cache/fastembed`).
 
+**URL crawling needs a browser that the Python install does not include.**
+Crawl4AI drives Playwright's Chromium, so run this once before using
+`docugraph crawl` or the `crawl_url` tool:
+
+```bash
+uv run playwright install chromium
+# On Linux, add --with-deps to install the browser's system libraries too:
+#   uv run playwright install --with-deps chromium
+```
+
+This is ~190 MB and is cached, so it is a one-off. `index local`, `index git`,
+`search`, `memory` and `stats` do not need it — only fetching a URL does.
+
 ### MCP integration with Claude Code (primary surface)
 
 Add to your Claude Code MCP configuration:
@@ -47,7 +60,29 @@ Add to your Claude Code MCP configuration:
 {
   "mcpServers": {
     "docugraph": {
-      "command": "docugraph-mcp",
+      "command": "/absolute/path/to/docugraph-ai-v1/.venv/bin/docugraph-mcp",
+      "env": {}
+    }
+  }
+}
+```
+
+Use the **absolute path** to the installed script. An MCP client launches the
+server directly rather than through a shell, so it does not pick up the venv
+that `uv sync` created — a bare `"command": "docugraph-mcp"` fails with
+`No such file or directory` unless that directory happens to be on the client's
+`PATH`. `uv sync` installs the script at `.venv/bin/docugraph-mcp` inside the
+repository (`Scripts\docugraph-mcp.exe` on Windows); substitute your real path.
+
+If you would rather not hardcode it, this is equivalent and needs no path
+change when the checkout moves:
+
+```json
+{
+  "mcpServers": {
+    "docugraph": {
+      "command": "uv",
+      "args": ["--directory", "/absolute/path/to/docugraph-ai-v1", "run", "docugraph-mcp"],
       "env": {}
     }
   }
@@ -60,44 +95,55 @@ The server speaks JSON-RPC over stdio and exposes nine tools:
 |------|---------|
 | `search_docs` | Vector search over indexed documentation |
 | `hybrid_search` | Vector + keyword (+ optional graph) fusion; `rerank` opt-in |
-| `crawl_url` | Crawl a URL and index it |
+| `crawl_url` | Crawl a URL and index it ¹ |
 | `index_git` | Clone and index a git repository |
 | `memory_store` | Store a value in repo/branch-scoped agent memory |
 | `memory_recall` | Retrieve a stored value |
-| `graph_query` | Query the documentation knowledge graph |
-| `graph_add` | Extract entities/relationships from text into the graph |
+| `graph_query` | Query the documentation knowledge graph ² |
+| `graph_add` | Extract entities/relationships from text into the graph ² |
 | `get_stats` | Indexing statistics |
+
+¹ Needs Playwright's Chromium — see the installation step above.
+² Needs an LLM configured — Ollama locally, or an OpenAI/Anthropic key. See
+[the knowledge graph section](#the-documentation-knowledge-graph).
 
 ### CLI (index bootstrap + one-off commands)
 
+Run these from the repository root. `uv sync` installs the `docugraph` command
+into the project's virtual environment but does not put that directory on your
+`PATH`, so each command below is prefixed with `uv run`. If you activated the
+virtual environment (`source .venv/bin/activate`, as the pip instructions do),
+drop the prefix and run them as bare `docugraph …`.
+
 ```bash
-# Crawl and index documentation
-docugraph crawl https://fastapi.tiangolo.com/tutorial/first-steps/
+# Crawl and index documentation (needs the Chromium install from above)
+uv run docugraph crawl https://fastapi.tiangolo.com/tutorial/first-steps/
 
 # Index a local docs directory
-docugraph index local ./docs
+uv run docugraph index local ./docs
 
 # Search indexed content
-docugraph search "how to create a path operation"
-docugraph search "async error handling" --top-k 10
+uv run docugraph search "how to create a path operation"
+uv run docugraph search "async error handling" --top-k 10
 
 # Rerank with the local multilingual cross-encoder (downloads ~1.8 GB once)
-docugraph search "path operations" --rerank
+uv run docugraph search "path operations" --rerank
 
-# Documentation knowledge graph (requires an LLM — see below)
-docugraph graph add "FastAPI depends on Starlette and Pydantic."
-docugraph graph search "what does FastAPI depend on?"
+# Documentation knowledge graph — needs an LLM (Ollama locally, or an
+# OPENAI_API_KEY/ANTHROPIC_API_KEY); see "The documentation knowledge graph"
+uv run docugraph graph add "FastAPI depends on Starlette and Pydantic."
+uv run docugraph graph search "what does FastAPI depend on?"
 
 # Agent memory
-docugraph memory set build.status green
-docugraph memory get build.status
+uv run docugraph memory set build.status green
+uv run docugraph memory get build.status
 
 # Stats + reset
-docugraph stats
-docugraph clear
+uv run docugraph stats
+uv run docugraph clear
 
 # Run the MCP server manually (usually launched by the MCP client)
-docugraph mcp-server
+uv run docugraph mcp-server
 ```
 
 ### Python API
@@ -136,7 +182,7 @@ storage:
   data_dir: ~/.docugraph/data
 
 embeddings:
-  provider: auto            # auto | fastembed | openai | ollama | cohere | sentence-transformers
+  provider: auto            # auto | fastembed | openai | ollama | cohere
   model: BAAI/bge-small-en-v1.5
   # dimensions: auto-detected from the model
   batch_size: 32
@@ -148,10 +194,9 @@ crawler:
 ```
 
 `provider: auto` resolves to: **OpenAI** (if `OPENAI_API_KEY` is set and the
-`openai` package is installed) → **fastembed** (local ONNX, the default) →
-**sentence-transformers** (only if you have it installed). Any field can be
-overridden by environment variable, e.g. `DOCUGRAPH_EMBEDDINGS__MODEL` or
-`DOCUGRAPH_EMBEDDINGS__PROVIDER`.
+`openai` package is installed) → **fastembed** (local ONNX, the default). Any
+field can be overridden by environment variable, e.g.
+`DOCUGRAPH_EMBEDDINGS__MODEL` or `DOCUGRAPH_EMBEDDINGS__PROVIDER`.
 
 See [docs/configuration.md](docs/configuration.md) for the full reference,
 including the embedding-model consistency guard and the graph LLM requirement.
