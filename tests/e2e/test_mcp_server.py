@@ -95,10 +95,9 @@ async def test_tool_surface_matches_frozen_snapshot(server_params):
 
     saved = _saved_surface()
     assert [t["name"] for t in live] == [t["name"] for t in saved], (
-        "The set of advertised tools changed. If that is intended, "
-        f"re-freeze {SNAPSHOT_PATH.name}."
+        f"The set of advertised tools changed. If that is intended, re-freeze {SNAPSHOT_PATH.name}."
     )
-    for live_tool, saved_tool in zip(live, saved):
+    for live_tool, saved_tool in zip(live, saved, strict=True):
         assert live_tool == saved_tool, (
             f"Tool {live_tool['name']!r} no longer matches {SNAPSHOT_PATH.name}. "
             "If the change is intended, re-freeze the snapshot."
