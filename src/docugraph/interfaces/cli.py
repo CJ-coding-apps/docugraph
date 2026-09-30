@@ -8,11 +8,13 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from docugraph._version import __version__
+
 console = Console()
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="docugraph")
+@click.version_option(version=__version__, prog_name="docugraph")
 def main() -> None:
     """DocuGraph AI - Intelligent documentation RAG for coding agents."""
     pass

@@ -1,6 +1,6 @@
 [project]
 name = "docugraph-ai-v1"
-version = "1.0.0"
+version = "0.1.0"
 description = "Documentation RAG for coding agents: vector search, knowledge graph, agent memory, and an MCP server — torch-free local embeddings via fastembed"
 readme = "README.md"
 requires-python = ">=3.11"

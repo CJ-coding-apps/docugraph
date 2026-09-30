@@ -10,6 +10,8 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from docugraph import _version
+
 
 class EmbeddingProvider(StrEnum):
     """Supported embedding providers."""
@@ -80,7 +82,7 @@ class CrawlerConfig(BaseModel):
 
     max_concurrent: int = 5
     rate_limit: float = 2.0  # requests per second
-    user_agent: str = "DocuGraph-AI/0.1.0"
+    user_agent: str = f"DocuGraph-AI/{_version.__version__}"
     respect_robots: bool = True
     cache_ttl: int = 86400  # 24 hours
     timeout: int = 30  # seconds

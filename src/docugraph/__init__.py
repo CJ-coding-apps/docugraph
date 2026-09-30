@@ -8,8 +8,7 @@ A powerful coding agent platform combining:
 - Agent memory (MCP-compatible)
 """
 
-__version__ = "0.1.0"
-
+from docugraph._version import __version__
 from docugraph.core.config import Config, get_config
 from docugraph.core.models import Chunk, Document, Entity, MemoryEntry, Relationship
 

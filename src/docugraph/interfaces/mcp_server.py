@@ -25,10 +25,14 @@ from mcp.types import (
     ToolAnnotations,
 )
 
+from docugraph._version import __version__
 from docugraph.storage.vector_store import VectorStore
 
-# Initialize server
-server = Server("docugraph")
+# Initialize server. `version` is passed explicitly: without it the MCP SDK
+# falls back to the *mcp* package's version (server.py: `server_version =
+# self.version if self.version else pkg_version("mcp")`), so clients would see
+# the SDK's version advertised as ours.
+server = Server("docugraph", version=__version__)
 
 # Global vector store instance
 _vector_store: VectorStore | None = None
