@@ -172,6 +172,14 @@ class GraphStore:
                 "Install with: pip install 'graphiti-core[kuzu]'"
             ) from e
 
+        # Resolve the LLM and embedder before opening the database.
+        # get_llm_provider checks that a provider is actually reachable and has
+        # the model, so a failure here costs nothing on disk: no Kùzu database
+        # file, no indices, no driver handle left open. (The `graph/` directory
+        # itself is created by __init__, before this runs.)
+        llm_client = get_graphiti_llm_client()
+        embedder = _get_embedder()
+
         # Create Kuzu driver
         kuzu_db_path = str(self._db_path / "graphiti.kuzu")
         self._driver = KuzuDriver(db=kuzu_db_path)
@@ -181,10 +189,6 @@ class GraphStore:
         # seeding it with the Kuzu default group id is a safe workaround.
         if not hasattr(self._driver, "_database"):
             self._driver._database = ""
-
-        # Get LLM client and embedder based on config (LLM-agnostic)
-        llm_client = get_graphiti_llm_client()
-        embedder = _get_embedder()
 
         # Initialize Graphiti with custom clients. cross_encoder is set to a
         # no-op so ingestion doesn't require an OpenAI key (Graphiti's default

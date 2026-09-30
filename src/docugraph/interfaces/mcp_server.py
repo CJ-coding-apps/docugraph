@@ -26,6 +26,7 @@ from mcp.types import (
 )
 
 from docugraph._version import __version__
+from docugraph.core.llm import LLMUnavailableError
 from docugraph.storage.vector_store import VectorStore
 
 # Initialize server. `version` is passed explicitly: without it the MCP SDK
@@ -720,6 +721,30 @@ async def _memory_recall(arguments: dict[str, Any]) -> CallToolResult:
         )
 
 
+def _llm_error_result(exc: RuntimeError, action: str) -> CallToolResult:
+    """Turn an LLM/runtime failure into an actionable MCP error result.
+
+    An LLMUnavailableError already carries a full explanation of what is
+    missing and how to fix it, so it is passed through verbatim. Any other
+    RuntimeError gets the generic pointer, since it could be something else.
+    """
+    if isinstance(exc, LLMUnavailableError):
+        text = str(exc)
+    else:
+        text = (
+            f"{action} needs an LLM and could not use one. Error: {exc}\n\n"
+            "To use the knowledge graph:\n"
+            "  Local: install Ollama (https://ollama.ai), run 'ollama serve', "
+            "and 'ollama pull <model>'\n"
+            "  Cloud: set OPENAI_API_KEY or ANTHROPIC_API_KEY\n"
+            "Vector and keyword search need no LLM and are unaffected."
+        )
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)],
+        isError=True,
+    )
+
+
 async def _graph_query(arguments: dict[str, Any]) -> CallToolResult:
     """Query the knowledge graph."""
     query = arguments.get("query", "")
@@ -761,20 +786,7 @@ async def _graph_query(arguments: dict[str, Any]) -> CallToolResult:
         )
 
     except RuntimeError as e:
-        return CallToolResult(
-            content=[
-                TextContent(
-                    type="text",
-                    text=(
-                        f"Graph store requires LLM. Error: {str(e)}\n\n"
-                        "To use the knowledge graph:\n"
-                        "  Local: Install Ollama (https://ollama.ai) and run: ollama serve\n"
-                        "  Cloud: Set OPENAI_API_KEY or ANTHROPIC_API_KEY"
-                    ),
-                )
-            ],
-            isError=True,
-        )
+        return _llm_error_result(e, "Graph search")
     except Exception as e:
         return CallToolResult(
             content=[TextContent(type="text", text=f"Error querying graph: {str(e)}")],
@@ -828,20 +840,7 @@ async def _graph_add(arguments: dict[str, Any]) -> CallToolResult:
         )
 
     except RuntimeError as e:
-        return CallToolResult(
-            content=[
-                TextContent(
-                    type="text",
-                    text=(
-                        f"Graph store requires LLM. Error: {str(e)}\n\n"
-                        "To use the knowledge graph:\n"
-                        "  Local: Install Ollama (https://ollama.ai) and run: ollama serve\n"
-                        "  Cloud: Set OPENAI_API_KEY or ANTHROPIC_API_KEY"
-                    ),
-                )
-            ],
-            isError=True,
-        )
+        return _llm_error_result(e, "Graph add")
     except Exception as e:
         return CallToolResult(
             content=[TextContent(type="text", text=f"Error adding to graph: {str(e)}")],

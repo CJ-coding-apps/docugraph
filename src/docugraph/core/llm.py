@@ -25,6 +25,11 @@ import httpx
 
 from docugraph.core.config import LLMProvider, get_config
 
+# One literal each, because the preflight check and the client it builds have
+# to agree on which server and which model they are talking about.
+OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
+OLLAMA_DEFAULT_MODEL = "llama3.2"
+
 
 class LLMProviderBase(ABC):
     """Abstract base class for LLM providers."""
@@ -207,8 +212,8 @@ class OllamaLLM(LLMProviderBase):
 
     def __init__(
         self,
-        model: str = "llama3.2",
-        base_url: str = "http://localhost:11434",
+        model: str = OLLAMA_DEFAULT_MODEL,
+        base_url: str = OLLAMA_DEFAULT_BASE_URL,
         temperature: float = 0.0,
     ) -> None:
         self._model = model
@@ -396,7 +401,7 @@ class AnthropicLLM(LLMProviderBase):
         return AnthropicClient(config=llm_config)
 
 
-def is_ollama_available(base_url: str = "http://localhost:11434") -> bool:
+def is_ollama_available(base_url: str = OLLAMA_DEFAULT_BASE_URL) -> bool:
     """Check if Ollama is running locally.
 
     Args:
@@ -412,7 +417,7 @@ def is_ollama_available(base_url: str = "http://localhost:11434") -> bool:
         return False
 
 
-def get_available_ollama_models(base_url: str = "http://localhost:11434") -> list[str]:
+def get_available_ollama_models(base_url: str = OLLAMA_DEFAULT_BASE_URL) -> list[str]:
     """Get list of available Ollama models.
 
     Args:
@@ -431,14 +436,118 @@ def get_available_ollama_models(base_url: str = "http://localhost:11434") -> lis
     return []
 
 
+class LLMUnavailableError(RuntimeError):
+    """No LLM can serve the requested model.
+
+    Raised for both "no provider is set up" and "the provider is reachable but
+    does not have the model pulled". The second case is the reason this exists:
+    an Ollama server that is running without the configured model passes every
+    reachability check, then fails deep inside Graphiti with a provider-specific
+    404 traceback. The graph tools claim to degrade gracefully; this is what
+    makes that true.
+
+    Subclasses RuntimeError so existing ``except RuntimeError`` handlers keep
+    catching it.
+    """
+
+
+def _model_is_available(wanted: str, available: list[str]) -> bool:
+    """Whether `wanted` names a model the Ollama server actually has.
+
+    Ollama tags its models, so a configured ``llama3.2`` is stored as
+    ``llama3.2:latest``. Compare on the untagged name, but only when the
+    request is itself untagged -- an explicit ``llama3.2:7b`` must match
+    exactly, or we would send a request for a tag that is not there.
+    """
+    for name in available:
+        if name == wanted:
+            return True
+        if ":" not in wanted and name.split(":", 1)[0] == wanted:
+            return True
+    return False
+
+
+def _diagnose_ollama(wanted_model: str, base_url: str) -> tuple[str | None, list[str]]:
+    """Why Ollama cannot serve `wanted_model`, plus what it does have.
+
+    Returns ``(None, installed)`` when Ollama can serve the request.
+    """
+    if not is_ollama_available(base_url):
+        return f"Ollama is not reachable at {base_url}", []
+
+    available = get_available_ollama_models(base_url)
+    if not available:
+        return f"Ollama at {base_url} is running but reports no models installed", []
+
+    if not _model_is_available(wanted_model, available):
+        return (
+            f"Ollama at {base_url} is running but does not have the model "
+            f"'{wanted_model}' (installed: {', '.join(available[:5])})",
+            available,
+        )
+    return None, available
+
+
+def _provider_problem(provider: LLMProvider, model: str | None) -> tuple[str | None, list[str]]:
+    """Why `provider` cannot serve `model` right now, plus Ollama's model list."""
+    if provider == LLMProvider.OLLAMA:
+        return _diagnose_ollama(model or OLLAMA_DEFAULT_MODEL, OLLAMA_DEFAULT_BASE_URL)
+    if provider == LLMProvider.OPENAI:
+        if os.environ.get("OPENAI_API_KEY"):
+            return None, []
+        return "OPENAI_API_KEY is not set", []
+    if provider == LLMProvider.ANTHROPIC:
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            return None, []
+        return "ANTHROPIC_API_KEY is not set", []
+    return f"Unsupported LLM provider: {provider}", []
+
+
+def _unavailable_error(
+    problems: list[str],
+    model: str | None,
+    ollama_models: list[str],
+) -> LLMUnavailableError:
+    """Build the actionable error for an unusable LLM configuration."""
+    lines = [
+        "The knowledge-graph tools need an LLM, and none is available.",
+        "",
+        "Why not:",
+    ]
+    lines += [f"  - {problem}" for problem in problems]
+    lines += [
+        "",
+        "To fix, pick one:",
+        f"    ollama pull {model or OLLAMA_DEFAULT_MODEL}",
+        "    export OPENAI_API_KEY=sk-...",
+        "    export ANTHROPIC_API_KEY=sk-ant-...",
+    ]
+    if ollama_models:
+        lines += [
+            "",
+            "Ollama already has a model you could use instead:",
+            f"    DOCUGRAPH_LLM__MODEL={ollama_models[0]}",
+        ]
+    lines += [
+        "",
+        "Vector and keyword search need no LLM: `docugraph search`, `search_docs` "
+        "and `hybrid_search` work as they are.",
+    ]
+    return LLMUnavailableError("\n".join(lines))
+
+
 def get_llm_provider(
     provider: LLMProvider | None = None,
     model: str | None = None,
 ) -> LLMProviderBase:
-    """Get an LLM provider instance.
+    """Get an LLM provider instance, validating that it can actually serve.
 
     Auto-detects the best available provider if not specified.
     Priority: Ollama (local) -> OpenAI -> Anthropic
+
+    Auto-detection checks the *model*, not just the service, so an Ollama
+    server that is running without the configured model falls through to a
+    cloud key instead of being selected and then failing at call time.
 
     Args:
         provider: Specific provider to use, or None for auto-detection
@@ -448,7 +557,8 @@ def get_llm_provider(
         LLM provider instance
 
     Raises:
-        RuntimeError: If no LLM provider is available
+        LLMUnavailableError: If the selected provider cannot serve the
+            requested model -- unreachable, missing model, or missing key.
     """
     config = get_config()
 
@@ -456,33 +566,34 @@ def get_llm_provider(
     if provider is None:
         provider = config.llm.provider
 
-    # Auto-detect provider
-    if provider == LLMProvider.AUTO:
-        if is_ollama_available():
-            provider = LLMProvider.OLLAMA
-        elif os.environ.get("OPENAI_API_KEY"):
-            provider = LLMProvider.OPENAI
-        elif os.environ.get("ANTHROPIC_API_KEY"):
-            provider = LLMProvider.ANTHROPIC
-        else:
-            raise RuntimeError(
-                "No LLM provider available. Options:\n"
-                "  1. Start Ollama locally: ollama serve\n"
-                "  2. Set OPENAI_API_KEY environment variable\n"
-                "  3. Set ANTHROPIC_API_KEY environment variable\n"
-                "For local-only operation, install Ollama: https://ollama.ai"
-            )
-
     # Get model from config if not specified
     if model is None or model == "auto":
         model = config.llm.model if config.llm.model != "auto" else None
 
     temperature = config.llm.temperature
 
+    if provider == LLMProvider.AUTO:
+        candidates = (LLMProvider.OLLAMA, LLMProvider.OPENAI, LLMProvider.ANTHROPIC)
+        problems: list[str] = []
+        ollama_models: list[str] = []
+        for candidate in candidates:
+            problem, models = _provider_problem(candidate, model)
+            if problem is None:
+                provider = candidate
+                break
+            problems.append(problem)
+            ollama_models = ollama_models or models
+        else:
+            raise _unavailable_error(problems, model, ollama_models)
+    else:
+        problem, ollama_models = _provider_problem(provider, model)
+        if problem is not None:
+            raise _unavailable_error([problem], model, ollama_models)
+
     # Create provider instance
     if provider == LLMProvider.OLLAMA:
         return OllamaLLM(
-            model=model or "llama3.2",
+            model=model or OLLAMA_DEFAULT_MODEL,
             temperature=temperature,
         )
     elif provider == LLMProvider.OPENAI:
