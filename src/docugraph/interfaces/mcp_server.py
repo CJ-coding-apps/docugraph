@@ -88,252 +88,254 @@ def _annotate(tools: list[Tool]) -> list[Tool]:
 @server.list_tools()
 async def list_tools() -> list[Tool]:
     """List available tools."""
-    return _annotate([
-        # Search tools
-        Tool(
-            name="search_docs",
-            description=(
-                "Search indexed documentation for relevant content. "
-                "Returns chunks of documentation that match the query, "
-                "with relevance scores and source information."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to find relevant documentation",
+    return _annotate(
+        [
+            # Search tools
+            Tool(
+                name="search_docs",
+                description=(
+                    "Search indexed documentation for relevant content. "
+                    "Returns chunks of documentation that match the query, "
+                    "with relevance scores and source information."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query to find relevant documentation",
+                        },
+                        "top_k": {
+                            "type": "integer",
+                            "description": "Number of results to return (default: 5)",
+                            "default": 5,
+                        },
                     },
-                    "top_k": {
-                        "type": "integer",
-                        "description": "Number of results to return (default: 5)",
-                        "default": 5,
-                    },
+                    "required": ["query"],
                 },
-                "required": ["query"],
-            },
-        ),
-        Tool(
-            name="hybrid_search",
-            description=(
-                "Perform hybrid search combining vector similarity, keyword matching, "
-                "and optionally knowledge graph traversal for more comprehensive results."
             ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query",
+            Tool(
+                name="hybrid_search",
+                description=(
+                    "Perform hybrid search combining vector similarity, keyword matching, "
+                    "and optionally knowledge graph traversal for more comprehensive results."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query",
+                        },
+                        "top_k": {
+                            "type": "integer",
+                            "description": "Number of results to return (default: 10)",
+                            "default": 10,
+                        },
+                        "mode": {
+                            "type": "string",
+                            "description": "Search mode: vector, keyword, hybrid, or all (default: hybrid)",
+                            "enum": ["vector", "keyword", "hybrid", "all"],
+                            "default": "hybrid",
+                        },
+                        "include_graph": {
+                            "type": "boolean",
+                            "description": "Include knowledge graph search (default: false)",
+                            "default": False,
+                        },
+                        "rerank": {
+                            "type": "boolean",
+                            "description": (
+                                "Rerank fused results with the local cross-encoder "
+                                "(BAAI/bge-reranker-v2-m3, multilingual). Downloads "
+                                "~1.8 GB on first use. Opt-in; off by default."
+                            ),
+                            "default": False,
+                        },
                     },
-                    "top_k": {
-                        "type": "integer",
-                        "description": "Number of results to return (default: 10)",
-                        "default": 10,
-                    },
-                    "mode": {
-                        "type": "string",
-                        "description": "Search mode: vector, keyword, hybrid, or all (default: hybrid)",
-                        "enum": ["vector", "keyword", "hybrid", "all"],
-                        "default": "hybrid",
-                    },
-                    "include_graph": {
-                        "type": "boolean",
-                        "description": "Include knowledge graph search (default: false)",
-                        "default": False,
-                    },
-                    "rerank": {
-                        "type": "boolean",
-                        "description": (
-                            "Rerank fused results with the local cross-encoder "
-                            "(BAAI/bge-reranker-v2-m3, multilingual). Downloads "
-                            "~1.8 GB on first use. Opt-in; off by default."
-                        ),
-                        "default": False,
-                    },
+                    "required": ["query"],
                 },
-                "required": ["query"],
-            },
-        ),
-        # Indexing tools
-        Tool(
-            name="crawl_url",
-            description=(
-                "Crawl a URL and index its content for future searches. "
-                "Use this to add new documentation to the knowledge base."
             ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL to crawl and index",
+            # Indexing tools
+            Tool(
+                name="crawl_url",
+                description=(
+                    "Crawl a URL and index its content for future searches. "
+                    "Use this to add new documentation to the knowledge base."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "The URL to crawl and index",
+                        },
+                        "max_pages": {
+                            "type": "integer",
+                            "description": "Maximum pages to crawl (default: 1)",
+                            "default": 1,
+                        },
                     },
-                    "max_pages": {
-                        "type": "integer",
-                        "description": "Maximum pages to crawl (default: 1)",
-                        "default": 1,
-                    },
+                    "required": ["url"],
                 },
-                "required": ["url"],
-            },
-        ),
-        Tool(
-            name="index_git",
-            description=(
-                "Clone a git repository and index its documentation. "
-                "Useful for adding project documentation to the knowledge base."
             ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "Git repository URL (HTTPS or SSH)",
+            Tool(
+                name="index_git",
+                description=(
+                    "Clone a git repository and index its documentation. "
+                    "Useful for adding project documentation to the knowledge base."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "Git repository URL (HTTPS or SSH)",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Custom name for the repository (optional)",
+                        },
+                        "ref": {
+                            "type": "string",
+                            "description": "Branch, tag, or commit to checkout (optional)",
+                        },
+                        "include_code": {
+                            "type": "boolean",
+                            "description": "Include code files, not just docs (default: false)",
+                            "default": False,
+                        },
                     },
-                    "name": {
-                        "type": "string",
-                        "description": "Custom name for the repository (optional)",
-                    },
-                    "ref": {
-                        "type": "string",
-                        "description": "Branch, tag, or commit to checkout (optional)",
-                    },
-                    "include_code": {
-                        "type": "boolean",
-                        "description": "Include code files, not just docs (default: false)",
-                        "default": False,
-                    },
+                    "required": ["url"],
                 },
-                "required": ["url"],
-            },
-        ),
-        # Memory tools
-        Tool(
-            name="memory_store",
-            description=(
-                "Store information in agent memory for later recall. "
-                "Memory is scoped by repository and branch for context isolation."
             ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "key": {
-                        "type": "string",
-                        "description": "Key to store the value under",
+            # Memory tools
+            Tool(
+                name="memory_store",
+                description=(
+                    "Store information in agent memory for later recall. "
+                    "Memory is scoped by repository and branch for context isolation."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "Key to store the value under",
+                        },
+                        "value": {
+                            "type": "string",
+                            "description": "Value to store (can be JSON for complex data)",
+                        },
+                        "repository": {
+                            "type": "string",
+                            "description": "Repository scope (default: 'default')",
+                            "default": "default",
+                        },
+                        "branch": {
+                            "type": "string",
+                            "description": "Branch scope (default: 'main')",
+                            "default": "main",
+                        },
                     },
-                    "value": {
-                        "type": "string",
-                        "description": "Value to store (can be JSON for complex data)",
-                    },
-                    "repository": {
-                        "type": "string",
-                        "description": "Repository scope (default: 'default')",
-                        "default": "default",
-                    },
-                    "branch": {
-                        "type": "string",
-                        "description": "Branch scope (default: 'main')",
-                        "default": "main",
-                    },
+                    "required": ["key", "value"],
                 },
-                "required": ["key", "value"],
-            },
-        ),
-        Tool(
-            name="memory_recall",
-            description=(
-                "Retrieve information from agent memory. "
-                "Use this to recall previous decisions, context, or stored data."
             ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "key": {
-                        "type": "string",
-                        "description": "Key to retrieve (or pattern with % wildcard)",
+            Tool(
+                name="memory_recall",
+                description=(
+                    "Retrieve information from agent memory. "
+                    "Use this to recall previous decisions, context, or stored data."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "Key to retrieve (or pattern with % wildcard)",
+                        },
+                        "repository": {
+                            "type": "string",
+                            "description": "Repository scope (default: 'default')",
+                            "default": "default",
+                        },
+                        "branch": {
+                            "type": "string",
+                            "description": "Branch scope (default: 'main')",
+                            "default": "main",
+                        },
+                        "list_all": {
+                            "type": "boolean",
+                            "description": "List all keys instead of getting a specific value",
+                            "default": False,
+                        },
                     },
-                    "repository": {
-                        "type": "string",
-                        "description": "Repository scope (default: 'default')",
-                        "default": "default",
-                    },
-                    "branch": {
-                        "type": "string",
-                        "description": "Branch scope (default: 'main')",
-                        "default": "main",
-                    },
-                    "list_all": {
-                        "type": "boolean",
-                        "description": "List all keys instead of getting a specific value",
-                        "default": False,
-                    },
+                    "required": ["key"],
                 },
-                "required": ["key"],
-            },
-        ),
-        # Graph tools
-        Tool(
-            name="graph_query",
-            description=(
-                "Query the knowledge graph to find entities and relationships. "
-                "Returns facts extracted from indexed documentation."
             ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query for the knowledge graph",
+            # Graph tools
+            Tool(
+                name="graph_query",
+                description=(
+                    "Query the knowledge graph to find entities and relationships. "
+                    "Returns facts extracted from indexed documentation."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query for the knowledge graph",
+                        },
+                        "num_results": {
+                            "type": "integer",
+                            "description": "Maximum results to return (default: 10)",
+                            "default": 10,
+                        },
+                        "group_id": {
+                            "type": "string",
+                            "description": "Group ID to filter by (optional)",
+                        },
                     },
-                    "num_results": {
-                        "type": "integer",
-                        "description": "Maximum results to return (default: 10)",
-                        "default": 10,
-                    },
-                    "group_id": {
-                        "type": "string",
-                        "description": "Group ID to filter by (optional)",
-                    },
+                    "required": ["query"],
                 },
-                "required": ["query"],
-            },
-        ),
-        Tool(
-            name="graph_add",
-            description=(
-                "Add content to the knowledge graph. Extracts entities and relationships using LLM."
             ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": "Content to extract entities from",
+            Tool(
+                name="graph_add",
+                description=(
+                    "Add content to the knowledge graph. Extracts entities and relationships using LLM."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "content": {
+                            "type": "string",
+                            "description": "Content to extract entities from",
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Episode name (optional)",
+                        },
+                        "group_id": {
+                            "type": "string",
+                            "description": "Group ID for scoping (default: 'default')",
+                            "default": "default",
+                        },
                     },
-                    "name": {
-                        "type": "string",
-                        "description": "Episode name (optional)",
-                    },
-                    "group_id": {
-                        "type": "string",
-                        "description": "Group ID for scoping (default: 'default')",
-                        "default": "default",
-                    },
+                    "required": ["content"],
                 },
-                "required": ["content"],
-            },
-        ),
-        # Utility tools
-        Tool(
-            name="get_stats",
-            description="Get statistics about the indexed documentation.",
-            inputSchema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-    ])
+            ),
+            # Utility tools
+            Tool(
+                name="get_stats",
+                description="Get statistics about the indexed documentation.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                },
+            ),
+        ]
+    )
 
 
 @server.call_tool()
