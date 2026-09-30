@@ -44,10 +44,20 @@ def get_vector_store() -> VectorStore:
 
 # MCP annotations, one per tool. An MCP client uses these hints to decide
 # whether a call needs human approval, so they must describe what the tool
-# actually does. None of the nine tools deletes data: the writers only append
-# (indexed chunks, graph episodes) or update the single record a caller names by
-# key -- nothing is removed, and nothing is replaced wholesale. Re-check this
-# table whenever a tool's behaviour changes.
+# actually does. Re-check this table whenever a tool's behaviour changes.
+#
+# destructiveHint=False is a claim that the call *only adds* -- that nothing
+# already stored is replaced or lost. Three of the four writers keep that claim.
+# `crawl_url` and `index_git` append chunks: `VectorStore.add_chunks` calls
+# LanceDB `add`, which appends, and no delete or merge path runs -- re-indexing
+# a source therefore duplicates its chunks rather than replacing them, which is a
+# separate idempotency question and not a destructive one. `graph_add` appends a
+# graph episode.
+#
+# `memory_store` does not keep it. `MemoryStore.set` looks up the row for the
+# (repository, branch, key) it is given and UPDATEs it, so the value that was
+# under that key is gone. Overwriting a record a caller names by key is still an
+# overwrite, and the hint means "only adds", so this one is destructive.
 TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {
     # Performs no writes.
     "search_docs": ToolAnnotations(readOnlyHint=True, destructiveHint=False),
@@ -58,8 +68,9 @@ TOOL_ANNOTATIONS: dict[str, ToolAnnotations] = {
     # Writes, additively.
     "crawl_url": ToolAnnotations(readOnlyHint=False, destructiveHint=False),
     "index_git": ToolAnnotations(readOnlyHint=False, destructiveHint=False),
-    "memory_store": ToolAnnotations(readOnlyHint=False, destructiveHint=False),
     "graph_add": ToolAnnotations(readOnlyHint=False, destructiveHint=False),
+    # Writes, replacing the value already held under `key`.
+    "memory_store": ToolAnnotations(readOnlyHint=False, destructiveHint=True),
 }
 
 

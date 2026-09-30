@@ -35,7 +35,12 @@ dependencies = [
     "pandas>=2.0.0",
 
     # Knowledge Graph
-    "graphiti-core[kuzu]>=0.5.0",
+    # Pinned exactly, to the version this code was tested against. graphiti-core
+    # moves quickly, and an open range let a future release change its Kùzu
+    # requirement -- or drop the kuzu driver -- and break the install against the
+    # exact `kuzu` pin below, with no change here to explain it. Do not widen
+    # without re-running the ingestion tests against the new version.
+    "graphiti-core[kuzu]==0.30.2",
     # Pinned exactly: kuzu is archived upstream (0.11.3 is the final release) and
     # its file format is not stable pre-1.0, so an unpinned upgrade can make an
     # existing graph unreadable. graphiti-core[kuzu] requires kuzu>=0.11.3, so
