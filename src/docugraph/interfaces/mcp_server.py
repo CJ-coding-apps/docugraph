@@ -456,6 +456,20 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
             fusion=FusionStrategy.RRF,
         )
 
+        # Report the graph leg explicitly. Without this, a caller that asked
+        # for graph results and got none cannot tell that from a graph that
+        # simply had nothing to say.
+        status = retriever.graph_status
+        graph_note: str | None = None
+        if status.requested:
+            if status.available:
+                graph_note = "graph_available: true"
+            else:
+                graph_note = (
+                    f"graph_available: false — {status.reason}. "
+                    "These results are from vector/keyword search only."
+                )
+
         if rerank and results:
             # Opt-in cross-encoder rerank (downloads ~1.8 GB on first use).
             from docugraph.retrieval.reranker import FastembedReranker
@@ -479,11 +493,18 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
             results = reordered
 
         if not results:
+            # Carry the graph note here too: "No results found." on its own
+            # would hide that the graph leg never ran.
+            empty_parts = ["No results found."]
+            if graph_note:
+                empty_parts.append(graph_note)
             return CallToolResult(
-                content=[TextContent(type="text", text="No results found.")],
+                content=[TextContent(type="text", text="\n\n".join(empty_parts))],
             )
 
         output_parts = [f"Found {len(results)} results for: {query}\n"]
+        if graph_note:
+            output_parts.append(f"{graph_note}\n")
 
         for i, result in enumerate(results, 1):
             chunk = result.chunk

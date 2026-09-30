@@ -55,6 +55,23 @@ class HybridSearchConfig:
     deduplicate: bool = True
 
 
+@dataclass(frozen=True)
+class GraphLegStatus:
+    """What happened to the graph leg of the most recent search.
+
+    The graph leg is optional -- it needs a graph store on disk, which needs an
+    LLM. When it cannot run, the caller still gets vector and/or keyword
+    results, and that is the whole point of degrading. What must not happen is
+    the *reason* disappearing: "asked for graph results and got none" would then
+    be indistinguishable from "the graph had nothing to say", and a silent
+    failure would read as a successful empty answer.
+    """
+
+    requested: bool = False
+    available: bool = False
+    reason: str | None = None
+
+
 @dataclass
 class HybridResult:
     """Result from hybrid search with source attribution."""
@@ -99,6 +116,12 @@ class HybridRetriever:
         self._vector_store = vector_store
         self._graph_store = graph_store
         self._config = config or HybridSearchConfig()
+        # Why the graph store could not be built or queried during this call.
+        # Carried forward to `graph_status`; see GraphLegStatus.
+        self._graph_store_error: str | None = None
+        # Set by every `search()` call: whether the graph leg was asked for and
+        # whether it actually ran.
+        self.graph_status = GraphLegStatus()
 
     def _get_vector_store(self) -> Any:
         """Lazy load vector store."""
@@ -109,15 +132,19 @@ class HybridRetriever:
         return self._vector_store
 
     def _get_graph_store(self) -> Any | None:
-        """Lazy load graph store if configured."""
+        """Lazy load graph store if configured.
+
+        A failure here is not raised -- the graph is optional -- but the reason
+        is kept in ``self._graph_store_error`` rather than discarded, so the
+        caller can be told the graph did not run.
+        """
         if self._graph_store is None and self._config.include_graph:
             try:
                 from docugraph.storage.graph_store import GraphStore
 
                 self._graph_store = GraphStore()
-            except Exception:  # nosec B110 -- graph is optional; degrade to vector/keyword
-                # Graph store may not be available
-                pass
+            except Exception as e:  # nosec B110 -- graph is optional; degrade to vector/keyword
+                self._graph_store_error = f"the graph store could not be opened: {e}"
         return self._graph_store
 
     def search(
@@ -157,8 +184,15 @@ class HybridRetriever:
             keyword_results = self._keyword_search(query, top_k * 2, filters)
             results_by_source["keyword"] = keyword_results
 
-        # Graph search (async, but we run it sync here)
-        if mode in (SearchMode.GRAPH, SearchMode.ALL) and cfg.include_graph:
+        # Graph search (async, but we run it sync here). Optional: it is
+        # skipped or fails without stopping the search, but what happened is
+        # recorded either way and reported through `graph_status`.
+        graph_requested = mode in (SearchMode.GRAPH, SearchMode.ALL)
+        self._graph_store_error = None
+        graph_available = False
+        graph_reason: str | None = None
+
+        if graph_requested and cfg.include_graph:
             import asyncio
 
             try:
@@ -173,9 +207,23 @@ class HybridRetriever:
                 else:
                     graph_results = loop.run_until_complete(self._graph_search(query, top_k * 2))
                 results_by_source["graph"] = graph_results
-            except Exception:  # nosec B110 -- graph search may fail if not configured
-                # Graph search may fail if not configured
-                pass
+                graph_available = True
+            except Exception as e:  # nosec B110 -- graph search may fail if not configured
+                graph_reason = f"the graph search could not be run: {e}"
+
+            # A store that failed to open reports through `_graph_store_error`
+            # rather than as an exception, so it is resolved after the fact.
+            if self._graph_store_error is not None:
+                graph_available = False
+                graph_reason = self._graph_store_error
+        elif graph_requested:
+            graph_reason = "graph search is disabled (set include_graph=true)"
+
+        self.graph_status = GraphLegStatus(
+            requested=graph_requested,
+            available=graph_available,
+            reason=graph_reason,
+        )
 
         # Fuse results
         if fusion == FusionStrategy.RRF:
@@ -254,7 +302,8 @@ class HybridRetriever:
                 (r.get("uuid", ""), 1.0 / (i + 1))  # Score by rank
                 for i, r in enumerate(results)
             ]
-        except Exception:
+        except Exception as e:
+            self._graph_store_error = f"the graph store could not be queried: {e}"
             return []
 
     def _fuse_rrf(
