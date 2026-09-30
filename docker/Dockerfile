@@ -101,9 +101,11 @@ USER docugraph
 ENV DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph \
     FASTEMBED_CACHE_PATH=/data/docugraph/models
 
-# Health check (stdio MCP server has no HTTP port)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD docugraph stats || exit 1
+# No HEALTHCHECK, deliberately. The container serves MCP over stdio, so there is
+# no port to poll; the obvious probe, `docugraph stats`, opens the same Kuzu
+# database the running server holds open, and Kuzu locks its files — the probe
+# would contend with the server and can mark a healthy container unhealthy.
+# Liveness for a stdio server is the client's connection, not a timer.
 
 # Default command: MCP stdio server — run with `docker run -i`
 CMD ["docugraph-mcp"]

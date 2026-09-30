@@ -2,16 +2,12 @@
 name: Docker Publish
 
 on:
+  # Version tags are releases. Branch pushes deliberately do not trigger this:
+  # an image for every push to main is noise, and it made the first push to a
+  # new repository fail a multi-platform build before anything was released.
   push:
-    branches:
-      - main
-      - master
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
-      - master
   workflow_dispatch:  # Allow manual trigger
 
 env:
@@ -29,11 +25,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # The arm64 half of the multi-platform build runs under emulation on the
+      # amd64 runners, which requires QEMU registered with binfmt. Without this
+      # step the arm64 build fails.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -46,18 +47,16 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Set latest tag for default branch
-            type=raw,value=latest,enable={{is_default_branch}}
-            # Tag with branch name
-            type=ref,event=branch
-            # Tag with PR number
-            type=ref,event=pr
-            # Tag with semver
+            # The tag as pushed (v1.2.3)
+            type=ref,event=tag
+            # Semver components (1.2.3, 1.2, 1)
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            # Tag with short SHA
+            # Short SHA, so a manual run is traceable
             type=sha,prefix=sha-
+            # `latest` only for a version tag, never for a manual run
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -65,7 +64,7 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           target: production
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -73,7 +72,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Build and push development image
-        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v5
         with:
           context: .
