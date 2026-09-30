@@ -3,6 +3,12 @@
 # but the whole tree is still sent to the daemon, and a single future
 # `COPY . .` would otherwise carry a 1.1 GB .venv or a .env into a published
 # image. This file is what makes that copy safe rather than lucky.
+#
+# Docker matches these against the path relative to the context root, so a bare
+# name covers only the root -- `__pycache__` does not match `src/x/__pycache__`.
+# Depth-capable patterns therefore carry `**/`. Patterns that are meaningfully
+# root-only (.venv, .git, data) stay anchored, so a nested `tests/fixtures/data`
+# is not swept up with them.
 
 # Virtual environments
 .venv/
@@ -10,47 +16,47 @@ venv/
 env/
 
 # Secrets. Nothing here is tracked, but an untracked .env is exactly what a
-# broad COPY would pick up.
-.env
-.env.*
+# broad COPY would pick up -- at any depth.
+**/.env
+**/.env.*
 
 # Key material
-*.pem
-*.key
-*.p12
-id_rsa*
+**/*.pem
+**/*.key
+**/*.p12
+**/id_rsa*
 
 # VCS
 .git/
 .gitignore
 
 # Caches, test and type-checker output
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.cache/
-htmlcov/
-.coverage
-.coverage.*
-*.log
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/.cache/
+**/htmlcov/
+**/.coverage
+**/.coverage.*
+**/*.log
 
 # Build output
 build/
 dist/
 wheels/
-*.egg-info/
+**/*.egg-info/
 
 # Local data stores. The container's data dir is a volume
 # (DOCUGRAPH_STORAGE__DATA_DIR=/data/docugraph), never build input.
 data/
-*.kuzu
-*.lance
-*.db
+**/*.kuzu
+**/*.lance
+**/*.db
 
 # OS / editor noise
-.DS_Store
+**/.DS_Store
 
 # tests/, docs/ and examples/ are deliberately NOT excluded: the `development`
 # target installs `.[dev]` and Playwright, so the suite is meant to be runnable
