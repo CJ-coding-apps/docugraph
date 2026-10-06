@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The arm64 half of the multi-platform build runs under emulation on the
       # amd64 runners, which requires QEMU registered with binfmt. Without this
