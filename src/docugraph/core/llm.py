@@ -367,24 +367,45 @@ class AnthropicLLM(LLMProviderBase):
         self,
         prompt: str,
         system_prompt: str | None = None,
-        temperature: float | None = None,
+        temperature: float | None = None,  # noqa: ARG002 -- LLMProviderBase declares it
         max_tokens: int = 4096,
     ) -> str:
         """Generate using Anthropic API."""
         try:
             from anthropic import AsyncAnthropic
+            from anthropic.types import TextBlock
         except ImportError as e:
             raise ImportError("anthropic package required: pip install anthropic") from e
 
         client = AsyncAnthropic(api_key=self._api_key)
+        # `temperature` is not sent, and must not be added back. The 1.x SDK
+        # removed it from Messages.create's signature and rejects it before the
+        # request is built -- `TypeError: AsyncMessages.create() got an
+        # unexpected keyword argument 'temperature'` -- so passing it made every
+        # Anthropic call fail at runtime, whatever the type checker said. The
+        # argument stays in the signature because LLMProviderBase declares it and
+        # the OpenAI and Ollama providers do honour it; on this provider it is
+        # inert, which is a difference worth knowing rather than one to paper
+        # over by smuggling it through `extra_body`.
         response = await client.messages.create(
             model=self._model,
             max_tokens=max_tokens,
             system=system_prompt or "",
             messages=[{"role": "user", "content": prompt}],
-            temperature=temperature or self._temperature,
         )
-        text: str = response.content[0].text
+        # `content` is a union of block types and only TextBlock carries `.text`.
+        # Reading `content[0].text` assumed the first block was text, which stops
+        # being true as soon as a reply leads with a thinking or tool-use block --
+        # and then the caller got an AttributeError naming no provider and no
+        # model. Collect the text blocks instead, and if there are none, say what
+        # came back rather than returning an empty string that reads as success.
+        text = "".join(block.text for block in response.content if isinstance(block, TextBlock))
+        if not text:
+            kinds = ", ".join(sorted({type(block).__name__ for block in response.content}))
+            raise RuntimeError(
+                f"Anthropic returned no text for model {self._model!r}; "
+                f"content blocks were: {kinds or 'none'}."
+            )
         return text
 
     def get_graphiti_client(self) -> Any:

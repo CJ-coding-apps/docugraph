@@ -31,8 +31,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      # --all-extras, not --extra dev. The cloud SDKs are imported conditionally,
+      # so with them absent mypy reports "cannot find implementation or library
+      # stub" and types the calls against `Any` -- which is how a `temperature`
+      # argument the Anthropic SDK had already removed passed type checking while
+      # raising TypeError at runtime for every user of docugraph[cloud].
       - name: Sync dependencies
-        run: uv sync --extra dev
+        run: uv sync --all-extras
 
       - name: Run Ruff linter
         run: uv run ruff check src/
@@ -42,6 +47,13 @@ jobs:
 
       - name: Run mypy
         run: uv run mypy src/
+
+      # These SDKs are installed in this job and nowhere else in CI, so it is the
+      # only place the cloud request shapes can be checked against the real
+      # libraries rather than against their absence. Skips itself if anthropic
+      # is missing, which is why it belongs to the all-extras job.
+      - name: Check the cloud provider calls against the installed SDKs
+        run: uv run pytest tests/unit/test_cloud_provider_sdks.py -v
 
   test:
     name: Test (py${{ matrix.python-version }})
