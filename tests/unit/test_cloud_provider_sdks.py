@@ -2,12 +2,17 @@
 
 A signature the type checker reads and a signature the SDK enforces at runtime
 are two different claims, and this module exists because they disagreed.
-`anthropic>=0.18.0` has no upper bound, so pip installs whatever is current --
-and in the 1.x line `Messages.create` no longer takes `temperature`. Passing it
-raised `TypeError: AsyncMessages.create() got an unexpected keyword argument
-'temperature'` before a request was ever built, so every Anthropic call failed at
-runtime while `mypy` under CI's `--extra dev` sync saw nothing at all, because
-anthropic was not installed and the import was treated as missing.
+`anthropic>=0.18.0` then had no upper bound, so pip installed whatever was
+current -- and in the 1.x line `Messages.create` no longer takes `temperature`.
+Passing it raised `TypeError: AsyncMessages.create() got an unexpected keyword
+argument 'temperature'` before a request was ever built, so every Anthropic call
+failed at runtime while `mypy` under CI's `--extra dev` sync saw nothing at all,
+because anthropic was not installed and the import was treated as missing.
+
+The `cloud` extra is now capped below each SDK's next major, so this cannot
+arrive as an automatic install again. The cap is a decision, not a guarantee:
+it is this file that says what the pinned version actually accepts, and it is
+the reason the cap is 2 rather than 3.
 
 So this asks the installed SDK two questions, over a mocked HTTP transport:
 does the call the provider makes succeed, and does it carry anything the SDK
