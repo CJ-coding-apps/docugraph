@@ -39,14 +39,19 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-extras
 
+      # `scripts/` is included, not just `src/`. The live-provider smoke script is
+      # not part of the package but it is part of this repository, and code no gate
+      # reads is code that rots. mypy gets both paths together so it resolves
+      # `docugraph` to this source tree rather than to the installed copy, which it
+      # otherwise reports as an untyped library.
       - name: Run Ruff linter
-        run: uv run ruff check src/
+        run: uv run ruff check src/ scripts/
 
       - name: Run Ruff formatter check
-        run: uv run ruff format --check src/
+        run: uv run ruff format --check src/ scripts/
 
       - name: Run mypy
-        run: uv run mypy src/
+        run: uv run mypy src/ scripts/
 
       # These SDKs are installed in this job and nowhere else in CI, so it is the
       # only place the cloud request shapes can be checked against the real

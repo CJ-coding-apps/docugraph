@@ -63,19 +63,18 @@ updates:
       - dependency-name: "lancedb"
         versions: [">= 0.26.0"]
 
-      # The three cloud SDKs, each capped below the next major after the version
-      # CI installs and tests against. They are held rather than tracked because
-      # a major release is where their breaking changes land, and each of them
-      # breaks this repo in a way a bump cannot explain: the Anthropic 1.x SDK
-      # removed `temperature` from its request type and every call raised
-      # `unexpected keyword argument` until that was fixed. A major here is a
-      # deliberate upgrade with the all-extras job behind it.
-      - dependency-name: "openai"
-        versions: [">= 4.0.0"]
-      - dependency-name: "anthropic"
-        versions: [">= 2.0.0"]
-      - dependency-name: "cohere"
-        versions: [">= 8.0.0"]
+      # The three cloud SDKs are deliberately *not* ignored here, though they
+      # are still capped in pyproject.toml. They were, and it was the wrong call:
+      # an ignore suppresses the PR that would have shown you the break. The
+      # Anthropic 1.x SDK removed `temperature` from its request type and every
+      # call raised `unexpected keyword argument` -- and because the cap arrived
+      # by hand, the break was discovered rather than announced. A major bump for
+      # any of these now opens a PR that proposes lifting the cap, and CI's
+      # all-extras job runs tests/unit/test_cloud_provider_sdks.py against the
+      # proposed version, which is the only thing that can say whether the new
+      # SDK still accepts the arguments these providers pass. That job exists for
+      # this: read its result before merging, because a green install proves
+      # nothing about the request shape.
 
   # ----------------------------------------------------------------- GitHub Actions
   - package-ecosystem: "github-actions"
