@@ -183,7 +183,7 @@ storage:
 
 embeddings:
   provider: auto            # auto | fastembed | openai | ollama | cohere
-  model: BAAI/bge-small-en-v1.5
+  model: BAAI/bge-small-en-v1.5   # fastembed's default; see the note below
   # dimensions: auto-detected from the model
   batch_size: 32
 
@@ -196,8 +196,10 @@ crawler:
 `provider: auto` resolves to **fastembed** (local ONNX) — nothing about your
 environment changes that, so documents are not sent anywhere for embedding
 unless you name a cloud provider. Set `provider: openai` (or `cohere`) to send
-them there; that is the request. Any field can be overridden by environment
-variable, e.g. `DOCUGRAPH_EMBEDDINGS__MODEL` or `DOCUGRAPH_EMBEDDINGS__PROVIDER`.
+them there; that is the request, and it needs a model named with it: the entry
+above is fastembed's own default and no cloud provider has one. Any field can be
+overridden by environment variable, e.g. `DOCUGRAPH_EMBEDDINGS__MODEL` or
+`DOCUGRAPH_EMBEDDINGS__PROVIDER`.
 
 See [docs/configuration.md](docs/configuration.md) for the full reference,
 including the embedding-model consistency guard and the graph LLM requirement.

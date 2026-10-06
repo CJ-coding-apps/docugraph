@@ -5,6 +5,14 @@ DocuGraph AI can be configured via:
 2. Environment variables (prefixed with `DOCUGRAPH_`)
 3. Command-line arguments
 
+> **Every model name in this document is an example.** DocuGraph ships no cloud
+> model id: nothing in `src/` names one, and `tests/unit/test_no_model_ids_in_source.py`
+> fails the build if that changes. A cloud provider is used only when you name
+> both the provider and the model; naming the provider alone is an error that
+> says which setting is missing. The local backends are the exception and do
+> carry a default each, because their models are a download away rather than an
+> account away — those defaults are listed below.
+
 ## Configuration File
 
 Default location: `~/.docugraph/config.yaml`
@@ -39,14 +47,26 @@ embeddings:
   #   sentence-transformers - only if you have it installed (pulls in torch)
   provider: auto
 
-  # Model name (provider-specific)
-  model: BAAI/bge-small-en-v1.5   # fastembed default, 384 dims
+  # Model name (provider-specific). Leave this out and each *local* backend
+  # falls back to its own model -- fastembed to BAAI/bge-small-en-v1.5 (384
+  # dims, ~130 MB on first use), sentence-transformers to all-MiniLM-L6-v2,
+  # Ollama to nomic-embed-text (pull it first).
+  #
+  # There is no default for a *cloud* provider, and leaving `model` unset with
+  # `provider: openai` or `cohere` is an error rather than a guess. An embedding
+  # model fixes the vector space of the whole index, so a name this package
+  # picked would be a silent, hard-to-undo choice made for you -- and the wrong
+  # one, since the local default is a name no cloud API has heard of.
+  #
+  # Examples (any model your provider offers will do; these are not defaults):
+  # - BAAI/bge-base-en-v1.5     (fastembed, better quality, 768 dims)
+  # - text-embedding-3-small    (OpenAI; set provider: openai)
+  model: BAAI/bge-small-en-v1.5
 
-  # Alternative fastembed models:
-  # - BAAI/bge-base-en-v1.5     (better quality, 768 dims)
-  # - text-embedding-3-small    (OpenAI; provider: openai)
-
-  # Embedding dimensions (auto-detected from the model)
+  # Embedding dimensions. Left null, they are measured from the first embedding
+  # the model returns, which is the model's own answer to the question. Set it
+  # only to skip that first call; a wrong value here does not fail, it writes
+  # vectors of the wrong width, so the measured path is the safer one.
   dimensions: null
 
   # Batch size for embedding generation
@@ -58,9 +78,21 @@ embeddings:
 llm:
   # Provider selection. Options: auto, ollama, openai, anthropic
   provider: auto      # Tries: ollama -> openai -> anthropic
-  model: auto
 
-  # Explicit configuration:
+  # The model used for extraction and reranking.
+  #
+  # `auto` (the shipped value) and "unset" both mean the same thing: resolve a
+  # model from whatever provider is actually usable. Ollama contributes its own
+  # default (llama3.2, pulled on request); a cloud provider contributes nothing,
+  # because it has no default here -- for those, this must name a model.
+  #
+  # A cloud model is checked against the provider's own models-list endpoint
+  # before the first call, so a name that has been retired fails with
+  # "not found; available: ..." and the list of names that do exist, rather than
+  # as a 404 from deep inside the graph layer. If the endpoint cannot be
+  # reached, the model is reported as unverified rather than assumed good.
+  #
+  # Examples (not defaults; set one to use that provider):
   # provider: ollama
   # model: llama3.2
   #
@@ -69,8 +101,21 @@ llm:
   #
   # provider: anthropic
   # model: claude-haiku-4-5-20251001
+  model: auto
 
-  temperature: 0.0
+  # A second, cheaper model for the summarisation and edge-deduplication passes
+  # the knowledge graph runs. Unset means "the same as `model`", which is what it
+  # did before this setting existed -- the difference is that the fallback is now
+  # whatever you chose rather than a model name compiled into the package.
+  small_model: null
+
+  # Unset by default, and sent to the provider only when you set it. That is not
+  # tidiness: OpenAI's reasoning models (o-series, GPT-5) reject any temperature
+  # other than their own fixed default, so a shipped 0.0 made every call to one
+  # fail with `unsupported value`. Set `0.0` explicitly for deterministic local
+  # output. On Anthropic this setting is accepted and not sent; see below.
+  temperature: null
+
   max_tokens: 4096
 
 # =============================================================================
@@ -126,9 +171,10 @@ export DOCUGRAPH_STORAGE__DATA_DIR=/custom/data/path
 export DOCUGRAPH_EMBEDDINGS__PROVIDER=fastembed
 export DOCUGRAPH_EMBEDDINGS__MODEL=BAAI/bge-base-en-v1.5
 
-# LLM (for the graph; requires API keys for cloud providers)
+# LLM (for the graph; requires API keys for cloud providers).
+# Naming a cloud provider means naming a model with it: there is no default.
 export DOCUGRAPH_LLM__PROVIDER=openai
-export DOCUGRAPH_LLM__MODEL=gpt-4o-mini
+export DOCUGRAPH_LLM__MODEL=<a model id from your provider's docs>
 
 # API keys
 export OPENAI_API_KEY=sk-...
@@ -149,11 +195,11 @@ export DOCUGRAPH_CRAWLER__RATE_LIMIT=5.0
 ```yaml
 embeddings:
   provider: fastembed
-  model: BAAI/bge-small-en-v1.5   # fast, 384 dims
-  # model: BAAI/bge-base-en-v1.5  # better quality, 768 dims
+  # model: BAAI/bge-base-en-v1.5  # an example: better quality, 768 dims
 ```
 
-No API keys required. Models download automatically to
+No API keys required. Omitting `model` uses the backend's own default,
+`BAAI/bge-small-en-v1.5` (fast, 384 dims). Models download automatically to
 `FASTEMBED_CACHE_PATH`. `bge`-family models are given the retrieval
 query-instruction prefix automatically for best relevance.
 
@@ -162,45 +208,49 @@ query-instruction prefix automatically for best relevance.
 ```yaml
 embeddings:
   provider: ollama
-  model: nomic-embed-text
+  # model: nomic-embed-text   # the backend's default; an example, not a requirement
 
 llm:
   provider: ollama
-  model: llama3.2
+  # model: llama3.2           # the backend's default, pulled on request
 ```
 
-Requires the `ollama` extra and a running server (`ollama serve`).
+Requires the `ollama` extra and a running server (`ollama serve`). Both models
+above are Ollama's own defaults for their slots and need not be written down.
 
 ### OpenAI
 
 ```yaml
 embeddings:
   provider: openai
-  model: text-embedding-3-small
+  model: text-embedding-3-small   # an example — required, there is no default
 
 llm:
   provider: openai
-  model: gpt-4o-mini
+  model: gpt-4o-mini              # an example — required, there is no default
 ```
 
-Requires the `cloud` extra and `export OPENAI_API_KEY=sk-...`.
+Requires the `cloud` extra and `export OPENAI_API_KEY=sk-...`. Both model names
+are required and checked against OpenAI's models list; the examples above are
+neither exhaustive nor maintained by this package.
 
 ### Cohere
 
 ```yaml
 embeddings:
   provider: cohere
-  model: embed-english-v3.0
+  model: embed-english-v3.0   # an example — required, there is no default
 ```
 
-Requires the `cloud` extra and `export COHERE_API_KEY=...`.
+Requires the `cloud` extra and `export COHERE_API_KEY=...`. Cohere is reachable
+here for embeddings only: there is no Cohere LLM provider.
 
 ### Anthropic (graph LLM only)
 
 ```yaml
 llm:
   provider: anthropic
-  model: claude-haiku-4-5-20251001
+  model: claude-haiku-4-5-20251001   # an example — required, there is no default
 ```
 
 Requires the `cloud` extra and `export ANTHROPIC_API_KEY=sk-ant-...`.
@@ -211,6 +261,11 @@ your config and has no effect on the request, rather than raising and failing
 the call. OpenAI and Ollama honour it as usual. If you need deterministic
 output on Anthropic, that is a property of the model and the prompt, not of a
 sampling setting here.
+
+Because this provider's `temperature` never reaches the request, leaving it
+unset costs nothing here — but it is still worth leaving unset everywhere, so
+that switching providers does not silently start sending a sampling value the
+new model rejects.
 
 ### sentence-transformers (optional, pulls in torch)
 
