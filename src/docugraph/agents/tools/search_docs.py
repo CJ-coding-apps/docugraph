@@ -5,6 +5,7 @@ Provides vector and hybrid search capabilities over indexed documentation.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 
@@ -16,12 +17,52 @@ def search_docs(
     _context: Any = None,
     **_kwargs: Any,
 ) -> list[dict[str, Any]]:
-    """Search indexed documentation.
+    """Search indexed documentation from synchronous code.
+
+    A thin wrapper over ``search_docs_async`` for callers that have no event
+    loop. Async callers -- the agent loop included -- await
+    ``search_docs_async`` instead: this drives a fresh loop and raises if one
+    is already running.
 
     Args:
         query: Search query text
         top_k: Number of results to return
-        mode: Search mode (vector, keyword, hybrid)
+        mode: Search mode (vector, keyword, hybrid, all)
+        include_graph: Include knowledge graph in search
+        _context: Agent execution context (injected)
+        **kwargs: Additional arguments
+
+    Returns:
+        List of search results with content, source, and score
+    """
+    return asyncio.run(
+        search_docs_async(
+            query=query,
+            top_k=top_k,
+            mode=mode,
+            include_graph=include_graph,
+            _context=_context,
+            **_kwargs,
+        )
+    )
+
+
+async def search_docs_async(
+    query: str,
+    top_k: int = 5,
+    mode: str = "hybrid",
+    include_graph: bool = False,
+    _context: Any = None,
+    **_kwargs: Any,
+) -> list[dict[str, Any]]:
+    """Search indexed documentation.
+
+    This is the implementation; ``search_docs`` is the synchronous wrapper.
+
+    Args:
+        query: Search query text
+        top_k: Number of results to return
+        mode: Search mode (vector, keyword, hybrid, all)
         include_graph: Include knowledge graph in search
         _context: Agent execution context (injected)
         **kwargs: Additional arguments
@@ -46,7 +87,7 @@ def search_docs(
     config = HybridSearchConfig(include_graph=include_graph)
     retriever = HybridRetriever(config=config)
 
-    results = retriever.search(
+    results = await retriever.asearch(
         query=query,
         top_k=top_k,
         mode=mode_map.get(mode, SearchMode.HYBRID),
@@ -71,38 +112,6 @@ def search_docs(
         )
 
     return formatted
-
-
-async def search_docs_async(
-    query: str,
-    top_k: int = 5,
-    mode: str = "hybrid",
-    include_graph: bool = False,
-    _context: Any = None,
-    **_kwargs: Any,
-) -> list[dict[str, Any]]:
-    """Async version of search_docs.
-
-    Args:
-        query: Search query text
-        top_k: Number of results to return
-        mode: Search mode (vector, keyword, hybrid)
-        include_graph: Include knowledge graph in search
-        _context: Agent execution context (injected)
-        **kwargs: Additional arguments
-
-    Returns:
-        List of search results
-    """
-    # The underlying implementation is sync, so we just wrap it
-    return search_docs(
-        query=query,
-        top_k=top_k,
-        mode=mode,
-        include_graph=include_graph,
-        _context=_context,
-        **_kwargs,
-    )
 
 
 def search_by_source(

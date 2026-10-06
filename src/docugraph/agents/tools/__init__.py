@@ -26,6 +26,7 @@ from docugraph.agents.tools.memory_ops import (
 )
 from docugraph.agents.tools.search_code import (
     search_code,
+    search_code_async,
     search_symbols,
 )
 from docugraph.agents.tools.search_docs import (
@@ -41,6 +42,7 @@ __all__ = [
     "search_by_source",
     # Search code
     "search_code",
+    "search_code_async",
     "search_symbols",
     # Graph query
     "graph_query",

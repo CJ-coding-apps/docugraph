@@ -449,7 +449,7 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
         config = HybridSearchConfig(include_graph=include_graph)
         retriever = HybridRetriever(config=config)
 
-        results = retriever.search(
+        results = await retriever.asearch(
             query=query,
             top_k=top_k,
             mode=mode_map.get(mode, SearchMode.HYBRID),

@@ -8,6 +8,7 @@ Implements multiple fusion strategies:
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -147,7 +148,7 @@ class HybridRetriever:
                 self._graph_store_error = f"the graph store could not be opened: {e}"
         return self._graph_store
 
-    def search(
+    async def asearch(
         self,
         query: str,
         top_k: int = 10,
@@ -157,6 +158,10 @@ class HybridRetriever:
         config: HybridSearchConfig | None = None,
     ) -> list[HybridResult]:
         """Perform hybrid search.
+
+        This is the implementation. Callers that are already async -- the MCP
+        server, the agent loop -- await it directly, which is the only correct
+        thing to do from inside a running event loop.
 
         Args:
             query: Search query text
@@ -184,28 +189,18 @@ class HybridRetriever:
             keyword_results = self._keyword_search(query, top_k * 2, filters)
             results_by_source["keyword"] = keyword_results
 
-        # Graph search (async, but we run it sync here). Optional: it is
-        # skipped or fails without stopping the search, but what happened is
-        # recorded either way and reported through `graph_status`.
+        # Graph search. Optional: it is skipped or fails without stopping the
+        # search, but what happened is recorded either way and reported through
+        # `graph_status`. It is awaited in place -- `asearch` is already async,
+        # so there is no loop to acquire here.
         graph_requested = mode in (SearchMode.GRAPH, SearchMode.ALL)
         self._graph_store_error = None
         graph_available = False
         graph_reason: str | None = None
 
         if graph_requested and cfg.include_graph:
-            import asyncio
-
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # If we're already in an async context, create a new task
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, self._graph_search(query, top_k * 2))
-                        graph_results = future.result()
-                else:
-                    graph_results = loop.run_until_complete(self._graph_search(query, top_k * 2))
+                graph_results = await self._graph_search(query, top_k * 2)
                 results_by_source["graph"] = graph_results
                 graph_available = True
             except Exception as e:  # nosec B110 -- graph search may fail if not configured
@@ -243,6 +238,39 @@ class HybridRetriever:
 
         # Retrieve full chunks and build results
         return self._build_results(fused, results_by_source, top_k)
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        mode: SearchMode = SearchMode.HYBRID,
+        fusion: FusionStrategy = FusionStrategy.RRF,
+        filters: dict[str, Any] | None = None,
+        config: HybridSearchConfig | None = None,
+    ) -> list[HybridResult]:
+        """Perform hybrid search from synchronous code.
+
+        A thin wrapper over ``asearch``, for callers that have no event loop --
+        the CLI. It must not be called from inside a running loop: this drives
+        a fresh loop, and calling it from within one raises. Async callers
+        await ``asearch`` instead; they do not use this.
+
+        Args:
+            As ``asearch``.
+
+        Returns:
+            List of hybrid results with scores and source attribution
+        """
+        return asyncio.run(
+            self.asearch(
+                query,
+                top_k=top_k,
+                mode=mode,
+                fusion=fusion,
+                filters=filters,
+                config=config,
+            )
+        )
 
     def _vector_search(
         self,

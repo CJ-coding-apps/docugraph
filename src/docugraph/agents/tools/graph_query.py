@@ -163,10 +163,11 @@ async def get_entity_context(
         )
         context["relationships"] = relationships
 
-    # Also search documentation
-    from docugraph.agents.tools.search_docs import search_docs
+    # Also search documentation. This function is async, so it awaits the
+    # async entry point rather than driving a loop of its own.
+    from docugraph.agents.tools.search_docs import search_docs_async
 
-    doc_results = search_docs(
+    doc_results = await search_docs_async(
         query=entity_name,
         top_k=3,
         _context=_context,

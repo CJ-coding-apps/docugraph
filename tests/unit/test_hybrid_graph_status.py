@@ -1,6 +1,6 @@
 """A hybrid search must say when its graph leg did not run.
 
-The defect these guard against: ``HybridRetriever.search()`` discarded every
+The defect these guard against: the retriever's graph leg discarded every
 graph failure -- the store could not be opened, could not be queried, or the
 search could not be run -- in three separate ``except: pass`` blocks. A caller
 that asked for graph results got vector and keyword results back with nothing
@@ -10,6 +10,8 @@ that simply had nothing to say.
 Ruled behaviour: ``mode="all"`` with ``include_graph=true`` and the graph
 unavailable must return ``graph_available: false`` plus a reason.
 """
+
+import asyncio
 
 from docugraph.core.llm import LLMUnavailableError
 from docugraph.core.models import Chunk, SearchResult
@@ -21,6 +23,15 @@ from docugraph.retrieval.hybrid_search import (
 )
 
 GRAPH_UNAVAILABLE_REASON = "No LLM can serve the requested model"
+
+
+async def _a_prior_async_call() -> None:
+    """Stands in for any earlier async caller in the process.
+
+    ``asyncio.run`` is what such a caller leaves behind: after it returns,
+    there is no current event loop. Nothing about this coroutine matters; the
+    running of it does.
+    """
 
 
 class _FakeVectorStore:
@@ -82,21 +93,42 @@ def _retriever(chunk: Chunk | None, *, include_graph: bool) -> HybridRetriever:
 
 class TestGraphStatusOnTheRetriever:
     async def test_mode_all_reports_the_graph_did_not_run(self, monkeypatch):
-        """The ruled case: asked for the graph, got none, and are told why.
+        """The ruled case, awaited from inside a running loop.
 
-        Async because the graph leg is reached by a running loop -- the MCP
-        server's situation. Called with no loop at all, ``search()`` fails
-        earlier, in its own loop lookup, and reports that instead.
+        That is the MCP server's situation, and the reason the implementation
+        is ``asearch``: the graph leg is reached by awaiting it, with no loop
+        lookup of its own to fail.
         """
         _graph_store_fails(monkeypatch)
         retriever = _retriever(_chunk(), include_graph=True)
 
-        results = retriever.search("zorblat", top_k=5, mode=SearchMode.ALL)
+        results = await retriever.asearch("zorblat", top_k=5, mode=SearchMode.ALL)
 
         assert retriever.graph_status.requested is True
         assert retriever.graph_status.available is False
         assert GRAPH_UNAVAILABLE_REASON in (retriever.graph_status.reason or "")
         assert results, "a failed graph leg must not remove the vector/keyword results"
+
+    def test_the_sync_call_still_reports_the_reason_after_a_loop_ran(self, monkeypatch):
+        """The CLI case -- and the one that used to report the wrong reason.
+
+        ``search()`` drives its own loop, so by the time it runs there may
+        already have been one: ``asyncio.run`` leaves no current loop behind,
+        and the old ``get_event_loop()`` then raised inside the graph leg. The
+        caller was told "There is no current event loop" instead of the real
+        reason, which was that no LLM could serve the model.
+        """
+        _graph_store_fails(monkeypatch)
+        retriever = _retriever(_chunk(), include_graph=True)
+
+        asyncio.run(_a_prior_async_call())
+
+        retriever.search("zorblat", top_k=5, mode=SearchMode.ALL)
+
+        reason = retriever.graph_status.reason or ""
+        assert retriever.graph_status.available is False
+        assert GRAPH_UNAVAILABLE_REASON in reason
+        assert "event loop" not in reason.lower()
 
     async def test_available_graph_is_reported_as_available(self, monkeypatch):
         """The other direction, so `available` cannot pass as a constant."""
@@ -106,7 +138,7 @@ class TestGraphStatusOnTheRetriever:
         )
         retriever = _retriever(_chunk(), include_graph=True)
 
-        retriever.search("zorblat", top_k=5, mode=SearchMode.ALL)
+        await retriever.asearch("zorblat", top_k=5, mode=SearchMode.ALL)
 
         assert retriever.graph_status.requested is True
         assert retriever.graph_status.available is True
