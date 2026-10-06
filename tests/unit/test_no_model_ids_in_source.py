@@ -45,10 +45,16 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "docugraph"
 MODEL_ID_PATTERNS = {
     # `gpt-4o`, `gpt-4.1-mini`, `gpt-3.5-turbo`; and `o1-`, `o3-mini`, `o4-mini`.
     "openai-chat": r"\bgpt-[0-9][0-9a-z.\-]*",
+    "openai-chatgpt": r"\bchatgpt-[0-9][0-9a-z.\-]*",
     "openai-reasoning": r"\bo[1-9][0-9]*(-[a-z0-9\-]+)?\b",
     "openai-embedding": r"\btext-embedding-[a-z0-9.\-]+",
-    "anthropic": r"\bclaude-[0-9][0-9a-z.\-]*",
-    "cohere-command": r"\bcommand-[r0-9][0-9a-z.\-]*",
+    # `claude-3-haiku-20240307`, but also `claude-sonnet-4-20250514`: the family
+    # name comes before the number, so a pattern requiring a digit straight after
+    # the dash sees none of the current generation.
+    "anthropic": r"\bclaude-[0-9a-z][0-9a-z.\-]*",
+    # `command-r-plus`, `command-r7b`, and `command-light`; deliberately not
+    # `command-[a-z0-9]*`, which would match the phrase "command-line".
+    "cohere-command": r"\bcommand-(r|light|nightly|a|b)[0-9a-z.\-]*",
     "cohere-embed": r"\bembed-(english|multilingual)-v[0-9.]+",
     "cohere-rerank": r"\brerank-(english|multilingual)-v[0-9.]+",
     # Local names. These are the ones the exceptions below cover; a new one, or
