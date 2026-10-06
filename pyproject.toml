@@ -1,5 +1,5 @@
 [project]
-name = "docugraph-ai-v1"
+name = "docugraph"
 version = "0.1.0"
 description = "Documentation RAG for coding agents: vector search, knowledge graph, agent memory, and an MCP server — torch-free local embeddings via fastembed"
 readme = "README.md"
@@ -91,7 +91,7 @@ dev = [
 
 # All optional dependencies
 all = [
-    "docugraph-ai-v1[cloud,ollama,dev]",
+    "docugraph[cloud,ollama,dev]",
 ]
 
 [project.scripts]

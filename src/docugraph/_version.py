@@ -15,7 +15,7 @@ back to the placeholder below.
 
 from importlib.metadata import PackageNotFoundError, version
 
-DISTRIBUTION_NAME = "docugraph-ai-v1"
+DISTRIBUTION_NAME = "docugraph"
 
 _UNKNOWN = "0.0.0.dev0"
 

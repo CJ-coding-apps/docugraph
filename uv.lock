@@ -1049,7 +1049,7 @@ wheels = [
 ]
 
 [[package]]
-name = "docugraph-ai-v1"
+name = "docugraph"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -1114,7 +1114,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "cohere", marker = "extra == 'cloud'", specifier = ">=5.0.0" },
     { name = "crawl4ai", specifier = ">=0.7.8" },
-    { name = "docugraph-ai-v1", extras = ["cloud", "ollama", "dev"], marker = "extra == 'all'" },
+    { name = "docugraph", extras = ["cloud", "ollama", "dev"], marker = "extra == 'all'" },
     { name = "fastembed", specifier = ">=0.4.0" },
     { name = "graphiti-core", extras = ["kuzu"], specifier = "==0.30.2" },
     { name = "httpx", specifier = ">=0.27.0" },

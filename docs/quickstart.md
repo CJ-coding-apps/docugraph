@@ -117,7 +117,7 @@ Add to your MCP configuration (e.g. `~/.claude/claude_desktop_config.json`):
 {
   "mcpServers": {
     "docugraph": {
-      "command": "/absolute/path/to/docugraph-ai-v1/.venv/bin/docugraph-mcp",
+      "command": "/absolute/path/to/docugraph/.venv/bin/docugraph-mcp",
       "env": {}
     }
   }
@@ -136,7 +136,7 @@ hardcode the path:
   "mcpServers": {
     "docugraph": {
       "command": "uv",
-      "args": ["--directory", "/absolute/path/to/docugraph-ai-v1", "run", "docugraph-mcp"],
+      "args": ["--directory", "/absolute/path/to/docugraph", "run", "docugraph-mcp"],
       "env": {}
     }
   }

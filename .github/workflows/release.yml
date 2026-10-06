@@ -49,7 +49,7 @@ jobs:
     needs: build
     environment:
       name: pypi
-      url: https://pypi.org/project/docugraph-ai-v1/
+      url: https://pypi.org/project/docugraph/
 
     permissions:
       id-token: write  # Required for trusted publishing
@@ -64,7 +64,7 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         # Uses trusted publishing - no API token needed
-        # Configure at: https://pypi.org/manage/project/docugraph-ai-v1/settings/publishing/
+        # Configure at: https://pypi.org/manage/project/docugraph/settings/publishing/
 
   publish-docker:
     name: Publish Release Docker Image

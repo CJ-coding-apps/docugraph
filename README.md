@@ -32,7 +32,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
 ```
 
-> Not yet published to PyPI, so there is no `pip install docugraph-ai-v1` yet —
+> Not yet published to PyPI, so there is no `pip install docugraph` yet —
 > install from a checkout as above.
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
@@ -60,7 +60,7 @@ Add to your Claude Code MCP configuration:
 {
   "mcpServers": {
     "docugraph": {
-      "command": "/absolute/path/to/docugraph-ai-v1/.venv/bin/docugraph-mcp",
+      "command": "/absolute/path/to/docugraph/.venv/bin/docugraph-mcp",
       "env": {}
     }
   }
@@ -82,7 +82,7 @@ change when the checkout moves:
   "mcpServers": {
     "docugraph": {
       "command": "uv",
-      "args": ["--directory", "/absolute/path/to/docugraph-ai-v1", "run", "docugraph-mcp"],
+      "args": ["--directory", "/absolute/path/to/docugraph", "run", "docugraph-mcp"],
       "env": {}
     }
   }
