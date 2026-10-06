@@ -558,8 +558,12 @@ class GraphStore:
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Context manager exit - close the store."""
-        asyncio.get_event_loop().run_until_complete(self.close())
+        """Context manager exit - close the store.
+
+        The synchronous form of closing. Code inside a running loop uses
+        ``async with``, whose exit awaits ``close`` directly.
+        """
+        asyncio.run(self.close())
 
     async def __aenter__(self) -> GraphStore:
         """Async context manager entry."""

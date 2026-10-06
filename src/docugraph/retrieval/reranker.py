@@ -8,6 +8,7 @@ Supports multiple reranking strategies:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -323,7 +324,13 @@ class LLMReranker(RerankerBase):
         results: list[SearchResult],
         top_k: int | None = None,
     ) -> list[RerankResult]:
-        """Rerank using LLM scoring.
+        """Rerank using LLM scoring, from synchronous code.
+
+        A thin wrapper over ``arerank`` for callers that have no event loop.
+        Async callers await ``arerank`` instead: this drives a fresh loop and
+        raises if one is already running. For the same reason it does the empty
+        short-circuit itself rather than inside the coroutine -- there is no
+        reason to spin up a loop to return an empty list.
 
         Args:
             query: Search query
@@ -333,23 +340,33 @@ class LLMReranker(RerankerBase):
         Returns:
             Reranked results
         """
-        import asyncio
-
         if not results:
             return []
 
-        # Run async reranking synchronously
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
+        return asyncio.run(self.arerank(query, results, top_k))
 
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self._rerank_async(query, results, top_k))
-                    return future.result()
-            return loop.run_until_complete(self._rerank_async(query, results, top_k))
-        except RuntimeError:
-            return asyncio.run(self._rerank_async(query, results, top_k))
+    async def arerank(
+        self,
+        query: str,
+        results: list[SearchResult],
+        top_k: int | None = None,
+    ) -> list[RerankResult]:
+        """Rerank using LLM scoring, awaiting the model calls in place.
+
+        This is the implementation; ``rerank`` is the synchronous wrapper.
+
+        Args:
+            query: Search query
+            results: Results to rerank
+            top_k: Optional limit on results
+
+        Returns:
+            Reranked results
+        """
+        if not results:
+            return []
+
+        return await self._rerank_async(query, results, top_k)
 
     async def _rerank_async(
         self,

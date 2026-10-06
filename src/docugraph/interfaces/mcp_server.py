@@ -381,7 +381,10 @@ async def _search_docs(arguments: dict[str, Any]) -> CallToolResult:
 
     try:
         vector_store = get_vector_store()
-        results = vector_store.search(query, top_k=top_k)
+        # The vector store is synchronous and can take a while on a cold index.
+        # This server is one process, so a blocking call here stalls every other
+        # request silently -- nothing in the logs would say why.
+        results = await asyncio.to_thread(vector_store.search, query, top_k=top_k)
 
         if not results:
             return CallToolResult(

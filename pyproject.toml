@@ -121,8 +121,18 @@ select = [
     "UP",     # pyupgrade
     "ARG",    # flake8-unused-arguments
     "SIM",    # flake8-simplify
+    "TID251", # flake8-tidy-imports: banned-api
 ]
 ignore = ["E501", "B008", "B904"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# get_event_loop() is wrong in both directions: it returns no loop at all once
+# anything in the process has called asyncio.run(), and inside a running loop it
+# hands back a loop that cannot be driven with run_until_complete. Neither
+# failure looks like a loop problem from the caller's side, which is how three
+# separate copies of this pattern survived here. Await in async code;
+# asyncio.run(...) in sync code.
+"asyncio.get_event_loop".msg = "Await the async implementation, or use asyncio.run(...) from sync code."
 
 [tool.ruff.lint.isort]
 known-first-party = ["docugraph"]

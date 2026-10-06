@@ -5,6 +5,7 @@ Provides access to the knowledge graph for entity and relationship queries.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 
@@ -184,7 +185,10 @@ def query_entities_sync(
     _context: Any = None,
     **_kwargs: Any,
 ) -> list[dict[str, Any]]:
-    """Synchronous wrapper for graph_query.
+    """Synchronous wrapper for graph_query, for callers with no event loop.
+
+    Async callers await ``graph_query`` itself -- this drives a fresh loop and
+    raises if one is already running, which is the signal to await instead.
 
     Args:
         query: Natural language query
@@ -196,22 +200,4 @@ def query_entities_sync(
     Returns:
         List of facts from the knowledge graph
     """
-    import asyncio
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If in async context, create new event loop
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(
-                    asyncio.run,
-                    graph_query(query, num_results, group_id, _context),
-                )
-                return future.result()
-        else:
-            return loop.run_until_complete(graph_query(query, num_results, group_id, _context))
-    except RuntimeError:
-        # No event loop, create one
-        return asyncio.run(graph_query(query, num_results, group_id, _context))
+    return asyncio.run(graph_query(query, num_results, group_id, _context))
