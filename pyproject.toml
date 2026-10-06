@@ -30,7 +30,7 @@ dependencies = [
     "onnxruntime<1.24",
 
     # Vector Database (<0.26: newer releases dropped macOS x86_64 wheels)
-    "lancedb>=0.6.0,<0.26",
+    "lancedb>=0.6.0,<0.40",
     "pyarrow>=15.0.0",
     "pandas>=2.0.0",
 
