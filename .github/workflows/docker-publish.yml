@@ -29,7 +29,7 @@ jobs:
       # amd64 runners, which requires QEMU registered with binfmt. Without this
       # step the arm64 build fails.
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
