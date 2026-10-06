@@ -168,6 +168,18 @@ disallow_untyped_calls = false
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+filterwarnings = [
+    # A DeprecationWarning raised from docugraph's own code is a thing we can
+    # fix, so it fails here rather than printing a line nobody reads. The
+    # module field matches the frame the warning is attributed to, which for
+    # `datetime.utcnow` and class-based Pydantic config is our file even though
+    # the deprecation is upstream's. (Same rule CF applies to its own package.)
+    "error::DeprecationWarning:docugraph",
+    # graphiti-core warns on every KuzuDriver construction. Kuzu is deliberately
+    # pinned (0.11.3, the final release) rather than migrated, so the warning is
+    # accurate, unavoidable, and not ours to fix. Named so it stays narrow.
+    "ignore:The Kuzu backend is deprecated.*:DeprecationWarning",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "examples"]
