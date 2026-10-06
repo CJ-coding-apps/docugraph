@@ -66,11 +66,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Cloud LLM providers
+# Cloud LLM providers.
+#
+# Each is capped below the next major version -- the one above what CI installs
+# and tests against -- so a major release cannot arrive as an automatic install
+# in someone's environment. The Anthropic 1.x SDK removed `temperature` from its
+# request type and broke every call until it was removed here; the same class of
+# change in any of these three would break a user's build with nothing in this
+# repo to explain it. Lifting a cap is a deliberate edit with a test run behind
+# it, not a Dependabot PR.
 cloud = [
-    "openai>=1.12.0",
-    "anthropic>=0.18.0",
-    "cohere>=5.0.0",
+    "openai>=1.12.0,<4",
+    "anthropic>=0.18.0,<2",
+    "cohere>=5.0.0,<8",
 ]
 
 # Local LLM via Ollama

@@ -63,6 +63,20 @@ updates:
       - dependency-name: "lancedb"
         versions: [">= 0.26.0"]
 
+      # The three cloud SDKs, each capped below the next major after the version
+      # CI installs and tests against. They are held rather than tracked because
+      # a major release is where their breaking changes land, and each of them
+      # breaks this repo in a way a bump cannot explain: the Anthropic 1.x SDK
+      # removed `temperature` from its request type and every call raised
+      # `unexpected keyword argument` until that was fixed. A major here is a
+      # deliberate upgrade with the all-extras job behind it.
+      - dependency-name: "openai"
+        versions: [">= 4.0.0"]
+      - dependency-name: "anthropic"
+        versions: [">= 2.0.0"]
+      - dependency-name: "cohere"
+        versions: [">= 8.0.0"]
+
   # ----------------------------------------------------------------- GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"

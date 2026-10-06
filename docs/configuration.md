@@ -205,6 +205,13 @@ llm:
 
 Requires the `cloud` extra and `export ANTHROPIC_API_KEY=sk-ant-...`.
 
+`temperature` is **ignored for Anthropic.** The 1.x SDK dropped the
+parameter from its request type, so it is not sent: the setting is accepted in
+your config and has no effect on the request, rather than raising and failing
+the call. OpenAI and Ollama honour it as usual. If you need deterministic
+output on Anthropic, that is a property of the model and the prompt, not of a
+sampling setting here.
+
 ### sentence-transformers (optional, pulls in torch)
 
 Not a managed dependency. If you install `sentence-transformers` yourself, it
