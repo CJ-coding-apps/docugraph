@@ -25,9 +25,9 @@ dependencies = [
     "rich>=13.7.0",
 
     # Embeddings + reranking (local, pure ONNX — no torch)
-    # (onnxruntime <1.24: newer releases dropped macOS x86_64 wheels)
+    # (onnxruntime <1.31: newer releases dropped macOS x86_64 wheels)
     "fastembed>=0.4.0",
-    "onnxruntime<1.24",
+    "onnxruntime<1.31",
 
     # Vector Database (<0.26: newer releases dropped macOS x86_64 wheels)
     "lancedb>=0.6.0,<0.26",
