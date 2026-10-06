@@ -31,6 +31,21 @@ class FakeFastembedModel:
             yield [float(i)] * self._dim
 
 
+def _fake_fastembed_init():
+    """A FastembedEmbedder.__init__ that takes the fake model, not real weights.
+
+    Captured before monkeypatch swaps it in, so the real constructor still runs
+    and only the model is replaced. Without this, AUTO would download ~130 MB of
+    ONNX weights during the test.
+    """
+    real_init = FastembedEmbedder.__init__
+
+    def _init(self, model_name="BAAI/bge-small-en-v1.5", model=None):
+        real_init(self, model_name=model_name, model=model or FakeFastembedModel())
+
+    return _init
+
+
 class TestFastembedEmbedder:
     def test_embed_shapes_and_float_conversion(self):
         model = FakeFastembedModel(dim=4)
@@ -92,32 +107,44 @@ class TestGetEmbedderDispatch:
         assert isinstance(emb, FastembedEmbedder)
         assert emb.model_name == "fake-model"
 
-    def test_auto_uses_openai_when_key_present(self, monkeypatch):
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-        # openai importable? If not, AUTO should fall through to fastembed —
-        # so only assert OpenAI when the package is available.
+    def test_auto_stays_local_even_with_a_cloud_key_present(self, monkeypatch):
+        """A key in the environment is not a request to send documents anywhere.
+
+        `openai` is importable here (the all-extras CI job installs it) and the
+        key is set, so under the old resolution order this returned an
+        OpenAIEmbedder and every document embedded went to OpenAI with nothing
+        in the config asking for it. The assert on the type is the whole test:
+        if anything in AUTO consults the environment again, this fails.
+        """
         pytest.importorskip("openai")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
-        config = EmbeddingConfig(provider=EmbeddingProvider.AUTO)
-        emb = get_embedder(config)
-        assert isinstance(emb, OpenAIEmbedder)
+        import docugraph.core.embeddings as emb_mod
 
-    def test_auto_falls_back_to_fastembed_without_key(self, monkeypatch):
+        monkeypatch.setattr(
+            emb_mod.FastembedEmbedder, "__init__", _fake_fastembed_init()
+        )
+
+        emb = get_embedder(EmbeddingConfig(provider=EmbeddingProvider.AUTO))
+        assert isinstance(emb, FastembedEmbedder)
+
+    def test_auto_uses_the_local_backend(self, monkeypatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
         config = EmbeddingConfig(provider=EmbeddingProvider.AUTO, model="fake-model")
 
-        # Force the fastembed constructor to accept our fake model, so no
-        # weights download during the test.
         import docugraph.core.embeddings as emb_mod
 
-        real_init = FastembedEmbedder.__init__
-
-        def _patched_init(self, model_name="BAAI/bge-small-en-v1.5", model=None):
-            real_init(self, model_name=model_name, model=model or FakeFastembedModel())
-
-        monkeypatch.setattr(emb_mod.FastembedEmbedder, "__init__", _patched_init)
+        monkeypatch.setattr(
+            emb_mod.FastembedEmbedder, "__init__", _fake_fastembed_init()
+        )
 
         emb = get_embedder(config)
         assert isinstance(emb, FastembedEmbedder)
         assert emb.model_name == "fake-model"
+
+    def test_naming_openai_still_sends_documents_there(self):
+        """The explicit provider is the request, and it is unaffected."""
+        pytest.importorskip("openai")
+        emb = get_embedder(EmbeddingConfig(provider=EmbeddingProvider.OPENAI))
+        assert isinstance(emb, OpenAIEmbedder)

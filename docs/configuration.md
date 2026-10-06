@@ -28,8 +28,10 @@ storage:
 # =============================================================================
 embeddings:
   # Provider. Options:
-  #   auto                  - OpenAI (if OPENAI_API_KEY + openai installed)
-  #                           -> fastembed -> sentence-transformers
+  #   auto                  - fastembed -> sentence-transformers. Local only:
+  #                           an OPENAI_API_KEY in the environment does not
+  #                           change this, so no document text leaves the
+  #                           machine unless you name a cloud provider below.
   #   fastembed             - local, pure ONNX, no torch (default backend)
   #   openai                - OpenAI API (needs the 'cloud' extra + key)
   #   ollama                - local Ollama server (needs the 'ollama' extra)

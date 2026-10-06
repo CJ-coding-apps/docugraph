@@ -193,10 +193,11 @@ crawler:
   respect_robots: true
 ```
 
-`provider: auto` resolves to: **OpenAI** (if `OPENAI_API_KEY` is set and the
-`openai` package is installed) → **fastembed** (local ONNX, the default). Any
-field can be overridden by environment variable, e.g.
-`DOCUGRAPH_EMBEDDINGS__MODEL` or `DOCUGRAPH_EMBEDDINGS__PROVIDER`.
+`provider: auto` resolves to **fastembed** (local ONNX) — nothing about your
+environment changes that, so documents are not sent anywhere for embedding
+unless you name a cloud provider. Set `provider: openai` (or `cohere`) to send
+them there; that is the request. Any field can be overridden by environment
+variable, e.g. `DOCUGRAPH_EMBEDDINGS__MODEL` or `DOCUGRAPH_EMBEDDINGS__PROVIDER`.
 
 See [docs/configuration.md](docs/configuration.md) for the full reference,
 including the embedding-model consistency guard and the graph LLM requirement.

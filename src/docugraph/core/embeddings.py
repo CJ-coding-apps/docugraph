@@ -303,10 +303,11 @@ class CohereEmbedder(EmbeddingProviderBase):
 def get_embedder(config: EmbeddingConfig | None = None) -> EmbeddingProviderBase:
     """Factory function to get the configured embedder.
 
-    Local-first priority. With provider=auto: OpenAI (if OPENAI_API_KEY is
-    set and the openai package is installed) -> fastembed (local, pure ONNX)
-    -> sentence-transformers (only if already installed). Explicit providers
-    construct directly and fail loudly on missing packages/keys.
+    With provider=auto: fastembed (local, pure ONNX) -> sentence-transformers
+    (only if already installed). Nothing about the environment is consulted,
+    so an unrelated OPENAI_API_KEY in your shell cannot start sending document
+    text to a third party. A cloud provider is used only when it is named
+    explicitly, and then it fails loudly on a missing package or key.
     """
     if config is None:
         config = get_config().embeddings
@@ -327,16 +328,13 @@ def get_embedder(config: EmbeddingConfig | None = None) -> EmbeddingProviderBase
     elif provider == EmbeddingProvider.COHERE:
         return CohereEmbedder(model_name=config.model)
     else:
-        # AUTO: resolve the best available backend (CF-v1 try-chain idiom).
-        import os
-
-        if os.environ.get("OPENAI_API_KEY"):
-            try:
-                import openai  # noqa: F401
-
-                return OpenAIEmbedder(model_name="text-embedding-3-small")
-            except ImportError:
-                pass
+        # AUTO: local backends only, and `os.environ` is deliberately not
+        # consulted here. A key in the environment is not a request to use it:
+        # resolving to OpenAI on the mere presence of OPENAI_API_KEY meant that
+        # a user who happened to have the variable exported (or the `cloud`
+        # extra installed) had the text of every document they embedded sent to
+        # a third party, with nothing in the config saying so. Naming the
+        # provider is the request; `provider: openai` sends it there.
         try:
             return FastembedEmbedder(model_name=config.model)
         except Exception:  # nosec B110 -- provider chain: try the next backend
@@ -350,5 +348,5 @@ def get_embedder(config: EmbeddingConfig | None = None) -> EmbeddingProviderBase
             raise RuntimeError(
                 "No embedding provider available. Install fastembed "
                 "(pip install fastembed) for local ONNX embeddings, or set "
-                "OPENAI_API_KEY with the 'cloud' extra for OpenAI embeddings."
+                "embeddings.provider to 'openai' or 'cohere' for a cloud one."
             ) from e
