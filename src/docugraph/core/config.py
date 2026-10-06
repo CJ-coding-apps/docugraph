@@ -48,9 +48,10 @@ class StorageConfig(BaseModel):
 class EmbeddingConfig(BaseModel):
     """Embedding configuration (local-first, LLM-agnostic).
 
-    provider=auto resolves: OpenAI (if OPENAI_API_KEY set and the openai
-    package is installed) -> fastembed (local, pure ONNX, no torch)
-    -> sentence-transformers (only if already installed, requires torch).
+    provider=auto resolves: fastembed (local, pure ONNX, no torch) ->
+    sentence-transformers (only if already installed, requires torch). It
+    reads nothing from the environment, so a cloud provider is used only when
+    one is named here.
     """
 
     provider: EmbeddingProvider = EmbeddingProvider.AUTO
