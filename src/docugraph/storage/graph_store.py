@@ -29,7 +29,12 @@ from pathlib import Path
 from typing import Any
 
 from docugraph.core.config import EmbeddingProvider, get_config
-from docugraph.core.embeddings import EmbeddingProviderBase, get_embedder
+from docugraph.core.embeddings import (
+    EmbeddingProviderBase,
+    OllamaEmbedder,
+    OpenAIEmbedder,
+    get_embedder,
+)
 from docugraph.core.llm import get_graphiti_llm_client
 from docugraph.core.models import Entity, EntityType, RelationshipType
 
@@ -101,30 +106,40 @@ def _get_embedder() -> Any:
     Returns:
         Graphiti-compatible embedder
     """
-    from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+    from graphiti_core.embedder.openai import (
+        OpenAIEmbedder as _GraphitiOpenAIEmbedder,
+    )
+    from graphiti_core.embedder.openai import OpenAIEmbedderConfig
 
     emb_config = get_config().embeddings
 
+    # Both branches ask the docugraph embedder for the model name and width
+    # rather than restating them here. The widths used to be literals -- 768 for
+    # Ollama, 1536 for OpenAI -- which is the same defect as the tables in
+    # core/embeddings.py: a second place holding a fact the model itself reports,
+    # right only for the model whoever wrote it had in mind.
     if emb_config.provider == EmbeddingProvider.OLLAMA:
+        local = OllamaEmbedder(model_name=emb_config.model)
         embedder_config = OpenAIEmbedderConfig(
             api_key="ollama",
-            embedding_model=emb_config.model or "nomic-embed-text",
-            embedding_dim=emb_config.dimensions or 768,
+            embedding_model=local.model_name,
+            embedding_dim=emb_config.dimensions or local.dimensions,
             base_url="http://localhost:11434/v1",
         )
-        return OpenAIEmbedder(config=embedder_config)
+        return _GraphitiOpenAIEmbedder(config=embedder_config)
 
     elif emb_config.provider == EmbeddingProvider.OPENAI:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY required for OpenAI embeddings")
 
+        cloud = OpenAIEmbedder(model_name=emb_config.model)
         embedder_config = OpenAIEmbedderConfig(
             api_key=api_key,
-            embedding_model=emb_config.model or "text-embedding-3-small",
-            embedding_dim=emb_config.dimensions or 1536,
+            embedding_model=cloud.model_name,
+            embedding_dim=emb_config.dimensions or cloud.dimensions,
         )
-        return OpenAIEmbedder(config=embedder_config)
+        return _GraphitiOpenAIEmbedder(config=embedder_config)
 
     else:
         # fastembed / sentence-transformers / cohere / auto: reuse the

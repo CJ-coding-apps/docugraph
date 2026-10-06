@@ -201,18 +201,29 @@ class CohereReranker(RerankerBase):
 
     def __init__(
         self,
-        model: str = "rerank-english-v3.0",
+        model: str | None = None,
         api_key: str | None = None,
         score_weight: float = 0.8,
     ) -> None:
         """Initialize Cohere reranker.
 
         Args:
-            model: Cohere rerank model name
+            model: Cohere rerank model name. Required: there is no default,
+                because a default here would be a cloud model chosen for the
+                user by this package rather than by them.
             api_key: API key (or set COHERE_API_KEY env var)
             score_weight: Weight for rerank score in final score
         """
         import os
+
+        if not model:
+            raise ValueError(
+                "Cohere reranking needs a model name and none was given. Cohere "
+                "is a cloud service with no default here: the model fixes the "
+                "price and the languages supported, so it is the caller's "
+                "choice. Pass `model=` (e.g. from configuration) and see "
+                "https://docs.cohere.com/docs/rerank-overview for the list."
+            )
 
         self._model = model
         self._api_key = api_key or os.environ.get("COHERE_API_KEY")

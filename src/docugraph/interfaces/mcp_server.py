@@ -883,7 +883,7 @@ async def _get_stats(_arguments: dict[str, Any]) -> CallToolResult:
         stats = {
             "total_chunks": vector_store.count(),
             "data_directory": str(config.storage.data_dir),
-            "embedding_model": config.embeddings.model,
+            "embedding_model": vector_store.embedding_model,
             "embedding_provider": config.embeddings.provider.value,
         }
 

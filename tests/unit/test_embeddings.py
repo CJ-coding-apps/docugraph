@@ -7,7 +7,9 @@ import pytest
 
 from docugraph.core.config import EmbeddingConfig, EmbeddingProvider
 from docugraph.core.embeddings import (
+    CohereEmbedder,
     FastembedEmbedder,
+    OllamaEmbedder,
     OpenAIEmbedder,
     get_embedder,
 )
@@ -121,9 +123,7 @@ class TestGetEmbedderDispatch:
 
         import docugraph.core.embeddings as emb_mod
 
-        monkeypatch.setattr(
-            emb_mod.FastembedEmbedder, "__init__", _fake_fastembed_init()
-        )
+        monkeypatch.setattr(emb_mod.FastembedEmbedder, "__init__", _fake_fastembed_init())
 
         emb = get_embedder(EmbeddingConfig(provider=EmbeddingProvider.AUTO))
         assert isinstance(emb, FastembedEmbedder)
@@ -135,9 +135,7 @@ class TestGetEmbedderDispatch:
 
         import docugraph.core.embeddings as emb_mod
 
-        monkeypatch.setattr(
-            emb_mod.FastembedEmbedder, "__init__", _fake_fastembed_init()
-        )
+        monkeypatch.setattr(emb_mod.FastembedEmbedder, "__init__", _fake_fastembed_init())
 
         emb = get_embedder(config)
         assert isinstance(emb, FastembedEmbedder)
@@ -146,5 +144,37 @@ class TestGetEmbedderDispatch:
     def test_naming_openai_still_sends_documents_there(self):
         """The explicit provider is the request, and it is unaffected."""
         pytest.importorskip("openai")
-        emb = get_embedder(EmbeddingConfig(provider=EmbeddingProvider.OPENAI))
+        emb = get_embedder(
+            EmbeddingConfig(provider=EmbeddingProvider.OPENAI, model="text-embedding-x")
+        )
         assert isinstance(emb, OpenAIEmbedder)
+        assert emb.model_name == "text-embedding-x"
+
+    def test_a_cloud_embedding_provider_without_a_model_is_an_error(self):
+        """Naming the provider is not the same as naming the model.
+
+        The two cloud embedders used to carry a default, both wrong in the same
+        way: OpenAI's table answered 1536 for anything it did not list, and
+        Cohere's was the literal 1024 that belongs to embed-english-v3.0 alone.
+        A default that is right only for one model is a wrong answer for the
+        rest, so there is no default and the failure names the setting.
+        """
+        with pytest.raises(ValueError, match="embeddings.model must name"):
+            OpenAIEmbedder(model_name=None)
+
+        with pytest.raises(ValueError, match="embeddings.model must name"):
+            CohereEmbedder(model_name=None)
+
+    def test_local_backends_keep_their_own_defaults(self):
+        """Local is where a default is a convenience rather than a guess.
+
+        Ollama is reachable without an account and its model is a `ollama pull`
+        away, so a name here is a fact the reader can check. This is the other
+        half of the test above: the carve-out is deliberate, and it is exactly
+        the local backends.
+        """
+        local = [
+            FastembedEmbedder(model_name=None, model=FakeFastembedModel()).model_name,
+            OllamaEmbedder(model_name=None).model_name,
+        ]
+        assert local == ["BAAI/bge-small-en-v1.5", "nomic-embed-text"]

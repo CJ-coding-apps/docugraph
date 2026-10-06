@@ -44,14 +44,14 @@ class FastembedEmbedder(EmbeddingProviderBase):
     # queries should carry this instruction prefix for best relevance.
     BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", model: Any | None = None):
-        self._model_name = model_name
+    def __init__(self, model_name: str | None = None, model: Any | None = None):
+        self._model_name = model_name or "BAAI/bge-small-en-v1.5"
         self._dimensions: int | None = None
         if model is None:
             # Lazy import so environments without fastembed degrade via the chain.
             from fastembed import TextEmbedding
 
-            model = TextEmbedding(model_name)
+            model = TextEmbedding(self._model_name)
         # Stored only once non-None so mypy can narrow the attribute.
         self._model: Any = model
 
@@ -88,17 +88,17 @@ class SentenceTransformersEmbedder(EmbeddingProviderBase):
 
     def __init__(
         self,
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str | None = None,
         device: str = "cpu",
         batch_size: int = 32,
     ):
-        self._model_name = model_name
+        self._model_name = model_name or "all-MiniLM-L6-v2"
         self._batch_size = batch_size
 
         # Lazy load to avoid import overhead
         from sentence_transformers import SentenceTransformer
 
-        self._model = SentenceTransformer(model_name, device=device)
+        self._model = SentenceTransformer(self._model_name, device=device)
         detected = self._model.get_sentence_embedding_dimension()
         self._dimensions: int = int(detected) if detected is not None else 384
 
@@ -133,10 +133,12 @@ class OllamaEmbedder(EmbeddingProviderBase):
 
     def __init__(
         self,
-        model_name: str = "nomic-embed-text",
+        model_name: str | None = None,
         base_url: str = "http://localhost:11434",
     ):
-        self._model_name = model_name
+        # Local, so it keeps a default: the server is on this machine and
+        # `ollama pull nomic-embed-text` is a command the reader can run.
+        self._model_name = model_name or "nomic-embed-text"
         self._base_url = base_url
         self._dimensions: int | None = None
 
@@ -180,21 +182,34 @@ class OllamaEmbedder(EmbeddingProviderBase):
 
 
 class OpenAIEmbedder(EmbeddingProviderBase):
-    """Embeddings via OpenAI API."""
+    """Embeddings via OpenAI API.
 
-    DIMENSIONS = {
-        "text-embedding-3-small": 1536,
-        "text-embedding-3-large": 3072,
-        "text-embedding-ada-002": 1536,
-    }
+    ``model_name`` has no default. An embedding model's vectors live in their
+    own space and cannot be mixed with another's, so a name compiled in here is
+    a name that silently becomes wrong the day OpenAI retires it -- and the
+    store's dimension and identity guards would then be comparing against a
+    model nobody chose.
+    """
 
     def __init__(
         self,
-        model_name: str = "text-embedding-3-small",
+        model_name: str | None = None,
         api_key: str | None = None,
     ):
+        if not model_name:
+            raise ValueError(
+                "embeddings.model must name an OpenAI embedding model when "
+                "embeddings.provider is 'openai' (e.g. DOCUGRAPH_EMBEDDINGS__MODEL). "
+                "There is no default: an embedding model fixes the vector space "
+                "of the whole index, so it is not something to guess at."
+            )
         self._model_name = model_name
         self._api_key = api_key
+        # Measured from a real response rather than looked up in a table. The
+        # table was a second place to keep a fact the API already reports, and
+        # it was wrong for every model it did not list -- it defaulted to 1536,
+        # so an unlisted model got a schema that could not hold its vectors.
+        self._dimensions: int | None = None
 
     def _get_client(self) -> Any:
         """Get OpenAI client."""
@@ -223,7 +238,10 @@ class OpenAIEmbedder(EmbeddingProviderBase):
             model=self._model_name,
             input=texts,
         )
-        return [item.embedding for item in response.data]
+        vectors = [item.embedding for item in response.data]
+        if self._dimensions is None and vectors:
+            self._dimensions = len(vectors[0])
+        return vectors
 
     def embed_query(self, query: str) -> list[float]:
         """Embed a single query."""
@@ -231,7 +249,11 @@ class OpenAIEmbedder(EmbeddingProviderBase):
 
     @property
     def dimensions(self) -> int:
-        return self.DIMENSIONS.get(self._model_name, 1536)
+        if self._dimensions is None:
+            # Nothing has been embedded yet and the caller needs the width before
+            # it can build a schema, so ask the model directly.
+            self.embed(["dimension probe"])
+        return self._dimensions or 0
 
     @property
     def model_name(self) -> str:
@@ -239,16 +261,30 @@ class OpenAIEmbedder(EmbeddingProviderBase):
 
 
 class CohereEmbedder(EmbeddingProviderBase):
-    """Embeddings via Cohere API."""
+    """Embeddings via Cohere API.
+
+    ``model_name`` has no default, for the same reason as OpenAIEmbedder: the
+    vector space is a property of the model. It used to default to
+    ``embed-english-v3.0`` with a hard-coded ``1024`` dimensions, which is that
+    one model's width -- every other Cohere embedding model got a schema built
+    to the wrong size.
+    """
 
     def __init__(
         self,
-        model_name: str = "embed-english-v3.0",
+        model_name: str | None = None,
         api_key: str | None = None,
     ):
+        if not model_name:
+            raise ValueError(
+                "embeddings.model must name a Cohere embedding model when "
+                "embeddings.provider is 'cohere' (e.g. DOCUGRAPH_EMBEDDINGS__MODEL). "
+                "There is no default: the model fixes the vector space of the "
+                "whole index."
+            )
         self._model_name = model_name
         self._api_key = api_key
-        self._dimensions = 1024  # Default for embed-english-v3.0
+        self._dimensions: int | None = None
 
     def _get_client(self) -> Any:
         """Get Cohere client."""
@@ -279,7 +315,10 @@ class CohereEmbedder(EmbeddingProviderBase):
             model=self._model_name,
             input_type="search_document",
         )
-        return [list(emb) for emb in response.embeddings]
+        vectors = [list(emb) for emb in response.embeddings]
+        if self._dimensions is None and vectors:
+            self._dimensions = len(vectors[0])
+        return vectors
 
     def embed_query(self, query: str) -> list[float]:
         """Embed a single query."""
@@ -293,7 +332,9 @@ class CohereEmbedder(EmbeddingProviderBase):
 
     @property
     def dimensions(self) -> int:
-        return self._dimensions
+        if self._dimensions is None:
+            self.embed(["dimension probe"])
+        return self._dimensions or 0
 
     @property
     def model_name(self) -> str:

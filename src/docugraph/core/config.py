@@ -52,20 +52,48 @@ class EmbeddingConfig(BaseModel):
     sentence-transformers (only if already installed, requires torch). It
     reads nothing from the environment, so a cloud provider is used only when
     one is named here.
+
+    ``model`` has no default, because the backends do not share one. Each local
+    backend names its own model in its constructor (fastembed's bge-small,
+    sentence-transformers' MiniLM, Ollama's nomic-embed-text); a *cloud* backend
+    has none, so leaving this unset with ``provider: openai`` or ``cohere`` is an
+    error rather than a guess. That distinction matters: a single shared default
+    here was the local fastembed name, so naming a cloud provider without naming
+    a model would have sent ``BAAI/bge-small-en-v1.5`` to an API that has never
+    heard of it.
     """
 
     provider: EmbeddingProvider = EmbeddingProvider.AUTO
-    model: str = "BAAI/bge-small-en-v1.5"  # fastembed default; used by auto/fastembed
-    dimensions: int | None = None  # Auto-detected from model
+    model: str | None = None  # local backends have their own; cloud has none
+    dimensions: int | None = None  # measured from the model unless set here
     batch_size: int = 32
 
 
 class LLMConfig(BaseModel):
-    """LLM configuration for extraction and reranking."""
+    """LLM configuration for extraction and reranking.
+
+    ``model`` defaults to the ``"auto"`` sentinel, which means "whichever model
+    this provider offers". Only a local Ollama server can answer that, because
+    it is the only provider docugraph can ask what it has installed. A cloud
+    provider needs the model named: every name that could be written here has a
+    retirement date on the provider's calendar, and a retired name fails every
+    call with a 404 the user cannot act on.
+
+    ``temperature`` is unset by default and is sent only when set. That is not
+    tidiness: OpenAI's reasoning models reject any temperature other than their
+    fixed default, so a default of 0.0 here made every call to one fail with
+    ``unsupported value``. Set ``temperature: 0.0`` explicitly for deterministic
+    local output.
+    """
 
     provider: LLMProvider = LLMProvider.AUTO
     model: str = "auto"
-    temperature: float = 0.0
+    # Graphiti asks for two models: a large one for extraction and a small one
+    # for the cheaper summarization and edge-dedup passes. Unset means "the same
+    # as `model`, whatever that turns out to be" -- not a hard-coded model name,
+    # which is what it was.
+    small_model: str | None = None
+    temperature: float | None = None
     max_tokens: int = 4096
 
     # API keys (loaded from environment)

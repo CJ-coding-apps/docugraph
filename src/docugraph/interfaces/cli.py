@@ -207,7 +207,7 @@ def stats() -> None:
 
     table.add_row("Total Chunks", str(vector_store.count()))
     table.add_row("Data Directory", str(config.storage.data_dir))
-    table.add_row("Embedding Model", config.embeddings.model)
+    table.add_row("Embedding Model", vector_store.embedding_model)
     table.add_row("Embedding Provider", config.embeddings.provider.value)
 
     console.print(table)
