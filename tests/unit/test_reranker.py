@@ -1,12 +1,18 @@
 """Unit tests for the reranker: fastembed cross-encoder + factory default.
 
 Uses an injected fake TextCrossEncoder so no ONNX weights are downloaded.
-The one live-inference test is gated on the ~1.8 GB model already being
-cached, so it never triggers a download in CI.
-"""
+The live-inference test at the bottom is gated on the ~1.8 GB model already
+being cached, so it never triggers a download in CI.
 
-import os
-from pathlib import Path
+That gate resolves the cache directory the way the loader resolves it rather
+than by guessing. fastembed's default is *not* `~/.cache/fastembed` -- it is a
+subdirectory of the system temp dir -- so a guess reports "not cached" on a
+machine that has the weights, and the one test that exercises them skips.
+
+The live class is therefore skipped on every push and pull request and runs
+weekly in `.github/workflows/live-reranker.yml`, which caches the weights with
+`actions/cache`. A skip there fails the job.
+"""
 
 import pytest
 
@@ -20,9 +26,16 @@ from docugraph.retrieval.reranker import (
 
 
 def _v2m3_cached() -> bool:
-    """True if the bge-reranker-v2-m3 ONNX weights are already on disk."""
-    cache = Path(os.environ.get("FASTEMBED_CACHE_PATH", Path.home() / ".cache" / "fastembed"))
-    return cache.exists() and any("bge-reranker-v2-m3" in p.name.lower() for p in cache.glob("*"))
+    """True if the bge-reranker-v2-m3 ONNX weights are already on disk.
+
+    `define_cache_dir` is the same call `TextCrossEncoder.__init__` makes, so
+    the test and the loader cannot disagree about where to look. The snapshot
+    directory fastembed writes is a direct child of it, named
+    `models--onnx-community--bge-reranker-v2-m3-ONNX`.
+    """
+    from fastembed.common.utils import define_cache_dir
+
+    return any("bge-reranker-v2-m3" in p.name.lower() for p in define_cache_dir().glob("*"))
 
 
 class FakeCrossEncoder:
