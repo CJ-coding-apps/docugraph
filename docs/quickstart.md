@@ -4,7 +4,15 @@ Get started with DocuGraph AI in under 5 minutes.
 
 ## Installation
 
-Not yet published to PyPI — install from a checkout of this repository.
+Requires Python 3.11–3.13 (the README says why 3.14 is excluded).
+
+From PyPI:
+
+```bash
+pip install docugraph
+```
+
+Or from a checkout of this repository, as below.
 
 ### Using uv (recommended)
 
