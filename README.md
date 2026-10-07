@@ -263,6 +263,15 @@ rather than pointing the new version at the old graph file.
 - **MCP**: Model Context Protocol for Claude Code integration
 - Optional cloud/local backends: OpenAI, Cohere, Ollama (extras)
 
+## Acknowledgements
+
+This project uses Crawl4AI (https://github.com/unclecode/crawl4ai) for web data extraction.
+
+- [fastembed](https://github.com/qdrant/fastembed) — local ONNX embeddings, and the optional reranker.
+- [Graphiti](https://github.com/getzep/graphiti) — temporal knowledge-graph extraction.
+- [LanceDB](https://github.com/lancedb/lancedb) — the embedded vector store.
+- [Kùzu](https://github.com/kuzudb/kuzu) — the embedded graph database.
+
 ## License
 
-Apache-2.0 — see `LICENSE`.
+Apache-2.0 — see `LICENSE`, and `NOTICE` for the Crawl4AI attribution.

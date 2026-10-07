@@ -50,6 +50,9 @@ def crawl(url: str, max_pages: int, pattern: str | None, no_cache: bool) -> None
     Examples:
         docugraph crawl https://fastapi.tiangolo.com/tutorial/
         docugraph crawl https://docs.python.org --max-pages 50
+
+    This project uses Crawl4AI (https://github.com/unclecode/crawl4ai) for web
+    data extraction.
     """
     from docugraph.ingestion.chunker import Chunker
     from docugraph.ingestion.crawler import DocCrawler
