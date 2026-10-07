@@ -69,7 +69,11 @@ jobs:
   publish-docker:
     name: Publish Release Docker Image
     runs-on: ubuntu-latest
-    needs: build
+    # Not `needs: build`. `publish-pypi` is gated on the `pypi` environment's
+    # required reviewers, so waiting on it means nothing reaches the registry
+    # before the release has been approved. Running straight off `build` would
+    # put an image on ghcr.io for a version that may never be published.
+    needs: [build, publish-pypi]
     permissions:
       contents: read
       packages: write
@@ -82,12 +86,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # The arm64 half of the multi-platform build runs under emulation on the
-      # amd64 runners, which requires QEMU registered with binfmt. Without this
-      # step the arm64 build fails.
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
+      # linux/amd64 only. Building arm64 means running it under emulation, which
+      # needs a QEMU step registered with binfmt -- the step that used to sit
+      # here. It is a post-release item: add both back once an arm64 image has
+      # been built and verified by hand.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -119,4 +121,4 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
