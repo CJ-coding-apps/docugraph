@@ -233,7 +233,7 @@ above is fastembed's own default and no cloud provider has one. Any field can be
 overridden by environment variable, e.g. `DOCUGRAPH_EMBEDDINGS__MODEL` or
 `DOCUGRAPH_EMBEDDINGS__PROVIDER`.
 
-See [docs/configuration.md](docs/configuration.md) for the full reference,
+See [docs/configuration.md](https://github.com/CJ-coding-apps/docugraph/blob/main/docs/configuration.md) for the full reference,
 including the embedding-model consistency guard and the graph LLM requirement.
 
 ## The documentation knowledge graph
