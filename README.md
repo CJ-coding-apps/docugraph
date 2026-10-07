@@ -135,7 +135,7 @@ uv run docugraph index local ./docs
 uv run docugraph search "how to create a path operation"
 uv run docugraph search "async error handling" --top-k 10
 
-# Rerank with the local multilingual cross-encoder (downloads ~1.8 GB once)
+# Rerank with the local multilingual cross-encoder (downloads about 2 GB once)
 uv run docugraph search "path operations" --rerank
 
 # Documentation knowledge graph — needs an LLM (Ollama locally, or an

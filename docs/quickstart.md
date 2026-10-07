@@ -95,7 +95,7 @@ docugraph search "how to handle async errors"
 docugraph search "authentication" --top-k 10
 
 # Rerank with the local multilingual cross-encoder
-# (downloads bge-reranker-v2-m3, ~1.8 GB, on first use)
+# (downloads bge-reranker-v2-m3, about 2 GB, on first use)
 docugraph search "authentication" --rerank
 ```
 

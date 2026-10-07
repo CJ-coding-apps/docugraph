@@ -152,7 +152,7 @@ and re-index. Indexes created before this column existed are also rejected.
 
 Reranking is **off by default**. When enabled, DocuGraph uses a local
 multilingual cross-encoder, `BAAI/bge-reranker-v2-m3` (pure ONNX via
-fastembed). Its weights are **~1.8 GB** and download on first use into
+fastembed). Its weights are **about 2 GB** and download on first use into
 `FASTEMBED_CACHE_PATH`, so it is always an explicit opt-in — nothing large is
 ever downloaded implicitly.
 
