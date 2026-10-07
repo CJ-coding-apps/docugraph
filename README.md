@@ -63,28 +63,42 @@ This is ~190 MB and is cached, so it is a one-off. `index local`, `index git`,
 
 ### MCP integration with Claude Code (primary surface)
 
-Add to your Claude Code MCP configuration:
+The MCP server is a console script, so where it lives depends on how you
+installed the package. For an MCP client, an isolated tool install is the least
+fuss: it puts the script somewhere stable that does not move with a project
+directory.
+
+```bash
+pipx install docugraph      # or: uv tool install docugraph
+```
+
+Then ask your shell where it landed:
+
+```bash
+which docugraph-mcp         # macOS, Linux
+where docugraph-mcp         # Windows
+```
+
+and use that exact path in your Claude Code MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "docugraph": {
-      "command": "/absolute/path/to/docugraph/.venv/bin/docugraph-mcp",
+      "command": "<the path `which docugraph-mcp` printed>",
       "env": {}
     }
   }
 }
 ```
 
-Use the **absolute path** to the installed script. An MCP client launches the
-server directly rather than through a shell, so it does not pick up the venv
-that `uv sync` created — a bare `"command": "docugraph-mcp"` fails with
-`No such file or directory` unless that directory happens to be on the client's
-`PATH`. `uv sync` installs the script at `.venv/bin/docugraph-mcp` inside the
-repository (`Scripts\docugraph-mcp.exe` on Windows); substitute your real path.
+An MCP client launches the server directly rather than through a shell, so it
+does not inherit your `PATH`: the short form `"command": "docugraph-mcp"` fails
+with `No such file or directory` even when that directory is on it. That is why
+the path is spelled out.
 
-If you would rather not hardcode it, this is equivalent and needs no path
-change when the checkout moves:
+If you would rather not manage an install, this is equivalent and works
+straight from a checkout, with no path to update when it moves:
 
 ```json
 {
@@ -97,6 +111,11 @@ change when the checkout moves:
   }
 }
 ```
+
+From a checkout, clone this repository and run `uv sync` (`pip install -e '.[dev]'`
+works too). The script is then at `.venv/bin/docugraph-mcp`
+(`Scripts\docugraph-mcp.exe` on Windows), and that is the path to give the
+client.
 
 The server speaks JSON-RPC over stdio and exposes nine tools:
 
