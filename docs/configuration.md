@@ -159,6 +159,14 @@ ever downloaded implicitly.
 - CLI: `docugraph search "..." --rerank`
 - MCP: call `hybrid_search` with `"rerank": true`
 
+## Model licenses
+
+DocuGraph ships no model weights; each model is downloaded or served elsewhere
+and carries its own license. The two defaults are permissive —
+`BAAI/bge-small-en-v1.5` is MIT and `BAAI/bge-reranker-v2-m3` is Apache-2.0 —
+but not all are: several Jina embeddings and rerankers are non-commercial, so
+check a model's license before configuring it.
+
 ## Environment Variables
 
 All options can be set via `DOCUGRAPH_SECTION__KEY=value`:
