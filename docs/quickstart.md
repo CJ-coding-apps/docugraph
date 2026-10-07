@@ -239,6 +239,14 @@ export DOCUGRAPH_EMBEDDINGS__MODEL=BAAI/bge-base-en-v1.5
 > search time (the store records which model wrote its vectors). Run
 > `docugraph clear` and re-index when you switch models.
 
+To see the fully resolved configuration — every value, including defaults the
+file does not mention — or to write the file in the first place:
+
+```bash
+docugraph config show     # print the effective configuration as JSON
+docugraph config init     # write ~/.docugraph/config.yaml (--path to choose)
+```
+
 ## Next steps
 
 - [Configuration Reference](configuration.md)

@@ -142,6 +142,10 @@ uv run docugraph memory get build.status
 uv run docugraph stats
 uv run docugraph clear
 
+# Configuration
+uv run docugraph config show
+uv run docugraph config init
+
 # Run the MCP server manually (usually launched by the MCP client)
 uv run docugraph mcp-server
 ```

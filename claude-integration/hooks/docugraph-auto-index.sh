@@ -53,13 +53,16 @@ fi
 FILE_DIR=$(dirname "$FILE_PATH")
 
 # Queue for background indexing (non-blocking)
-# We index just the single file to be efficient
 (
     # Small delay to ensure file is fully written
     sleep 1
 
-    # Index the specific file
-    docugraph index local "$FILE_PATH" --quiet 2>/dev/null || true
+    # Index the containing directory. `index local` takes a directory --
+    # its argument is `click.Path(file_okay=False, dir_okay=True)` -- and has
+    # no `--quiet`. This line used to pass the changed *file* plus `--quiet`,
+    # so click exited 2 on the unknown option and `|| true` swallowed it: the
+    # hook reported "Queued for automatic re-indexing" and indexed nothing.
+    docugraph index local "$FILE_DIR" --no-recursive 2>/dev/null || true
 
     # Log the indexing (optional, for debugging)
     # echo "$(date): Indexed $FILE_PATH" >> ~/.docugraph/auto-index.log
