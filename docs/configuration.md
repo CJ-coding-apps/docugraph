@@ -180,7 +180,9 @@ export DOCUGRAPH_LLM__MODEL=<a model id from your provider's docs>
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 
-# fastembed model cache (bge-small + any opt-in reranker weights)
+# fastembed model cache (bge-small + any opt-in reranker weights).
+# Worth setting: without it fastembed uses a `fastembed_cache` subdirectory
+# of the system temp directory, which the OS is free to clear.
 export FASTEMBED_CACHE_PATH=~/.cache/fastembed
 
 # Crawler

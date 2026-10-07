@@ -22,8 +22,9 @@ pip install -e '.[dev]'
 ```
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
-~130 MB, pure ONNX — no torch) into `FASTEMBED_CACHE_PATH`
-(default `~/.cache/fastembed`).
+~130 MB, pure ONNX — no torch) into `FASTEMBED_CACHE_PATH`. Set it if you want
+the weights somewhere durable: unset, fastembed uses a `fastembed_cache`
+subdirectory of the system temp directory, which the OS may clear.
 
 **URL crawling needs a browser the Python install does not include.** Crawl4AI
 drives Playwright's Chromium, so run this once before any crawl:

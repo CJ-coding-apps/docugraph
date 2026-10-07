@@ -74,9 +74,10 @@ class FastembedReranker(RerankerBase):
     relevance scoring than bi-encoders (used in initial retrieval).
 
     Default model: BAAI/bge-reranker-v2-m3 (multilingual, ~1.8 GB —
-    downloads on first use, cached under FASTEMBED_CACHE_PATH). Because
-    of the download size this reranker is always an explicit opt-in;
-    the factory default is NONE.
+    downloads on first use, cached under FASTEMBED_CACHE_PATH; unset,
+    fastembed falls back to a `fastembed_cache` subdirectory of the
+    system temp directory). Because of the download size this reranker
+    is always an explicit opt-in; the factory default is NONE.
     """
 
     DEFAULT_MODEL = "BAAI/bge-reranker-v2-m3"

@@ -366,3 +366,76 @@ def test_every_command_is_documented() -> None:
         "These CLI commands appear on no page a reader would look at:\n  "
         + "\n  ".join(undocumented)
     )
+
+
+# --------------------------------------------------------------------------
+# 4. The fastembed cache default
+# --------------------------------------------------------------------------
+
+# Everything that states where fastembed caches. The source docstrings are
+# included because they make the same claim to a different reader.
+CACHE_CLAIM_SOURCES = [
+    *PAGES,
+    ROOT / "src" / "docugraph" / "core" / "embeddings.py",
+    ROOT / "src" / "docugraph" / "retrieval" / "reranker.py",
+]
+
+# A page claiming that an unset FASTEMBED_CACHE_PATH means `~/.cache/fastembed`.
+# The export example on the configuration page names that directory too, and is
+# not a claim about the default, so the word "default" is required.
+FALSE_DEFAULT = re.compile(r"default[^.]{0,200}?\.cache/fastembed")
+
+
+def _claims_false_default(text: str) -> bool:
+    """True if `text` calls `~/.cache/fastembed` the default.
+
+    Whitespace is collapsed first: one of the offending claims was wrapped
+    across two lines, and matching line by line walked straight past it.
+    """
+    return bool(FALSE_DEFAULT.search(re.sub(r"\s+", " ", text)))
+
+
+def _fastembed_default_cache_dir() -> Path:
+    """Where fastembed caches when `FASTEMBED_CACHE_PATH` is unset.
+
+    Read under an environment with that variable removed: `ci.yml` sets it to
+    the very path the pages used to claim was the default, so asking with the
+    variable in place would agree with the pages for the wrong reason.
+    """
+    import os
+    from unittest import mock
+
+    from fastembed.common.utils import define_cache_dir
+
+    without = {k: v for k, v in os.environ.items() if k != "FASTEMBED_CACHE_PATH"}
+    with mock.patch.dict(os.environ, without, clear=True):
+        return define_cache_dir()
+
+
+def test_the_documented_fastembed_cache_default_is_the_real_one() -> None:
+    """Four places said `~/.cache/fastembed`. That is not the default.
+
+    fastembed's `define_cache_dir` falls back to `<tempdir>/fastembed_cache`.
+    Nothing caught it because `ci.yml` pins `FASTEMBED_CACHE_PATH` to
+    `~/.cache/fastembed`, so the guess was right in the one environment that
+    ran the tests and wrong on every reader's machine.
+    """
+    import tempfile
+
+    real = _fastembed_default_cache_dir()
+    assert real == Path(tempfile.gettempdir()) / "fastembed_cache", (
+        f"fastembed's default cache directory moved to {real}. The pages that "
+        "describe where models are cached were written against the old one; "
+        "re-read them."
+    )
+    assert real != Path.home() / ".cache" / "fastembed"
+
+    offenders = [
+        str(source.relative_to(ROOT))
+        for source in CACHE_CLAIM_SOURCES
+        if _claims_false_default(source.read_text())
+    ]
+    assert not offenders, (
+        "These call `~/.cache/fastembed` the default, and it is not -- the "
+        f"default is {real}:\n  " + "\n  ".join(offenders)
+    )

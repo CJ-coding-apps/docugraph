@@ -36,8 +36,9 @@ class FastembedEmbedder(EmbeddingProviderBase):
     """Local embeddings via fastembed (pure ONNX, no torch).
 
     Default model BAAI/bge-small-en-v1.5 (384 dims). Weights download on
-    first use and are cached under FASTEMBED_CACHE_PATH (default
-    ~/.cache/fastembed).
+    first use and are cached under FASTEMBED_CACHE_PATH; unset, fastembed
+    falls back to a `fastembed_cache` subdirectory of the system temp
+    directory (its `define_cache_dir`), not to `~/.cache/fastembed`.
     """
 
     # bge-en-v1.5 models are trained with a query/passage asymmetry; retrieval
