@@ -1,11 +1,24 @@
 [project]
-name = "docugraph-ai-v1"
-version = "1.0.0"
+name = "docugraph"
+version = "0.1.0"
 description = "Documentation RAG for coding agents: vector search, knowledge graph, agent memory, and an MCP server — torch-free local embeddings via fastembed"
 readme = "README.md"
-requires-python = ">=3.11"
+# The ceiling is deliberate, and there are two independent reasons for it.
+#
+# `kuzu==0.11.3` (pinned below) publishes cp314 wheels for Linux only -- its
+# macOS and Windows wheels stop at cp313. On those platforms 3.14 resolves to
+# the 19 MB sdist, and pip tries to compile Kuzu's C++ from source.
+#
+# Independently, fastembed requires `onnxruntime>=1.24.2` on 3.14, while this
+# package caps onnxruntime below 1.24. Those two cannot both be satisfied, so on
+# 3.14 this package cannot be installed anywhere at all, Linux included.
+#
+# Declaring the ceiling turns both into one clear line from pip, before anything
+# is downloaded. It lifts only when the Kuzu pin and the onnxruntime cap are
+# revisited together; both are recorded in the project's open decisions.
+requires-python = ">=3.11,<3.14"
 license = { text = "Apache-2.0" }
-authors = [{ name = "DocuGraph AI Team" }]
+authors = [{ name = "Jim Cuttler", email = "jimcuttler@gmail.com" }]
 keywords = ["rag", "knowledge-graph", "vector-search", "coding-agent", "mcp", "documentation"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -13,6 +26,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Documentation",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -66,11 +80,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Cloud LLM providers
+# Cloud LLM providers.
+#
+# Each is capped below the next major version -- the one above what CI installs
+# and tests against -- so a major release cannot arrive as an automatic install
+# in someone's environment. The Anthropic 1.x SDK removed `temperature` from its
+# request type and broke every call until it was removed here; the same class of
+# change in any of these three would break a user's build with nothing in this
+# repo to explain it. Lifting a cap is a deliberate edit with a test run behind
+# it, not a Dependabot PR.
 cloud = [
-    "openai>=1.12.0",
-    "anthropic>=0.18.0",
-    "cohere>=5.0.0",
+    "openai>=1.12.0,<4",
+    "anthropic>=0.18.0,<2",
+    "cohere>=5.0.0,<8",
 ]
 
 # Local LLM via Ollama
@@ -89,9 +111,14 @@ dev = [
     "types-pyyaml",
 ]
 
-# All optional dependencies
+# All optional dependencies a *user* of the package would want. `dev` is
+# deliberately not among them: it installs pytest, ruff, mypy and pre-commit,
+# which serve contributors rather than callers, and pulling them into a normal
+# install is not a thing to offer. CI still installs `dev` -- `uv sync
+# --all-extras` covers every extra, `dev` included -- so nothing is tested less
+# for its absence here.
 all = [
-    "docugraph-ai-v1[cloud,ollama,dev]",
+    "docugraph[cloud,ollama]",
 ]
 
 [project.scripts]
@@ -121,8 +148,18 @@ select = [
     "UP",     # pyupgrade
     "ARG",    # flake8-unused-arguments
     "SIM",    # flake8-simplify
+    "TID251", # flake8-tidy-imports: banned-api
 ]
 ignore = ["E501", "B008", "B904"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# get_event_loop() is wrong in both directions: it returns no loop at all once
+# anything in the process has called asyncio.run(), and inside a running loop it
+# hands back a loop that cannot be driven with run_until_complete. Neither
+# failure looks like a loop problem from the caller's side, which is how three
+# separate copies of this pattern survived here. Await in async code;
+# asyncio.run(...) in sync code.
+"asyncio.get_event_loop".msg = "Await the async implementation, or use asyncio.run(...) from sync code."
 
 [tool.ruff.lint.isort]
 known-first-party = ["docugraph"]
@@ -168,6 +205,18 @@ disallow_untyped_calls = false
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+filterwarnings = [
+    # A DeprecationWarning raised from docugraph's own code is a thing we can
+    # fix, so it fails here rather than printing a line nobody reads. The
+    # module field matches the frame the warning is attributed to, which for
+    # `datetime.utcnow` and class-based Pydantic config is our file even though
+    # the deprecation is upstream's. (Same rule CF applies to its own package.)
+    "error::DeprecationWarning:docugraph",
+    # graphiti-core warns on every KuzuDriver construction. Kuzu is deliberately
+    # pinned (0.11.3, the final release) rather than migrated, so the warning is
+    # accurate, unavoidable, and not ours to fix. Named so it stays narrow.
+    "ignore:The Kuzu backend is deprecated.*:DeprecationWarning",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "examples"]

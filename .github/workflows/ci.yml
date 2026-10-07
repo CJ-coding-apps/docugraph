@@ -6,16 +6,36 @@ on:
     branches:
       - main
       - master
+  # Deliberately no branch filter. With `branches: [main, master]` here, a pull
+  # request whose base is any other branch -- which is how a change is stacked on
+  # another unmerged change -- got no CI at all, and "no checks reported" in the
+  # PR list reads much like "checks passed". Every pull request runs CI.
   pull_request:
-    branches:
-      - main
-      - master
 
 env:
   # fastembed model cache (bge-small ~130 MB; shared across jobs)
   FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
 
 jobs:
+  # The workflow files are the one thing here with no other gate, and release.yml
+  # is the part that runs rarely and matters most -- so a mistake in it is found
+  # at release time, by everyone. actionlint reads the workflows themselves:
+  # expression syntax, job-graph references, and the shell and Python inside each
+  # `run:` block, through shellcheck and pyflakes, both of which the pinned image
+  # below ships. Run against this tree it reported two SC2086 findings in
+  # release.yml (`>> $GITHUB_OUTPUT` unquoted); both are fixed.
+  actionlint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -31,32 +51,77 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      # --all-extras, not --extra dev. The cloud SDKs are imported conditionally,
+      # so with them absent mypy reports "cannot find implementation or library
+      # stub" and types the calls against `Any` -- which is how a `temperature`
+      # argument the Anthropic SDK had already removed passed type checking while
+      # raising TypeError at runtime for every user of docugraph[cloud].
       - name: Sync dependencies
-        run: uv sync --extra dev
+        run: uv sync --all-extras
 
+      # `scripts/` is included, not just `src/`. The live-provider smoke script is
+      # not part of the package but it is part of this repository, and code no gate
+      # reads is code that rots. mypy gets both paths together so it resolves
+      # `docugraph` to this source tree rather than to the installed copy, which it
+      # otherwise reports as an untyped library.
       - name: Run Ruff linter
-        run: uv run ruff check src/
+        run: uv run ruff check src/ scripts/
 
       - name: Run Ruff formatter check
-        run: uv run ruff format --check src/
+        run: uv run ruff format --check src/ scripts/
 
       - name: Run mypy
-        run: uv run mypy src/
+        run: uv run mypy src/ scripts/
+
+      # These SDKs are installed in this job and nowhere else in CI, so it is the
+      # only place the cloud request shapes can be checked against the real
+      # libraries rather than against their absence. Skips itself if anthropic
+      # is missing, which is why it belongs to the all-extras job.
+      - name: Check the cloud provider calls against the installed SDKs
+        run: uv run pytest tests/unit/test_cloud_provider_sdks.py -v
 
   test:
-    name: Test
+    name: Test (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     needs: lint
+    strategy:
+      # Report every version, rather than cancelling the others when one fails.
+      fail-fast: false
+      matrix:
+        # Every version the package claims, via the pyproject classifiers, now
+        # that 3.13 is among them. 3.14 is excluded by `requires-python`; the
+        # comment there gives the two independent reasons.
+        python-version: ['3.11', '3.12', '3.13']
+    env:
+      # uv otherwise reads .python-version (3.11) and silently builds a 3.11
+      # venv for both legs, so the matrix would prove nothing. This overrides
+      # that file for every uv command in the job, `uv run` included.
+      UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      # `--extra cloud` as well as dev, so the whole suite runs with the SDKs
+      # present. Without it the two `importorskip("openai")` tests in
+      # tests/unit/test_embeddings.py skipped here -- and they ran nowhere else,
+      # because the all-extras job runs only tests/unit/test_cloud_provider_sdks.py.
+      # One of the two is the guard on the auto-embedding fix: a key in the
+      # environment must not be read as a request to send documents to OpenAI.
+      # A regression guard that never runs is a comment.
+      #
+      # `ollama` is deliberately not included: no test imports it, and the three
+      # ollama tests in tests/unit/test_llm_preflight.py monkeypatch the probe.
       - name: Sync dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra cloud
 
       - name: Cache fastembed models
         uses: actions/cache@v4
@@ -66,6 +131,67 @@ jobs:
 
       - name: Run tests
         run: uv run pytest tests/unit/ tests/integration/ tests/e2e/ -v --tb=short
+
+  docker:
+    # Builds the image but never publishes it: docker-publish.yml owns pushing,
+    # and that only triggers on a tag. This job exists so a dependency change
+    # cannot break the image without anyone noticing between releases.
+    name: Docker (production image)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build the production target
+        run: docker build --file docker/Dockerfile --target production --tag docugraph:ci .
+
+      - name: Handshake over stdio
+        # Initialise, then let stdin close. A missing LLM does not stop the
+        # server from identifying itself -- that is the point of the
+        # degradation work -- so this needs no credentials.
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci-handshake","version":"0"}}}' \
+            | timeout 300 docker run -i --rm docugraph:ci \
+                > /tmp/handshake.jsonl 2> /tmp/handshake.err \
+            || echo "docker run exit: $?"
+          echo "--- container stderr (tail) ---"
+          tail -20 /tmp/handshake.err || true
+
+      - name: Assert the handshake
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+
+          EXPECTED = "0.1.0"  # the version this repo publishes; pinned deliberately
+          raw = pathlib.Path("/tmp/handshake.jsonl").read_text()
+
+          # stdout carries the JSON-RPC stream and nothing else. A stray line
+          # here corrupts the protocol, so it fails rather than being skipped.
+          messages = []
+          for n, line in enumerate(raw.splitlines(), 1):
+              if not line.strip():
+                  continue
+              try:
+                  messages.append(json.loads(line))
+              except json.JSONDecodeError as e:
+                  sys.exit(f"stdout line {n} is not JSON: {line[:160]!r} ({e})")
+
+          infos = [
+              m["result"]["serverInfo"]
+              for m in messages
+              if isinstance(m.get("result"), dict) and "serverInfo" in m["result"]
+          ]
+          if not infos:
+              sys.exit(f"no serverInfo in {len(messages)} message(s): {messages!r}")
+          if infos[0].get("version") != EXPECTED:
+              sys.exit(f"serverInfo.version is {infos[0].get('version')!r}, expected {EXPECTED!r}")
+
+          print(f"stdout: {len(messages)} JSON-RPC message(s), 0 stray lines")
+          print(f"serverInfo: {infos[0]}")
+          PY
 
   test-summary:
     name: Test Summary

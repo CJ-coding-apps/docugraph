@@ -8,6 +8,7 @@ Supports multiple reranking strategies:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -73,9 +74,10 @@ class FastembedReranker(RerankerBase):
     relevance scoring than bi-encoders (used in initial retrieval).
 
     Default model: BAAI/bge-reranker-v2-m3 (multilingual, ~1.8 GB —
-    downloads on first use, cached under FASTEMBED_CACHE_PATH). Because
-    of the download size this reranker is always an explicit opt-in;
-    the factory default is NONE.
+    downloads on first use, cached under FASTEMBED_CACHE_PATH; unset,
+    fastembed falls back to a `fastembed_cache` subdirectory of the
+    system temp directory). Because of the download size this reranker
+    is always an explicit opt-in; the factory default is NONE.
     """
 
     DEFAULT_MODEL = "BAAI/bge-reranker-v2-m3"
@@ -200,18 +202,29 @@ class CohereReranker(RerankerBase):
 
     def __init__(
         self,
-        model: str = "rerank-english-v3.0",
+        model: str | None = None,
         api_key: str | None = None,
         score_weight: float = 0.8,
     ) -> None:
         """Initialize Cohere reranker.
 
         Args:
-            model: Cohere rerank model name
+            model: Cohere rerank model name. Required: there is no default,
+                because a default here would be a cloud model chosen for the
+                user by this package rather than by them.
             api_key: API key (or set COHERE_API_KEY env var)
             score_weight: Weight for rerank score in final score
         """
         import os
+
+        if not model:
+            raise ValueError(
+                "Cohere reranking needs a model name and none was given. Cohere "
+                "is a cloud service with no default here: the model fixes the "
+                "price and the languages supported, so it is the caller's "
+                "choice. Pass `model=` (e.g. from configuration) and see "
+                "https://docs.cohere.com/docs/rerank-overview for the list."
+            )
 
         self._model = model
         self._api_key = api_key or os.environ.get("COHERE_API_KEY")
@@ -323,7 +336,13 @@ class LLMReranker(RerankerBase):
         results: list[SearchResult],
         top_k: int | None = None,
     ) -> list[RerankResult]:
-        """Rerank using LLM scoring.
+        """Rerank using LLM scoring, from synchronous code.
+
+        A thin wrapper over ``arerank`` for callers that have no event loop.
+        Async callers await ``arerank`` instead: this drives a fresh loop and
+        raises if one is already running. For the same reason it does the empty
+        short-circuit itself rather than inside the coroutine -- there is no
+        reason to spin up a loop to return an empty list.
 
         Args:
             query: Search query
@@ -333,23 +352,33 @@ class LLMReranker(RerankerBase):
         Returns:
             Reranked results
         """
-        import asyncio
-
         if not results:
             return []
 
-        # Run async reranking synchronously
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
+        return asyncio.run(self.arerank(query, results, top_k))
 
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self._rerank_async(query, results, top_k))
-                    return future.result()
-            return loop.run_until_complete(self._rerank_async(query, results, top_k))
-        except RuntimeError:
-            return asyncio.run(self._rerank_async(query, results, top_k))
+    async def arerank(
+        self,
+        query: str,
+        results: list[SearchResult],
+        top_k: int | None = None,
+    ) -> list[RerankResult]:
+        """Rerank using LLM scoring, awaiting the model calls in place.
+
+        This is the implementation; ``rerank`` is the synchronous wrapper.
+
+        Args:
+            query: Search query
+            results: Results to rerank
+            top_k: Optional limit on results
+
+        Returns:
+            Reranked results
+        """
+        if not results:
+            return []
+
+        return await self._rerank_async(query, results, top_k)
 
     async def _rerank_async(
         self,

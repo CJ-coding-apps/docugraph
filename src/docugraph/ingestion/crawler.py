@@ -2,7 +2,7 @@
 
 import asyncio
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime
 from urllib.parse import urljoin, urlparse
 
 from docugraph.core.config import CrawlerConfig, get_config
@@ -40,9 +40,13 @@ class DocCrawler:
             with open(cache_file) as f:
                 data = json.load(f)
 
-            # Check TTL
+            # Check TTL. A cache entry written before timestamps carried a
+            # timezone parses as naive, so it is read as UTC rather than
+            # subtracted from an aware "now" (which raises).
             cached_at = datetime.fromisoformat(data["cached_at"])
-            age = (datetime.utcnow() - cached_at).total_seconds()
+            if cached_at.tzinfo is None:
+                cached_at = cached_at.replace(tzinfo=UTC)
+            age = (datetime.now(UTC) - cached_at).total_seconds()
             if age > self._config.cache_ttl:
                 return None
 
@@ -58,7 +62,7 @@ class DocCrawler:
         import json
 
         data = {
-            "cached_at": datetime.utcnow().isoformat(),
+            "cached_at": datetime.now(UTC).isoformat(),
             "document": document.model_dump(mode="json"),
         }
 
@@ -131,7 +135,7 @@ class DocCrawler:
                 metadata={
                     "raw_html_length": len(result.html) if result.html else 0,
                     "links_count": len(result.links.get("internal", [])) if result.links else 0,
-                    "crawled_at": datetime.utcnow().isoformat(),
+                    "crawled_at": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -237,7 +241,7 @@ class DocCrawler:
                         content_type=ContentType.MARKDOWN,
                         metadata={
                             "raw_html_length": len(result.html) if result.html else 0,
-                            "crawled_at": datetime.utcnow().isoformat(),
+                            "crawled_at": datetime.now(UTC).isoformat(),
                         },
                     )
 

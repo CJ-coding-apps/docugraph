@@ -1,11 +1,11 @@
 """Core data models for DocuGraph AI."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def generate_id() -> str:
@@ -62,8 +62,8 @@ class Document(BaseModel):
     content: str
     content_type: ContentType = ContentType.MARKDOWN
     metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -79,7 +79,7 @@ class Chunk(BaseModel):
     start_char: int = 0
     end_char: int = 0
     metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -94,8 +94,8 @@ class Entity(BaseModel):
     description: str | None = None
     source_chunks: list[str] = Field(default_factory=list)
     properties: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    valid_from: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    valid_from: datetime = Field(default_factory=lambda: datetime.now(UTC))
     valid_to: datetime | None = None
 
     def __hash__(self) -> int:
@@ -111,7 +111,7 @@ class Relationship(BaseModel):
     relationship_type: RelationshipType
     properties: dict[str, Any] = Field(default_factory=dict)
     weight: float = 1.0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -126,8 +126,8 @@ class MemoryEntry(BaseModel):
     key: str
     value: Any
     context: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    accessed_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    accessed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -136,10 +136,10 @@ class MemoryEntry(BaseModel):
 class SearchResult(BaseModel):
     """A search result with relevance score."""
 
+    # Class-based `Config` is deprecated in Pydantic v2 and warns on import.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     chunk: Chunk
     score: float
     source_document: Document | None = None
     highlights: list[str] = Field(default_factory=list)
-
-    class Config:
-        arbitrary_types_allowed = True

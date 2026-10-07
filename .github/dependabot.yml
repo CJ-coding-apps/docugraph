@@ -1,48 +1,101 @@
-# Dependabot configuration for automated dependency updates
+# Dependabot is configured rather than switched off.
+#
+# Left as it was, this file opened a PR per dependency per week, which in practice
+# meant a queue of PRs that could not be merged. Five of docugraph's dependencies
+# are held deliberately, and the old grouping covered minor and patch bumps only
+# -- so every major bump, which is exactly where the held-back lines were, arrived
+# as its own PR proposing to lift them. Eight were open at the time of writing.
+#
+# Now the held dependencies are ignored by name with the reason recorded beside
+# each, and the rest arrives as one grouped PR per ecosystem per month: a size a
+# person can review in one sitting.
+#
+# These `ignore` entries restate decisions already written into pyproject.toml.
+# If a pin is lifted there, lift it here too -- otherwise this file goes on
+# suppressing updates that nobody still means to suppress. Note that Dependabot
+# reads this file only from the default branch, so changes here take effect at
+# the next merge to `main`, not at the push.
+#
+# There are deliberately no `labels:` entries. The previous config asked for
+# `dependencies`, `python`, `github-actions` and `docker`, none of which exist in
+# this repository, so every Dependabot PR carried "the following labels could not
+# be found" and no labels at all. Either create them and put the entries back, or
+# leave this as it is; asking for labels that do not exist is worse than not
+# asking.
+
 version: 2
 
 updates:
-  # Python dependencies
+  # ------------------------------------------------------------------ Python deps
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     commit-message:
       prefix: "deps"
-    labels:
-      - "dependencies"
-      - "python"
-    open-pull-requests-limit: 5
     groups:
-      # Group minor/patch updates together
-      python-minor:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
+      pip:
+        patterns: ["*"]
+    ignore:
+      # Pinned exactly in pyproject.toml. kuzu is archived upstream -- 0.11.3 is the
+      # final release -- and its file format is not stable before 1.0, so a bump can
+      # leave an existing graph unreadable. Lifting this pin needs a migration step,
+      # not a dependency bump.
+      - dependency-name: "kuzu"
 
-  # GitHub Actions
+      # Pinned exactly in pyproject.toml, so that a graphiti release cannot change
+      # its kuzu requirement or drop the kuzu driver and break the pin above, with
+      # no change in this repo to explain it. Bump only alongside a re-run of the
+      # ingestion tests.
+      - dependency-name: "graphiti-core"
+
+      # Capped below 2 in pyproject.toml: the 2.x SDK removed the low-level Server
+      # list_tools/call_tool decorators that mcp_server.py is built on.
+      - dependency-name: "mcp"
+        versions: [">= 2.0.0"]
+
+      # Capped below 1.24: newer releases dropped macOS x86_64 wheels, so the
+      # install breaks on an Intel Mac. Same reason as lancedb below.
+      - dependency-name: "onnxruntime"
+        versions: [">= 1.24.0"]
+
+      # Capped below 0.26, for the same dropped-wheel reason.
+      - dependency-name: "lancedb"
+        versions: [">= 0.26.0"]
+
+      # The three cloud SDKs are deliberately *not* ignored here, though they
+      # are still capped in pyproject.toml. They were, and it was the wrong call:
+      # an ignore suppresses the PR that would have shown you the break. The
+      # Anthropic 1.x SDK removed `temperature` from its request type and every
+      # call raised `unexpected keyword argument` -- and because the cap arrived
+      # by hand, the break was discovered rather than announced. A major bump for
+      # any of these now opens a PR that proposes lifting the cap, and CI's
+      # all-extras job runs tests/unit/test_cloud_provider_sdks.py against the
+      # proposed version, which is the only thing that can say whether the new
+      # SDK still accepts the arguments these providers pass. That job exists for
+      # this: read its result before merging, because a green install proves
+      # nothing about the request shape.
+
+  # ----------------------------------------------------------------- GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     commit-message:
       prefix: "ci"
-    labels:
-      - "dependencies"
-      - "github-actions"
+    groups:
+      github-actions:
+        patterns: ["*"]
 
-  # Docker dependencies
+  # ------------------------------------------------------------------ Docker images
+  # Kept from the previous config, now monthly like the others. Nothing is held
+  # here, so it is a plain grouped update of the base image.
   - package-ecosystem: "docker"
     directory: "/docker"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     commit-message:
       prefix: "docker"
-    labels:
-      - "dependencies"
-      - "docker"
+    groups:
+      docker:
+        patterns: ["*"]

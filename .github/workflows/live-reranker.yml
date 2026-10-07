@@ -1,0 +1,91 @@
+# The opt-in cross-encoder, run against the real weights, weekly and on demand.
+#
+# `tests/unit/test_reranker.py` is skipped on every push and pull request,
+# because bge-reranker-v2-m3 is ~2.3 GB and a download on every run would make
+# the fast offline suite slow and flaky. The consequence was that nothing ever
+# exercised the real model: the one test that proves registration, download
+# wiring and inference work together ran *never*. A gate that has never once
+# been satisfied is not a gate; it is a comment.
+#
+# So this job runs it -- weekly, on `main`, with the weights cached between
+# runs. It is deliberately separate from `live-provider-smoke.yml`, which talks
+# to a cloud provider and says so in its header; this job talks to the Hugging
+# Face hub and runs a model locally, and keeping them apart keeps each header
+# true. The skip in the test file stays, because CI on a pull request must not
+# download 2.3 GB.
+#
+# A *skip* fails this job. The weights are fetched in the step above the test,
+# so nothing here can legitimately skip; if the test does skip, the cache is
+# not where the test looks, and green would mean "checked nothing".
+name: Live reranker
+
+on:
+  # Manual: Actions -> Live reranker -> Run workflow.
+  workflow_dispatch:
+  schedule:
+    # Tuesdays at 07:41 UTC. Off the hour, and the day after the provider smoke,
+    # so a bad Monday there does not hide a bad Tuesday here.
+    - cron: '41 7 * * 2'
+
+# Read-only: this job downloads weights, runs a model and writes nothing back.
+permissions:
+  contents: read
+
+jobs:
+  reranker:
+    name: Real cross-encoder inference
+    runs-on: ubuntu-latest
+    # `main` only, including for a manual dispatch, which can otherwise be
+    # started from any branch. The point is to check what users run: a branch
+    # may name a different model, and a green run there would say nothing about
+    # the released default. Scheduled runs are already pinned to the default
+    # branch.
+    if: github.ref == 'refs/heads/main'
+    env:
+      # The same path ci.yml uses, so both workflows cache fastembed weights in
+      # one place. Set explicitly because fastembed's own default is a
+      # subdirectory of the system temp dir -- unkeyable for the cache step
+      # below and different on every runner. The test resolves the directory
+      # through fastembed's own `define_cache_dir`, so it reads this value
+      # rather than assuming it.
+      FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      # Keyed on the model, not on a hash of anything: the weights at a given
+      # revision never change, and the job accesses the entry weekly so it does
+      # not age out under GitHub's eviction policy.
+      - name: Restore the reranker weights
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FASTEMBED_CACHE_PATH }}
+          key: fastembed-bge-reranker-v2-m3
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      # Cold cache: this is where the ~2.3 GB download happens, and where a
+      # retired repository or a broken ModelSource is caught.
+      - name: Fetch the weights if the cache was cold
+        run: uv run python -c "from docugraph.retrieval.reranker import FastembedReranker; FastembedReranker()"
+
+      # `pipefail` so a failing pytest fails the step; `tee` so the log survives
+      # the grep. Verbose because the assertion below is on the test's own
+      # verdict, and a skip exits 0.
+      - name: Run the reranker tests
+        run: |
+          set -o pipefail
+          uv run pytest tests/unit/test_reranker.py -v | tee /tmp/reranker.log
+          if ! grep -qE "TestFastembedRerankerLive.*PASSED" /tmp/reranker.log; then
+            echo "::error::the live reranker test did not pass -- it skipped, so this run checked nothing"
+            exit 1
+          fi

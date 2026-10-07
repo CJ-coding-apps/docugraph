@@ -38,6 +38,16 @@ class VectorStore:
         self._embedder = embedder or get_embedder()
         self._table: lancedb.table.Table | None = None
 
+    @property
+    def embedding_model(self) -> str:
+        """The model this store is actually using, defaults already resolved.
+
+        Not the same as the configured value: config leaves the model unset for
+        the local backends and lets each one name its own, so reporting the
+        config field would show a user on fastembed that their model is None.
+        """
+        return self._embedder.model_name
+
     def _get_schema(self) -> pa.Schema:
         """Get PyArrow schema for the chunks table."""
         return pa.schema(

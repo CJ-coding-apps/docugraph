@@ -2,13 +2,13 @@
 name: Docker Publish
 
 on:
-  # Version tags are releases. Branch pushes deliberately do not trigger this:
-  # an image for every push to main is noise, and it made the first push to a
-  # new repository fail a multi-platform build before anything was released.
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:  # Allow manual trigger
+  # Manual only. Publishing a release goes through release.yml, which builds the
+  # same production image and tags it with the release version; a `v*` tag used
+  # to fire this file as well, building that image a second time under a second
+  # set of tags. Branch pushes deliberately do not trigger it either: an image
+  # for every push to main is noise, and it made the first push to a new
+  # repository fail a multi-platform build before anything was released.
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io

@@ -22,8 +22,9 @@ pip install -e '.[dev]'
 ```
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
-~130 MB, pure ONNX — no torch) into `FASTEMBED_CACHE_PATH`
-(default `~/.cache/fastembed`).
+~130 MB, pure ONNX — no torch) into `FASTEMBED_CACHE_PATH`. Set it if you want
+the weights somewhere durable: unset, fastembed uses a `fastembed_cache`
+subdirectory of the system temp directory, which the OS may clear.
 
 **URL crawling needs a browser the Python install does not include.** Crawl4AI
 drives Playwright's Chromium, so run this once before any crawl:
@@ -117,7 +118,7 @@ Add to your MCP configuration (e.g. `~/.claude/claude_desktop_config.json`):
 {
   "mcpServers": {
     "docugraph": {
-      "command": "/absolute/path/to/docugraph-ai-v1/.venv/bin/docugraph-mcp",
+      "command": "/absolute/path/to/docugraph/.venv/bin/docugraph-mcp",
       "env": {}
     }
   }
@@ -136,7 +137,7 @@ hardcode the path:
   "mcpServers": {
     "docugraph": {
       "command": "uv",
-      "args": ["--directory", "/absolute/path/to/docugraph-ai-v1", "run", "docugraph-mcp"],
+      "args": ["--directory", "/absolute/path/to/docugraph", "run", "docugraph-mcp"],
       "env": {}
     }
   }
@@ -238,6 +239,14 @@ export DOCUGRAPH_EMBEDDINGS__MODEL=BAAI/bge-base-en-v1.5
 > **Note:** changing the embedding model after indexing will fail loudly at
 > search time (the store records which model wrote its vectors). Run
 > `docugraph clear` and re-index when you switch models.
+
+To see the fully resolved configuration — every value, including defaults the
+file does not mention — or to write the file in the first place:
+
+```bash
+docugraph config show     # print the effective configuration as JSON
+docugraph config init     # write ~/.docugraph/config.yaml (--path to choose)
+```
 
 ## Next steps
 

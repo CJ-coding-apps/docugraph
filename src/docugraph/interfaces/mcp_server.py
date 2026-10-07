@@ -25,10 +25,15 @@ from mcp.types import (
     ToolAnnotations,
 )
 
+from docugraph._version import __version__
+from docugraph.core.llm import LLMUnavailableError
 from docugraph.storage.vector_store import VectorStore
 
-# Initialize server
-server = Server("docugraph")
+# Initialize server. `version` is passed explicitly: without it the MCP SDK
+# falls back to the *mcp* package's version (server.py: `server_version =
+# self.version if self.version else pkg_version("mcp")`), so clients would see
+# the SDK's version advertised as ours.
+server = Server("docugraph", version=__version__)
 
 # Global vector store instance
 _vector_store: VectorStore | None = None
@@ -376,7 +381,10 @@ async def _search_docs(arguments: dict[str, Any]) -> CallToolResult:
 
     try:
         vector_store = get_vector_store()
-        results = vector_store.search(query, top_k=top_k)
+        # The vector store is synchronous and can take a while on a cold index.
+        # This server is one process, so a blocking call here stalls every other
+        # request silently -- nothing in the logs would say why.
+        results = await asyncio.to_thread(vector_store.search, query, top_k=top_k)
 
         if not results:
             return CallToolResult(
@@ -444,12 +452,26 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
         config = HybridSearchConfig(include_graph=include_graph)
         retriever = HybridRetriever(config=config)
 
-        results = retriever.search(
+        results = await retriever.asearch(
             query=query,
             top_k=top_k,
             mode=mode_map.get(mode, SearchMode.HYBRID),
             fusion=FusionStrategy.RRF,
         )
+
+        # Report the graph leg explicitly. Without this, a caller that asked
+        # for graph results and got none cannot tell that from a graph that
+        # simply had nothing to say.
+        status = retriever.graph_status
+        graph_note: str | None = None
+        if status.requested:
+            if status.available:
+                graph_note = "graph_available: true"
+            else:
+                graph_note = (
+                    f"graph_available: false — {status.reason}. "
+                    "These results are from vector/keyword search only."
+                )
 
         if rerank and results:
             # Opt-in cross-encoder rerank (downloads ~1.8 GB on first use).
@@ -474,11 +496,18 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
             results = reordered
 
         if not results:
+            # Carry the graph note here too: "No results found." on its own
+            # would hide that the graph leg never ran.
+            empty_parts = ["No results found."]
+            if graph_note:
+                empty_parts.append(graph_note)
             return CallToolResult(
-                content=[TextContent(type="text", text="No results found.")],
+                content=[TextContent(type="text", text="\n\n".join(empty_parts))],
             )
 
         output_parts = [f"Found {len(results)} results for: {query}\n"]
+        if graph_note:
+            output_parts.append(f"{graph_note}\n")
 
         for i, result in enumerate(results, 1):
             chunk = result.chunk
@@ -716,6 +745,30 @@ async def _memory_recall(arguments: dict[str, Any]) -> CallToolResult:
         )
 
 
+def _llm_error_result(exc: RuntimeError, action: str) -> CallToolResult:
+    """Turn an LLM/runtime failure into an actionable MCP error result.
+
+    An LLMUnavailableError already carries a full explanation of what is
+    missing and how to fix it, so it is passed through verbatim. Any other
+    RuntimeError gets the generic pointer, since it could be something else.
+    """
+    if isinstance(exc, LLMUnavailableError):
+        text = str(exc)
+    else:
+        text = (
+            f"{action} needs an LLM and could not use one. Error: {exc}\n\n"
+            "To use the knowledge graph:\n"
+            "  Local: install Ollama (https://ollama.ai), run 'ollama serve', "
+            "and 'ollama pull <model>'\n"
+            "  Cloud: set OPENAI_API_KEY or ANTHROPIC_API_KEY\n"
+            "Vector and keyword search need no LLM and are unaffected."
+        )
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)],
+        isError=True,
+    )
+
+
 async def _graph_query(arguments: dict[str, Any]) -> CallToolResult:
     """Query the knowledge graph."""
     query = arguments.get("query", "")
@@ -757,20 +810,7 @@ async def _graph_query(arguments: dict[str, Any]) -> CallToolResult:
         )
 
     except RuntimeError as e:
-        return CallToolResult(
-            content=[
-                TextContent(
-                    type="text",
-                    text=(
-                        f"Graph store requires LLM. Error: {str(e)}\n\n"
-                        "To use the knowledge graph:\n"
-                        "  Local: Install Ollama (https://ollama.ai) and run: ollama serve\n"
-                        "  Cloud: Set OPENAI_API_KEY or ANTHROPIC_API_KEY"
-                    ),
-                )
-            ],
-            isError=True,
-        )
+        return _llm_error_result(e, "Graph search")
     except Exception as e:
         return CallToolResult(
             content=[TextContent(type="text", text=f"Error querying graph: {str(e)}")],
@@ -824,20 +864,7 @@ async def _graph_add(arguments: dict[str, Any]) -> CallToolResult:
         )
 
     except RuntimeError as e:
-        return CallToolResult(
-            content=[
-                TextContent(
-                    type="text",
-                    text=(
-                        f"Graph store requires LLM. Error: {str(e)}\n\n"
-                        "To use the knowledge graph:\n"
-                        "  Local: Install Ollama (https://ollama.ai) and run: ollama serve\n"
-                        "  Cloud: Set OPENAI_API_KEY or ANTHROPIC_API_KEY"
-                    ),
-                )
-            ],
-            isError=True,
-        )
+        return _llm_error_result(e, "Graph add")
     except Exception as e:
         return CallToolResult(
             content=[TextContent(type="text", text=f"Error adding to graph: {str(e)}")],
@@ -856,7 +883,7 @@ async def _get_stats(_arguments: dict[str, Any]) -> CallToolResult:
         stats = {
             "total_chunks": vector_store.count(),
             "data_directory": str(config.storage.data_dir),
-            "embedding_model": config.embeddings.model,
+            "embedding_model": vector_store.embedding_model,
             "embedding_provider": config.embeddings.provider.value,
         }
 

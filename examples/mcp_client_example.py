@@ -26,7 +26,7 @@ than through a shell, so a bare "docugraph-mcp" is not on their PATH.
     {
       "mcpServers": {
         "docugraph": {
-          "command": "/absolute/path/to/docugraph-ai-v1/.venv/bin/docugraph-mcp",
+          "command": "/absolute/path/to/docugraph/.venv/bin/docugraph-mcp",
           "env": {}
         }
       }
@@ -39,7 +39,7 @@ On macOS Intel, launch it via Docker instead:
           "command": "docker",
           "args": ["run", "-i", "--rm",
                    "-v", "docugraph-data:/data/docugraph",
-                   "docugraph-ai-v1", "docugraph-mcp"]
+                   "docugraph", "docugraph-mcp"]
         }
       }
     }

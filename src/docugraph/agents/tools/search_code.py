@@ -5,6 +5,7 @@ Provides code-specific search with language and structure awareness.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 
@@ -16,7 +17,47 @@ def search_code(
     _context: Any = None,
     **_kwargs: Any,
 ) -> list[dict[str, Any]]:
+    """Search for code examples in indexed documentation, from synchronous code.
+
+    A thin wrapper over ``search_code_async`` for callers that have no event
+    loop. Async callers -- the agent loop included -- await
+    ``search_code_async`` instead: this drives a fresh loop and raises if one
+    is already running.
+
+    Args:
+        query: Search query (can be natural language or code snippet)
+        language: Filter by programming language (python, javascript, etc.)
+        top_k: Number of results to return
+        include_context: Include surrounding context
+        _context: Agent execution context (injected)
+        **kwargs: Additional arguments
+
+    Returns:
+        List of code results with code, path, language, and context
+    """
+    return asyncio.run(
+        search_code_async(
+            query=query,
+            language=language,
+            top_k=top_k,
+            include_context=include_context,
+            _context=_context,
+            **_kwargs,
+        )
+    )
+
+
+async def search_code_async(
+    query: str,
+    language: str | None = None,
+    top_k: int = 10,
+    include_context: bool = True,
+    _context: Any = None,
+    **_kwargs: Any,
+) -> list[dict[str, Any]]:
     """Search for code examples in indexed documentation.
+
+    This is the implementation; ``search_code`` is the synchronous wrapper.
 
     Args:
         query: Search query (can be natural language or code snippet)
@@ -43,7 +84,7 @@ def search_code(
     config = HybridSearchConfig(include_graph=False)
     retriever = HybridRetriever(config=config)
 
-    results = retriever.search(
+    results = await retriever.asearch(
         query=code_query,
         top_k=top_k * 2,  # Get more results for filtering
         mode=SearchMode.HYBRID,

@@ -135,12 +135,15 @@ class CodingAgent:
         # same-named functions that shadow the module names.
         from docugraph.agents.tools.graph_query import graph_query
         from docugraph.agents.tools.memory_ops import memory_recall, memory_store
-        from docugraph.agents.tools.search_code import search_code
-        from docugraph.agents.tools.search_docs import search_docs
+        from docugraph.agents.tools.search_code import search_code_async
+        from docugraph.agents.tools.search_docs import search_docs_async
 
+        # The async implementations: this loop is async and `execute_tool`
+        # awaits coroutine functions, so a sync wrapper that drives its own
+        # loop would raise here.
         self._tools = {
-            "search_docs": search_docs,
-            "search_code": search_code,
+            "search_docs": search_docs_async,
+            "search_code": search_code_async,
             "graph_query": graph_query,
             "memory_store": memory_store,
             "memory_recall": memory_recall,

@@ -32,12 +32,14 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
 ```
 
-> Not yet published to PyPI, so there is no `pip install docugraph-ai-v1` yet —
+> Not yet published to PyPI, so there is no `pip install docugraph` yet —
 > install from a checkout as above.
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
-~130 MB ONNX) and caches it under `FASTEMBED_CACHE_PATH` (default
-`~/.cache/fastembed`).
+~130 MB ONNX) and caches it under `FASTEMBED_CACHE_PATH`. Set that variable to
+keep the weights somewhere durable; unset, fastembed puts them in a
+`fastembed_cache` subdirectory of the system temp directory, which the OS is
+free to clear.
 
 **URL crawling needs a browser that the Python install does not include.**
 Crawl4AI drives Playwright's Chromium, so run this once before using
@@ -60,7 +62,7 @@ Add to your Claude Code MCP configuration:
 {
   "mcpServers": {
     "docugraph": {
-      "command": "/absolute/path/to/docugraph-ai-v1/.venv/bin/docugraph-mcp",
+      "command": "/absolute/path/to/docugraph/.venv/bin/docugraph-mcp",
       "env": {}
     }
   }
@@ -82,7 +84,7 @@ change when the checkout moves:
   "mcpServers": {
     "docugraph": {
       "command": "uv",
-      "args": ["--directory", "/absolute/path/to/docugraph-ai-v1", "run", "docugraph-mcp"],
+      "args": ["--directory", "/absolute/path/to/docugraph", "run", "docugraph-mcp"],
       "env": {}
     }
   }
@@ -142,6 +144,10 @@ uv run docugraph memory get build.status
 uv run docugraph stats
 uv run docugraph clear
 
+# Configuration
+uv run docugraph config show
+uv run docugraph config init
+
 # Run the MCP server manually (usually launched by the MCP client)
 uv run docugraph mcp-server
 ```
@@ -183,7 +189,7 @@ storage:
 
 embeddings:
   provider: auto            # auto | fastembed | openai | ollama | cohere
-  model: BAAI/bge-small-en-v1.5
+  model: BAAI/bge-small-en-v1.5   # fastembed's default; see the note below
   # dimensions: auto-detected from the model
   batch_size: 32
 
@@ -193,10 +199,13 @@ crawler:
   respect_robots: true
 ```
 
-`provider: auto` resolves to: **OpenAI** (if `OPENAI_API_KEY` is set and the
-`openai` package is installed) → **fastembed** (local ONNX, the default). Any
-field can be overridden by environment variable, e.g.
-`DOCUGRAPH_EMBEDDINGS__MODEL` or `DOCUGRAPH_EMBEDDINGS__PROVIDER`.
+`provider: auto` resolves to **fastembed** (local ONNX) — nothing about your
+environment changes that, so documents are not sent anywhere for embedding
+unless you name a cloud provider. Set `provider: openai` (or `cohere`) to send
+them there; that is the request, and it needs a model named with it: the entry
+above is fastembed's own default and no cloud provider has one. Any field can be
+overridden by environment variable, e.g. `DOCUGRAPH_EMBEDDINGS__MODEL` or
+`DOCUGRAPH_EMBEDDINGS__PROVIDER`.
 
 See [docs/configuration.md](docs/configuration.md) for the full reference,
 including the embedding-model consistency guard and the graph LLM requirement.

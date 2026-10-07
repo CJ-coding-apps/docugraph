@@ -1,0 +1,77 @@
+# One real call per cloud provider, weekly and on demand.
+#
+# This is the only job in this repository that talks to a provider for real.
+# Everything else runs offline, and the unit tests that cover request shape use a
+# mocked transport -- deliberately, because that is what makes them fast and
+# deterministic, and also what makes them unable to answer the one question only
+# a live call can: does the model the operator configured still exist, and does
+# the provider still accept the request this package builds for it? Vendors
+# retire model ids on their own schedule, and no amount of local testing notices.
+#
+# So it is deliberately not in the push and PR gate. It needs secrets, it spends a
+# fraction of a cent, and it fails for reasons that have nothing to do with the
+# commit under test -- a red X on every PR would train people to ignore it. It
+# runs on `main` only, weekly and by hand, and its failures are a signal about the
+# world rather than about a diff.
+#
+#   Models  come from repository *variables*  (Settings -> Secrets and variables
+#           -> Actions -> Variables): OPENAI_MODEL, ANTHROPIC_MODEL, COHERE_MODEL.
+#           A model id is not a credential, and being able to read it in the
+#           settings page is what makes a failure diagnosable.
+#   Keys    come from repository *secrets* (OPENAI_API_KEY, ANTHROPIC_API_KEY,
+#           COHERE_API_KEY).
+#
+# A provider with no key or no model is reported as skipped, and the job stays
+# green -- but a run where *nothing* was configured fails, because a smoke test
+# that passes by testing nothing is worse than one that never ran.
+name: Live provider smoke
+
+on:
+  # Manual: Actions -> Live provider smoke -> Run workflow.
+  workflow_dispatch:
+  schedule:
+    # Mondays at 07:13 UTC. Off the hour on purpose: the top of the hour is when
+    # most of the world's scheduled jobs fire, and GitHub queues behind them.
+    - cron: '13 7 * * 1'
+
+# Read-only: this job runs provider SDKs against a checked-out tree and writes
+# nothing back.
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: One call per provider
+    runs-on: ubuntu-latest
+    # `main` only, including for a manual dispatch, which can otherwise be
+    # started from any branch. The point is to check what users have: a branch may
+    # name a model that is not the released default, and a green run there would
+    # say nothing about the published package. Scheduled runs are already pinned
+    # to the default branch.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      # --all-extras so every provider's SDK is present; without it the ones that
+      # are missing report as skipped, which reads identically to unconfigured.
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: One tiny call per provider
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          COHERE_MODEL: ${{ vars.COHERE_MODEL }}
+        run: uv run python scripts/live_provider_smoke.py

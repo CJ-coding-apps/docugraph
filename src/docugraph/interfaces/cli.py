@@ -8,11 +8,18 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from docugraph._version import __version__
+
 console = Console()
+
+# Exit code for "the command needed an LLM and could not reach a usable one".
+# Distinct from 1 so a script can tell "not set up yet" from "failed", and
+# from 0 so a wrapped call cannot mistake it for success.
+EXIT_LLM_UNAVAILABLE = 3
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="docugraph")
+@click.version_option(version=__version__, prog_name="docugraph")
 def main() -> None:
     """DocuGraph AI - Intelligent documentation RAG for coding agents."""
     pass
@@ -200,7 +207,7 @@ def stats() -> None:
 
     table.add_row("Total Chunks", str(vector_store.count()))
     table.add_row("Data Directory", str(config.storage.data_dir))
-    table.add_row("Embedding Model", config.embeddings.model)
+    table.add_row("Embedding Model", vector_store.embedding_model)
     table.add_row("Embedding Provider", config.embeddings.provider.value)
 
     console.print(table)
@@ -491,8 +498,9 @@ def graph() -> None:
 def graph_add(content: str, name: str | None, group: str, source_type: str) -> None:
     """Add content to extract entities and relationships.
 
-    Graphiti automatically extracts entities and relationships from text.
-    Requires OPENAI_API_KEY to be set for LLM-based entity extraction.
+    Graphiti automatically extracts entities and relationships from text, which
+    needs an LLM: Ollama locally, or an OPENAI_API_KEY / ANTHROPIC_API_KEY.
+    Exits 3 if none can be reached.
 
     Examples:
         docugraph graph add "FastAPI is a Python web framework. It uses Starlette for routing."
@@ -500,7 +508,7 @@ def graph_add(content: str, name: str | None, group: str, source_type: str) -> N
     """
     from docugraph.storage.graph_store import GraphStore
 
-    async def _add() -> None:
+    async def _add() -> bool:
         store = GraphStore()
         try:
             episode_name = name or f"episode_{hash(content) % 10000}"
@@ -521,22 +529,19 @@ def graph_add(content: str, name: str | None, group: str, source_type: str) -> N
                     console.print(f"  - {e['name']}")
                 if len(result["entities"]) > 5:
                     console.print(f"  ... and {len(result['entities']) - 5} more")
+            return True
 
         except RuntimeError as e:
-            console.print(f"[red]Error: {e}[/red]")
-            console.print("\n[bold]To use the knowledge graph, you need an LLM:[/bold]")
-            console.print("  [cyan]Local (recommended):[/cyan] Install Ollama: https://ollama.ai")
-            console.print(
-                "    ollama pull llama3.2 && ollama pull nomic-embed-text && ollama serve"
-            )
-            console.print("  [cyan]Cloud:[/cyan] Set OPENAI_API_KEY or ANTHROPIC_API_KEY")
-            console.print(
-                "\n[dim]For local-only vector search (no LLM), use 'docugraph search'[/dim]"
-            )
+            # LLMUnavailableError carries its own full explanation; anything
+            # else is reported as-is. Either way: no traceback, and a non-zero
+            # exit so the caller does not read a failure as success.
+            console.print(f"[red]{e}[/red]")
+            return False
         finally:
             await store.close()
 
-    asyncio.run(_add())
+    if not asyncio.run(_add()):
+        raise SystemExit(EXIT_LLM_UNAVAILABLE)
 
 
 @graph.command("search")
@@ -546,7 +551,8 @@ def graph_add(content: str, name: str | None, group: str, source_type: str) -> N
 def graph_search(query: str, limit: int, group: str | None) -> None:
     """Search the knowledge graph.
 
-    Requires OPENAI_API_KEY for embedding-based search.
+    Needs an LLM: Ollama locally, or an OPENAI_API_KEY / ANTHROPIC_API_KEY.
+    Exits 3 if none can be reached.
 
     Examples:
         docugraph graph search "Python web frameworks"
@@ -554,7 +560,7 @@ def graph_search(query: str, limit: int, group: str | None) -> None:
     """
     from docugraph.storage.graph_store import GraphStore
 
-    async def _search() -> None:
+    async def _search() -> bool:
         store = GraphStore()
         try:
             group_ids = [group] if group else None
@@ -562,7 +568,7 @@ def graph_search(query: str, limit: int, group: str | None) -> None:
 
             if not results:
                 console.print("[yellow]No results found.[/yellow]")
-                return
+                return True
 
             console.print(f"\n[bold]Found {len(results)} facts for:[/bold] {query}\n")
 
@@ -571,22 +577,16 @@ def graph_search(query: str, limit: int, group: str | None) -> None:
                 if r.get("valid_at"):
                     console.print(f"   [dim]Valid: {r['valid_at']}[/dim]")
                 console.print()
+            return True
 
         except RuntimeError as e:
-            console.print(f"[red]Error: {e}[/red]")
-            console.print("\n[bold]To use the knowledge graph, you need an LLM:[/bold]")
-            console.print("  [cyan]Local (recommended):[/cyan] Install Ollama: https://ollama.ai")
-            console.print(
-                "    ollama pull llama3.2 && ollama pull nomic-embed-text && ollama serve"
-            )
-            console.print("  [cyan]Cloud:[/cyan] Set OPENAI_API_KEY or ANTHROPIC_API_KEY")
-            console.print(
-                "\n[dim]For local-only vector search (no LLM), use 'docugraph search'[/dim]"
-            )
+            console.print(f"[red]{e}[/red]")
+            return False
         finally:
             await store.close()
 
-    asyncio.run(_search())
+    if not asyncio.run(_search()):
+        raise SystemExit(EXIT_LLM_UNAVAILABLE)
 
 
 @graph.command("clear")
