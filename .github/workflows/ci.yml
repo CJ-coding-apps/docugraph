@@ -17,6 +17,25 @@ env:
   FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
 
 jobs:
+  # The workflow files are the one thing here with no other gate, and release.yml
+  # is the part that runs rarely and matters most -- so a mistake in it is found
+  # at release time, by everyone. actionlint reads the workflows themselves:
+  # expression syntax, job-graph references, and the shell and Python inside each
+  # `run:` block, through shellcheck and pyflakes, both of which the pinned image
+  # below ships. Run against this tree it reported two SC2086 findings in
+  # release.yml (`>> $GITHUB_OUTPUT` unquoted); both are fixed.
+  actionlint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
