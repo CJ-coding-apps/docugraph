@@ -22,8 +22,18 @@ Code and other MCP clients. The CLI is for out-of-band index bootstrapping
 ### Installation
 
 ```bash
-# Clone this repository, then from its root:
+pip install docugraph
+```
 
+**Requires Python 3.11–3.13.** CI runs the suite on all three, on Linux. Python
+3.14 is excluded deliberately, for two independent reasons: `kuzu` 0.11.3 — the
+final release, and the version this package pins — publishes no 3.14 wheels for
+macOS or Windows, and fastembed's 3.14 requirement (`onnxruntime>=1.24.2`) cannot
+be satisfied alongside the `onnxruntime<1.24` cap this package carries.
+
+Or work from a checkout — clone this repository, then from its root:
+
+```bash
 # With uv (recommended)
 uv sync --extra dev
 
@@ -31,9 +41,6 @@ uv sync --extra dev
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
 ```
-
-> Not yet published to PyPI, so there is no `pip install docugraph` yet —
-> install from a checkout as above.
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
 ~130 MB ONNX) and caches it under `FASTEMBED_CACHE_PATH`. Set that variable to
@@ -46,9 +53,9 @@ Crawl4AI drives Playwright's Chromium, so run this once before using
 `docugraph crawl` or the `crawl_url` tool:
 
 ```bash
-uv run playwright install chromium
+playwright install chromium
 # On Linux, add --with-deps to install the browser's system libraries too:
-#   uv run playwright install --with-deps chromium
+#   playwright install --with-deps chromium
 ```
 
 This is ~190 MB and is cached, so it is a one-off. `index local`, `index git`,
@@ -56,28 +63,42 @@ This is ~190 MB and is cached, so it is a one-off. `index local`, `index git`,
 
 ### MCP integration with Claude Code (primary surface)
 
-Add to your Claude Code MCP configuration:
+The MCP server is a console script, so where it lives depends on how you
+installed the package. For an MCP client, an isolated tool install is the least
+fuss: it puts the script somewhere stable that does not move with a project
+directory.
+
+```bash
+pipx install docugraph      # or: uv tool install docugraph
+```
+
+Then ask your shell where it landed:
+
+```bash
+which docugraph-mcp         # macOS, Linux
+where docugraph-mcp         # Windows
+```
+
+and use that exact path in your Claude Code MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "docugraph": {
-      "command": "/absolute/path/to/docugraph/.venv/bin/docugraph-mcp",
+      "command": "<the path `which docugraph-mcp` printed>",
       "env": {}
     }
   }
 }
 ```
 
-Use the **absolute path** to the installed script. An MCP client launches the
-server directly rather than through a shell, so it does not pick up the venv
-that `uv sync` created — a bare `"command": "docugraph-mcp"` fails with
-`No such file or directory` unless that directory happens to be on the client's
-`PATH`. `uv sync` installs the script at `.venv/bin/docugraph-mcp` inside the
-repository (`Scripts\docugraph-mcp.exe` on Windows); substitute your real path.
+An MCP client launches the server directly rather than through a shell, so it
+does not inherit your `PATH`: the short form `"command": "docugraph-mcp"` fails
+with `No such file or directory` even when that directory is on it. That is why
+the path is spelled out.
 
-If you would rather not hardcode it, this is equivalent and needs no path
-change when the checkout moves:
+If you would rather not manage an install, this is equivalent and works
+straight from a checkout, with no path to update when it moves:
 
 ```json
 {
@@ -90,6 +111,11 @@ change when the checkout moves:
   }
 }
 ```
+
+From a checkout, clone this repository and run `uv sync` (`pip install -e '.[dev]'`
+works too). The script is then at `.venv/bin/docugraph-mcp`
+(`Scripts\docugraph-mcp.exe` on Windows), and that is the path to give the
+client.
 
 The server speaks JSON-RPC over stdio and exposes nine tools:
 
@@ -128,7 +154,7 @@ uv run docugraph index local ./docs
 uv run docugraph search "how to create a path operation"
 uv run docugraph search "async error handling" --top-k 10
 
-# Rerank with the local multilingual cross-encoder (downloads ~1.8 GB once)
+# Rerank with the local multilingual cross-encoder (downloads about 2 GB once)
 uv run docugraph search "path operations" --rerank
 
 # Documentation knowledge graph — needs an LLM (Ollama locally, or an
@@ -207,7 +233,7 @@ above is fastembed's own default and no cloud provider has one. Any field can be
 overridden by environment variable, e.g. `DOCUGRAPH_EMBEDDINGS__MODEL` or
 `DOCUGRAPH_EMBEDDINGS__PROVIDER`.
 
-See [docs/configuration.md](docs/configuration.md) for the full reference,
+See [docs/configuration.md](https://github.com/CJ-coding-apps/docugraph/blob/main/docs/configuration.md) for the full reference,
 including the embedding-model consistency guard and the graph LLM requirement.
 
 ## The documentation knowledge graph
@@ -256,6 +282,15 @@ rather than pointing the new version at the old graph file.
 - **MCP**: Model Context Protocol for Claude Code integration
 - Optional cloud/local backends: OpenAI, Cohere, Ollama (extras)
 
+## Acknowledgements
+
+This project uses Crawl4AI (https://github.com/unclecode/crawl4ai) for web data extraction.
+
+- [fastembed](https://github.com/qdrant/fastembed) — local ONNX embeddings, and the optional reranker.
+- [Graphiti](https://github.com/getzep/graphiti) — temporal knowledge-graph extraction.
+- [LanceDB](https://github.com/lancedb/lancedb) — the embedded vector store.
+- [Kùzu](https://github.com/kuzudb/kuzu) — the embedded graph database.
+
 ## License
 
-Apache-2.0 — see `LICENSE`.
+Apache-2.0 — see `LICENSE`, and `NOTICE` for the Crawl4AI attribution.
