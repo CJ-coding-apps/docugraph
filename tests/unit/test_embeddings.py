@@ -112,11 +112,16 @@ class TestGetEmbedderDispatch:
     def test_auto_stays_local_even_with_a_cloud_key_present(self, monkeypatch):
         """A key in the environment is not a request to send documents anywhere.
 
-        `openai` is importable here (the all-extras CI job installs it) and the
-        key is set, so under the old resolution order this returned an
+        `openai` is importable here (the CI test job installs the `cloud` extra)
+        and the key is set, so under the old resolution order this returned an
         OpenAIEmbedder and every document embedded went to OpenAI with nothing
         in the config asking for it. The assert on the type is the whole test:
         if anything in AUTO consults the environment again, this fails.
+
+        The importorskip is what kept this test from running at all in CI for a
+        while: the test job installed `--extra dev` only, and the one job that
+        did install the SDKs ran a single other file. A guard that never runs
+        reads as a passing test.
         """
         pytest.importorskip("openai")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")

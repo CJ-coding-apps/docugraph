@@ -88,8 +88,18 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      # `--extra cloud` as well as dev, so the whole suite runs with the SDKs
+      # present. Without it the two `importorskip("openai")` tests in
+      # tests/unit/test_embeddings.py skipped here -- and they ran nowhere else,
+      # because the all-extras job runs only tests/unit/test_cloud_provider_sdks.py.
+      # One of the two is the guard on the auto-embedding fix: a key in the
+      # environment must not be read as a request to send documents to OpenAI.
+      # A regression guard that never runs is a comment.
+      #
+      # `ollama` is deliberately not included: no test imports it, and the three
+      # ollama tests in tests/unit/test_llm_preflight.py monkeypatch the probe.
       - name: Sync dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra cloud
 
       - name: Cache fastembed models
         uses: actions/cache@v4
