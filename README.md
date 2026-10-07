@@ -25,6 +25,12 @@ Code and other MCP clients. The CLI is for out-of-band index bootstrapping
 pip install docugraph
 ```
 
+**Requires Python 3.11–3.13.** CI runs the suite on all three, on Linux. Python
+3.14 is excluded deliberately, for two independent reasons: `kuzu` 0.11.3 — the
+final release, and the version this package pins — publishes no 3.14 wheels for
+macOS or Windows, and fastembed's 3.14 requirement (`onnxruntime>=1.24.2`) cannot
+be satisfied alongside the `onnxruntime<1.24` cap this package carries.
+
 Or work from a checkout — clone this repository, then from its root:
 
 ```bash
