@@ -22,8 +22,12 @@ Code and other MCP clients. The CLI is for out-of-band index bootstrapping
 ### Installation
 
 ```bash
-# Clone this repository, then from its root:
+pip install docugraph
+```
 
+Or work from a checkout — clone this repository, then from its root:
+
+```bash
 # With uv (recommended)
 uv sync --extra dev
 
@@ -31,9 +35,6 @@ uv sync --extra dev
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
 ```
-
-> Not yet published to PyPI, so there is no `pip install docugraph` yet —
-> install from a checkout as above.
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
 ~130 MB ONNX) and caches it under `FASTEMBED_CACHE_PATH`. Set that variable to
@@ -46,9 +47,9 @@ Crawl4AI drives Playwright's Chromium, so run this once before using
 `docugraph crawl` or the `crawl_url` tool:
 
 ```bash
-uv run playwright install chromium
+playwright install chromium
 # On Linux, add --with-deps to install the browser's system libraries too:
-#   uv run playwright install --with-deps chromium
+#   playwright install --with-deps chromium
 ```
 
 This is ~190 MB and is cached, so it is a one-off. `index local`, `index git`,
