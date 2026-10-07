@@ -6,10 +6,11 @@ on:
     branches:
       - main
       - master
+  # Deliberately no branch filter. With `branches: [main, master]` here, a pull
+  # request whose base is any other branch -- which is how a change is stacked on
+  # another unmerged change -- got no CI at all, and "no checks reported" in the
+  # PR list reads much like "checks passed". Every pull request runs CI.
   pull_request:
-    branches:
-      - main
-      - master
 
 env:
   # fastembed model cache (bge-small ~130 MB; shared across jobs)
