@@ -68,8 +68,10 @@ jobs:
       # Report every version, rather than cancelling the others when one fails.
       fail-fast: false
       matrix:
-        # Every version the package claims, via the pyproject classifiers.
-        python-version: ['3.11', '3.12']
+        # Every version the package claims, via the pyproject classifiers, now
+        # that 3.13 is among them. 3.14 is excluded by `requires-python`; the
+        # comment there gives the two independent reasons.
+        python-version: ['3.11', '3.12', '3.13']
     env:
       # uv otherwise reads .python-version (3.11) and silently builds a 3.11
       # venv for both legs, so the matrix would prove nothing. This overrides
