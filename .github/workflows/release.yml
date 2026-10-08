@@ -80,11 +80,17 @@ jobs:
 
     env:
       REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ghcr.io requires a lowercase repository path, and `github.repository`
+      # keeps the owner's case. Expressions have no lowercase function, so it
+      # is done in the shell.
+      - name: Resolve image name
+        id: image
+        run: echo "name=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       # linux/amd64 only. Building arm64 means running it under emulation, which
       # needs a QEMU step registered with binfmt -- the step that used to sit
@@ -117,8 +123,8 @@ jobs:
           target: production
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ steps.image.outputs.name }}:${{ steps.version.outputs.version }}
+            ${{ steps.image.outputs.name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
