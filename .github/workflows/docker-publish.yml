@@ -12,7 +12,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -24,6 +23,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ghcr.io requires a lowercase repository path, and `github.repository`
+      # keeps the owner's case. Expressions have no lowercase function, so it
+      # is done in the shell. `docker/metadata-action` lowercases the `images:`
+      # input itself, but the tags built by hand below are not, so they all read
+      # the same resolved value.
+      - name: Resolve image name
+        id: image
+        run: echo "name=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       # The arm64 half of the multi-platform build runs under emulation on the
       # amd64 runners, which requires QEMU registered with binfmt. Without this
@@ -45,7 +53,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
             # The tag as pushed (v1.2.3)
             type=ref,event=tag
@@ -78,7 +86,7 @@ jobs:
           file: ./docker/Dockerfile
           target: development
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
+          tags: ${{ steps.image.outputs.name }}:dev
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
