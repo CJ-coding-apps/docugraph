@@ -124,7 +124,7 @@ llm:
 crawler:
   max_concurrent: 5
   rate_limit: 2.0            # requests per second
-  user_agent: DocuGraph-AI/0.1.0
+  user_agent: DocuGraph-AI/0.1.1
   respect_robots: true
   cache_ttl: 86400          # 24 hours
   timeout: 30               # seconds

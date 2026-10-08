@@ -165,7 +165,7 @@ jobs:
           python3 - <<'PY'
           import json, pathlib, sys
 
-          EXPECTED = "0.1.0"  # the version this repo publishes; pinned deliberately
+          EXPECTED = "0.1.1"  # the version this repo publishes; pinned deliberately
           raw = pathlib.Path("/tmp/handshake.jsonl").read_text()
 
           # stdout carries the JSON-RPC stream and nothing else. A stray line
