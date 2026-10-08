@@ -79,6 +79,12 @@ dependencies = [
     "xxhash>=3.4.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/CJ-coding-apps/docugraph"
+Repository = "https://github.com/CJ-coding-apps/docugraph"
+Issues = "https://github.com/CJ-coding-apps/docugraph/issues"
+Changelog = "https://github.com/CJ-coding-apps/docugraph/releases"
+
 [project.optional-dependencies]
 # Cloud LLM providers.
 #
