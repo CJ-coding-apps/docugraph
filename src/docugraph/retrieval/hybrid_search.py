@@ -303,9 +303,13 @@ class HybridRetriever:
         store = self._get_vector_store()
         filter_expr = self._build_filter_expr(filters) if filters else None
 
-        # Keyword-side source: LanceDB native hybrid (vector+FTS) with any
-        # filters applied, so keyword mode respects the same scoping as vector.
-        results = store.search_hybrid(query, top_k=top_k, filter_expr=filter_expr)
+        # Keyword-side source: true BM25 full-text search. This leg used to
+        # call search_hybrid (LanceDB native vector+FTS), which made the two
+        # RRF legs correlated -- vector evidence voted twice -- and, with no
+        # FTS index ever built before v0.1.1, in practice meant the "keyword"
+        # leg silently returned vector results. The retrieval benchmark
+        # measures the legs independently, so they must be independent.
+        results = store.search_fts(query, top_k=top_k, filter_expr=filter_expr)
         return [(r.chunk.id, r.score) for r in results]
 
     async def _graph_search(
