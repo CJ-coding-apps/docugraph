@@ -48,6 +48,13 @@ class _FakeVectorStore:
         assert filter_expr is None, "no filters were supplied, so none are built"
         return self._hits(0.4)[:top_k]
 
+    def search_fts(self, _query, top_k, filter_expr=None):
+        # The retriever's keyword leg calls this since it became true BM25
+        # (it fused search_hybrid before); these tests exercise the graph
+        # status, so any deterministic hit will do.
+        assert filter_expr is None, "no filters were supplied, so none are built"
+        return self._hits(0.4)[:top_k]
+
     def _hits(self, score: float) -> list[SearchResult]:
         if self._chunk is None:
             return []
