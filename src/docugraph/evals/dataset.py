@@ -24,6 +24,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 # Every query and corpus doc carries one of these; the report aggregates per
 # category, so an unknown category is a dataset bug, not a new feature.
@@ -67,8 +68,8 @@ class BenchQuery:
     design_note: str = ""
 
 
-def _read_jsonl(path: Path) -> list[dict]:
-    rows = []
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     with path.open(encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             line = line.strip()
@@ -117,8 +118,11 @@ def load_queries(dataset_dir: Path) -> list[BenchQuery]:
     ]
 
 
-def load_manifest(dataset_dir: Path) -> dict:
-    return json.loads((dataset_dir / "MANIFEST.json").read_text(encoding="utf-8"))
+def load_manifest(dataset_dir: Path) -> dict[str, Any]:
+    manifest: dict[str, Any] = json.loads(
+        (dataset_dir / "MANIFEST.json").read_text(encoding="utf-8")
+    )
+    return manifest
 
 
 def validate(dataset_dir: Path) -> list[str]:

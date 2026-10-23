@@ -1047,19 +1047,21 @@ def bench_run(
 
     arm_names = [a.strip() for a in arms_csv.split(",")] if arms_csv else None
 
-    with tempfile.TemporaryDirectory(prefix="docugraph-bench-") as tmp:
-        with Progress(
+    with (
+        tempfile.TemporaryDirectory(prefix="docugraph-bench-") as tmp,
+        Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
-        ) as progress:
-            progress.add_task("Running benchmark (fresh store, committed corpus)...", total=None)
-            report = run_bench(
-                dataset_dir,
-                Path(tmp),
-                arm_names=arm_names,
-                include_rerank=rerank,
-            )
+        ) as progress,
+    ):
+        progress.add_task("Running benchmark (fresh store, committed corpus)...", total=None)
+        report = run_bench(
+            dataset_dir,
+            Path(tmp),
+            arm_names=arm_names,
+            include_rerank=rerank,
+        )
 
     env = report["environment"]
     console.print(

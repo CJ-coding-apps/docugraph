@@ -74,7 +74,7 @@ def compare_reports(
             passed = False
             continue
 
-        scopes: list[tuple[str, dict, dict]] = [
+        scopes: list[tuple[str, dict[str, Any], dict[str, Any]]] = [
             ("overall", base_arm["overall"], new_arm["overall"])
         ]
         for category, base_cat in base_arm["by_category"].items():

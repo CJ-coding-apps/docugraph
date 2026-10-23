@@ -51,7 +51,7 @@ def ingest_corpus(vector_store: Any, corpus: list[CorpusDoc]) -> int:
         )
         for doc in corpus
     ]
-    added = vector_store.add_chunks(chunks)
+    added: int = vector_store.add_chunks(chunks)
     # Build the FTS index now rather than on first search, so arm timings and
     # failures land where they belong.
     vector_store.ensure_fts_index()
@@ -101,7 +101,7 @@ def run_arm(arm: Arm, queries: list[BenchQuery]) -> dict[str, Any]:
     }
 
 
-def _environment(vector_store: Any, manifest: dict) -> dict[str, Any]:
+def _environment(vector_store: Any, manifest: dict[str, Any]) -> dict[str, Any]:
     """What produced these numbers. A report that omits this can't be compared."""
     from importlib import metadata as im
 
