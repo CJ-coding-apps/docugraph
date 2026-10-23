@@ -16,6 +16,7 @@ Code and other MCP clients. The CLI is for out-of-band index bootstrapping
 - **Agent memory**: persistent, repository/branch-scoped key-value store
 - **Optional reranking**: local multilingual cross-encoder (BAAI/bge-reranker-v2-m3), opt-in
 - **Torch-free**: default embeddings and reranking run on ONNX — no PyTorch in the dependency tree
+- **Measured retrieval**: a committed adversarial benchmark scores every search mode per failure category, with a regression gate (`docugraph bench`)
 
 ## Quick start
 
@@ -245,6 +246,42 @@ required**. However, Graphiti performs entity extraction with an **LLM**, so
 `graph add` / `graph_query` need an LLM configured (Ollama locally, or an
 OpenAI/Anthropic key). Without one, the graph tools degrade gracefully with a
 clear message; vector and keyword search are unaffected.
+
+## Retrieval benchmark
+
+Retrieval quality is measured, not asserted. `benchmarks/retrieval/` commits a
+hand-authored documentation corpus for a fictional SDK plus graded relevance
+judgments, built adversarially around seven failure modes: exact-token lookups
+(error codes, parameter names), paraphrase queries with no lexical overlap,
+keyword-stuffed distractor pages, near-sibling semantic distractors, version-
+pinned questions, acronym/synonym gaps, and "X without Y" constraint queries.
+Each query records the trap it sets in a `design_note`, and a manifest pins the
+dataset by hash — editing it is a deliberate act that invalidates baselines.
+
+```bash
+# Score every arm (vector-only, BM25-only, LanceDB-native hybrid, RRF, weighted)
+# against a temporary store built from the committed corpus:
+docugraph bench run --json report.json
+
+# Hold a report against a committed baseline; exits 1 when nDCG@10 drops by
+# more than the tolerance, overall or in any single category:
+docugraph bench compare benchmarks/retrieval/baselines/bge-small-en-v1.5.json report.json
+```
+
+Reported metrics are recall@1/5/10, MRR@10, and nDCG@10 (graded, linear gain),
+macro-averaged overall and per category. The per-category table is the point:
+a fusion change that wins on average while losing exact-code lookup shows up
+as the regression it is. Baselines are per embedding model and live in
+`benchmarks/retrieval/baselines/`; the `Retrieval benchmark` workflow re-runs
+the suite weekly against the committed baseline.
+
+Honest scope: the corpus is small and purpose-built, so scores are comparable
+across docugraph changes — not with BEIR or any external leaderboard. The
+first thing this benchmark caught predates it: before v0.2.0 no FTS index was
+ever created, so "keyword" search silently returned vector results and
+RRF fused the vector ranking with itself. The benchmark's `fts` arm and the
+hybrid arm's refuse-to-score-on-fallback check exist so that class of silent
+degradation cannot come back unnoticed.
 
 ### KuzuDB version
 
