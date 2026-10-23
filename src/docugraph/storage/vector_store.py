@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import lancedb
 import pyarrow as pa
@@ -179,7 +180,7 @@ class VectorStore:
         self._fts_stale = True
         return len(records)
 
-    def _row_to_chunk(self, row) -> Chunk:
+    def _row_to_chunk(self, row: Any) -> Chunk:
         """One row of a LanceDB result frame as a Chunk."""
         import json
 
