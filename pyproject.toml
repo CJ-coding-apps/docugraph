@@ -1,6 +1,6 @@
 [project]
 name = "docugraph"
-version = "0.1.1"
+version = "0.2.0"
 description = "Documentation RAG for coding agents: vector search, knowledge graph, agent memory, and an MCP server — torch-free local embeddings via fastembed"
 readme = "README.md"
 # The ceiling is deliberate, and there are two independent reasons for it.
