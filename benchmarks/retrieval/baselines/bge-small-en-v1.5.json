@@ -1,0 +1,2669 @@
+{
+  "schema": "docugraph-bench/1",
+  "created_at": "2026-10-23T17:25:30.789830+00:00",
+  "top_k": 10,
+  "environment": {
+    "embedder": "BAAI/bge-small-en-v1.5",
+    "docugraph": "0.1.1",
+    "lancedb": "0.25.3",
+    "fastembed": "0.8.0",
+    "dataset_version": "0.1.0-pilot",
+    "corpus_sha256": "6318b464c188eccd62a4f6eea8c457e7c63780d1d3b7d3e6a0728795955ea5ca",
+    "queries_sha256": "afcc08a10c73d350244fd13c2006a047aa82d18a4be4fbfc2323cb3741979344"
+  },
+  "arms": {
+    "vector": {
+      "overall": {
+        "n_queries": 21,
+        "recall@1": 0.5793650793650794,
+        "recall@5": 0.865079365079365,
+        "recall@10": 0.9285714285714286,
+        "mrr@10": 0.8809523809523809,
+        "ndcg@10": 0.821903285833041
+      },
+      "by_category": {
+        "acronym-synonym": {
+          "n_queries": 3,
+          "recall@1": 0.6666666666666666,
+          "recall@5": 0.6666666666666666,
+          "recall@10": 0.8333333333333334,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.7585578105423262
+        },
+        "keyword-trap": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "lexical-exact": {
+          "n_queries": 3,
+          "recall@1": 0.6666666666666666,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8446310493003172
+        },
+        "negation-constraint": {
+          "n_queries": 3,
+          "recall@1": 0.16666666666666666,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.6666666666666666,
+          "ndcg@10": 0.6740156801915944
+        },
+        "paraphrase": {
+          "n_queries": 3,
+          "recall@1": 0.16666666666666666,
+          "recall@5": 0.5,
+          "recall@10": 0.6666666666666666,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.5217504938017581
+        },
+        "semantic-distractor": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "version-pinning": {
+          "n_queries": 3,
+          "recall@1": 0.38888888888888884,
+          "recall@5": 0.8888888888888888,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9543679669952918
+        }
+      },
+      "per_query": [
+        {
+          "query_id": "q-lex-1",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-err-index",
+            "qrv-api-index",
+            "qrv-migration",
+            "qrv-v2-execute",
+            "qrv-err-4012",
+            "qrv-sink-postgres",
+            "qrv-config-reference",
+            "qrv-changelog",
+            "qrv-troubleshooting",
+            "qrv-guide-dlq"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.6741744480487545,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-2",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-sink-postgres",
+            "qrv-config-reference",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-guide-checkpointing",
+            "qrv-sink-s3",
+            "qrv-migration",
+            "qrv-guide-retries",
+            "qrv-source-s3",
+            "qrv-glossary"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-3",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-guide-checkpointing",
+            "qrv-config-reference",
+            "qrv-howto-ephemeral",
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-guide-dlq",
+            "qrv-api-index",
+            "qrv-source-s3",
+            "qrv-err-index",
+            "qrv-sink-postgres"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8597186998521972,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-1",
+          "category": "paraphrase",
+          "top": [
+            "qrv-quickstart",
+            "qrv-guide-checkpointing",
+            "qrv-err-4012",
+            "qrv-config-reference",
+            "qrv-migration",
+            "qrv-sink-postgres",
+            "qrv-guide-dlq",
+            "qrv-v1-run",
+            "qrv-sink-s3",
+            "qrv-architecture"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 0.0,
+          "recall@10": 0.0,
+          "mrr@10": 0.0,
+          "ndcg@10": 0.0,
+          "first_relevant_rank": null
+        },
+        {
+          "query_id": "q-par-2",
+          "category": "paraphrase",
+          "top": [
+            "qrv-howto-ephemeral",
+            "qrv-guide-delivery",
+            "qrv-guide-checkpointing",
+            "qrv-migration",
+            "qrv-guide-dlq",
+            "qrv-guide-retries",
+            "qrv-sink-postgres",
+            "qrv-api-index",
+            "qrv-v2-execute",
+            "qrv-config-reference"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.66967181649423,
+          "first_relevant_rank": 2
+        },
+        {
+          "query_id": "q-par-3",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-dlq",
+            "qrv-err-4012",
+            "qrv-troubleshooting",
+            "qrv-guide-delivery",
+            "qrv-guide-checkpointing",
+            "qrv-guide-retries",
+            "qrv-guide-batching",
+            "qrv-sink-postgres",
+            "qrv-guide-backpressure",
+            "qrv-sources-overview"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8955796649110442,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-1",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-auth-oauth",
+            "qrv-config-reference",
+            "qrv-changelog",
+            "qrv-quickstart",
+            "qrv-cli-deploy",
+            "qrv-auth-env",
+            "qrv-auth-apikey",
+            "qrv-v1-run",
+            "qrv-architecture",
+            "qrv-sink-s3"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-2",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-retries",
+            "qrv-api-index",
+            "qrv-troubleshooting",
+            "qrv-guide-delivery",
+            "qrv-guide-dlq",
+            "qrv-sink-postgres",
+            "qrv-guide-batching",
+            "qrv-sinks-overview",
+            "qrv-config-reference",
+            "qrv-howto-ephemeral"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-3",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-schema",
+            "qrv-faq",
+            "qrv-source-s3",
+            "qrv-config-reference",
+            "qrv-sink-s3",
+            "qrv-sources-overview",
+            "qrv-err-4012",
+            "qrv-cli-overview",
+            "qrv-cli-deploy",
+            "qrv-api-index"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-1",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-config-reference",
+            "qrv-auth-oauth",
+            "qrv-changelog",
+            "qrv-sink-s3",
+            "qrv-guide-retries",
+            "qrv-cli-deploy",
+            "qrv-cli-overview",
+            "qrv-guide-delivery"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-2",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-guide-batching",
+            "qrv-quickstart",
+            "qrv-migration",
+            "qrv-sink-s3",
+            "qrv-guide-retries",
+            "qrv-v2-execute",
+            "qrv-architecture",
+            "qrv-sink-postgres",
+            "qrv-guide-rate-limits",
+            "qrv-guide-backpressure"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-3",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-sink-s3",
+            "qrv-source-s3",
+            "qrv-quickstart",
+            "qrv-config-reference",
+            "qrv-observability",
+            "qrv-v1-run",
+            "qrv-err-4012",
+            "qrv-guide-dlq",
+            "qrv-migration",
+            "qrv-cli-deploy"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-1",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v1-run",
+            "qrv-cli-deploy",
+            "qrv-troubleshooting",
+            "qrv-architecture",
+            "qrv-v2-execute",
+            "qrv-cli-overview",
+            "qrv-config-reference",
+            "qrv-migration",
+            "qrv-auth-oauth",
+            "qrv-install"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 0.6666666666666666,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8631039009858753,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-2",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-howto-ephemeral",
+            "qrv-api-index",
+            "qrv-v1-run",
+            "qrv-glossary",
+            "qrv-cli-overview",
+            "qrv-transforms",
+            "qrv-sink-s3",
+            "qrv-sink-postgres"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-3",
+          "category": "version-pinning",
+          "top": [
+            "qrv-migration",
+            "qrv-v1-run",
+            "qrv-v2-execute",
+            "qrv-howto-ephemeral",
+            "qrv-cli-overview",
+            "qrv-config-reference",
+            "qrv-cli-deploy",
+            "qrv-architecture",
+            "qrv-api-index",
+            "qrv-sink-s3"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-1",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-glossary",
+            "qrv-quickstart",
+            "qrv-sink-s3",
+            "qrv-migration",
+            "qrv-config-reference",
+            "qrv-err-index",
+            "qrv-cli-deploy",
+            "qrv-cli-overview",
+            "qrv-sources-overview",
+            "qrv-sink-postgres"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 0.5,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.38009376671593426,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-2",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-architecture",
+            "qrv-cli-overview",
+            "qrv-install",
+            "qrv-v1-run",
+            "qrv-v2-execute",
+            "qrv-auth-env",
+            "qrv-cli-deploy",
+            "qrv-howto-ephemeral",
+            "qrv-troubleshooting"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-3",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-rate-limits",
+            "qrv-sink-postgres",
+            "qrv-api-index",
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-glossary",
+            "qrv-howto-ephemeral",
+            "qrv-err-index",
+            "qrv-sink-s3",
+            "qrv-config-reference"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8955796649110442,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-1",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-guide-checkpointing",
+            "qrv-migration",
+            "qrv-howto-ephemeral",
+            "qrv-v1-run",
+            "qrv-quickstart",
+            "qrv-v2-execute",
+            "qrv-config-reference",
+            "qrv-guide-dlq",
+            "qrv-guide-retries",
+            "qrv-troubleshooting"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.7601875334318685,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-2",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-config-reference",
+            "qrv-sink-s3",
+            "qrv-auth-oauth",
+            "qrv-changelog",
+            "qrv-howto-ephemeral",
+            "qrv-err-index",
+            "qrv-cli-overview",
+            "qrv-migration"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.6309297535714575,
+          "first_relevant_rank": 2
+        },
+        {
+          "query_id": "q-neg-3",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-cli-deploy",
+            "qrv-deploy-api",
+            "qrv-quickstart",
+            "qrv-config-reference",
+            "qrv-migration",
+            "qrv-cli-overview",
+            "qrv-v2-execute",
+            "qrv-v1-run",
+            "qrv-sink-s3",
+            "qrv-guide-checkpointing"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.6309297535714575,
+          "first_relevant_rank": 2
+        }
+      ]
+    },
+    "fts": {
+      "overall": {
+        "n_queries": 21,
+        "recall@1": 0.6031746031746033,
+        "recall@5": 0.9206349206349207,
+        "recall@10": 0.9761904761904762,
+        "mrr@10": 0.878968253968254,
+        "ndcg@10": 0.8684806481629846
+      },
+      "by_category": {
+        "acronym-synonym": {
+          "n_queries": 3,
+          "recall@1": 0.6666666666666666,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8913914826829181
+        },
+        "keyword-trap": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "lexical-exact": {
+          "n_queries": 3,
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.8333333333333334,
+          "ndcg@10": 0.8089753722696894
+        },
+        "negation-constraint": {
+          "n_queries": 3,
+          "recall@1": 0.16666666666666666,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.611111111111111,
+          "ndcg@10": 0.7103099178571526
+        },
+        "paraphrase": {
+          "n_queries": 3,
+          "recall@1": 0.5,
+          "recall@5": 0.6666666666666666,
+          "recall@10": 0.8333333333333334,
+          "mrr@10": 0.7083333333333334,
+          "ndcg@10": 0.7156801135554701
+        },
+        "semantic-distractor": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "version-pinning": {
+          "n_queries": 3,
+          "recall@1": 0.38888888888888884,
+          "recall@5": 0.7777777777777777,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9530076507756619
+        }
+      },
+      "per_query": [
+        {
+          "query_id": "q-lex-1",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-err-index",
+            "qrv-err-4012",
+            "qrv-sinks-overview",
+            "qrv-howto-ephemeral",
+            "qrv-api-index",
+            "qrv-faq",
+            "qrv-troubleshooting",
+            "qrv-guide-dlq",
+            "qrv-config-reference",
+            "qrv-changelog"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8597186998521972,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-2",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-sink-postgres",
+            "qrv-guide-checkpointing",
+            "qrv-config-reference",
+            "qrv-guide-retries",
+            "qrv-observability"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-3",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-howto-ephemeral",
+            "qrv-guide-checkpointing",
+            "qrv-v2-execute",
+            "qrv-config-reference",
+            "qrv-guide-dlq",
+            "qrv-err-index",
+            "qrv-observability",
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-install"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.5672074169568709,
+          "first_relevant_rank": 2
+        },
+        {
+          "query_id": "q-par-1",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-backpressure",
+            "qrv-sources-overview",
+            "qrv-howto-ephemeral",
+            "qrv-migration",
+            "qrv-guide-dlq",
+            "qrv-architecture",
+            "qrv-config-reference",
+            "qrv-guide-rate-limits",
+            "qrv-sinks-overview",
+            "qrv-cli-overview"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-2",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-guide-batching",
+            "qrv-observability",
+            "qrv-guide-backpressure",
+            "qrv-guide-checkpointing",
+            "qrv-howto-ephemeral",
+            "qrv-guide-dlq",
+            "qrv-guide-rate-limits",
+            "qrv-architecture",
+            "qrv-transforms"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9072278740982787,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-3",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-backpressure",
+            "qrv-glossary",
+            "qrv-err-4012",
+            "qrv-howto-ephemeral",
+            "qrv-observability",
+            "qrv-faq",
+            "qrv-config-reference",
+            "qrv-guide-dlq",
+            "qrv-guide-schema",
+            "qrv-guide-batching"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 0.0,
+          "recall@10": 0.5,
+          "mrr@10": 0.125,
+          "ndcg@10": 0.23981246656813146,
+          "first_relevant_rank": 8
+        },
+        {
+          "query_id": "q-trap-1",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-auth-oauth",
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-changelog",
+            "qrv-glossary",
+            "qrv-config-reference",
+            "qrv-source-s3",
+            "qrv-observability",
+            "qrv-guide-backpressure",
+            "qrv-howto-ephemeral"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-2",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-retries",
+            "qrv-sink-postgres",
+            "qrv-troubleshooting",
+            "qrv-api-index",
+            "qrv-sinks-overview",
+            "qrv-guide-dlq",
+            "qrv-changelog",
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-guide-delivery"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-3",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-schema",
+            "qrv-faq",
+            "qrv-err-4012",
+            "qrv-cli-deploy",
+            "qrv-cli-overview",
+            "qrv-troubleshooting",
+            "qrv-guide-retries",
+            "qrv-sources-overview",
+            "qrv-glossary",
+            "qrv-source-s3"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-1",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-auth-apikey",
+            "qrv-config-reference",
+            "qrv-auth-env",
+            "qrv-auth-oauth",
+            "qrv-guide-rate-limits",
+            "qrv-guide-checkpointing",
+            "qrv-v1-run",
+            "qrv-glossary",
+            "qrv-api-index",
+            "qrv-sink-postgres"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-2",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-guide-batching",
+            "qrv-guide-retries",
+            "qrv-sink-s3",
+            "qrv-transforms",
+            "qrv-guide-dlq",
+            "qrv-err-4012",
+            "qrv-architecture",
+            "qrv-sink-postgres",
+            "qrv-sinks-overview",
+            "qrv-sources-overview"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-3",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-sink-s3",
+            "qrv-source-s3",
+            "qrv-observability",
+            "qrv-config-reference",
+            "qrv-install",
+            "qrv-sinks-overview",
+            "qrv-architecture",
+            "qrv-err-4012",
+            "qrv-err-index",
+            "qrv-transforms"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-1",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v1-run",
+            "qrv-config-reference",
+            "qrv-faq",
+            "qrv-troubleshooting",
+            "qrv-cli-deploy",
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-auth-apikey",
+            "qrv-howto-ephemeral",
+            "qrv-guide-backpressure"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 0.3333333333333333,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8590229523269858,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-2",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-transforms",
+            "qrv-v1-run",
+            "qrv-cli-overview",
+            "qrv-architecture",
+            "qrv-glossary",
+            "qrv-sinks-overview"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-3",
+          "category": "version-pinning",
+          "top": [
+            "qrv-migration",
+            "qrv-v1-run",
+            "qrv-v2-execute",
+            "qrv-source-s3",
+            "qrv-cli-deploy",
+            "qrv-auth-env",
+            "qrv-guide-checkpointing",
+            "qrv-cli-overview",
+            "qrv-howto-ephemeral",
+            "qrv-sources-overview"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-1",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-glossary",
+            "qrv-troubleshooting",
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-guide-dlq",
+            "qrv-guide-retries",
+            "qrv-err-4012",
+            "qrv-changelog"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.6741744480487545,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-2",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-faq",
+            "qrv-auth-env",
+            "qrv-install",
+            "qrv-howto-ephemeral",
+            "qrv-err-4012",
+            "qrv-glossary",
+            "qrv-guide-rate-limits",
+            "qrv-cli-overview",
+            "qrv-changelog"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-3",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-rate-limits",
+            "qrv-glossary",
+            "qrv-sinks-overview",
+            "qrv-v2-execute",
+            "qrv-auth-apikey",
+            "qrv-howto-ephemeral",
+            "qrv-migration",
+            "qrv-v1-run",
+            "qrv-auth-env",
+            "qrv-api-index"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-1",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-howto-ephemeral",
+            "qrv-guide-checkpointing",
+            "qrv-v1-run",
+            "qrv-v2-execute",
+            "qrv-config-reference",
+            "qrv-cli-overview",
+            "qrv-guide-backpressure",
+            "qrv-migration",
+            "qrv-err-index",
+            "qrv-changelog"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-2",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-auth-oauth",
+            "qrv-auth-env",
+            "qrv-cli-overview",
+            "qrv-config-reference",
+            "qrv-howto-ephemeral",
+            "qrv-auth-apikey",
+            "qrv-sources-overview",
+            "qrv-guide-dlq",
+            "qrv-err-index",
+            "qrv-guide-backpressure"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.6309297535714575,
+          "first_relevant_rank": 2
+        },
+        {
+          "query_id": "q-neg-3",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-cli-deploy",
+            "qrv-cli-overview",
+            "qrv-deploy-api",
+            "qrv-quickstart",
+            "qrv-glossary",
+            "qrv-source-s3",
+            "qrv-install",
+            "qrv-sinks-overview",
+            "qrv-howto-ephemeral",
+            "qrv-guide-backpressure"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.3333333333333333,
+          "ndcg@10": 0.5,
+          "first_relevant_rank": 3
+        }
+      ]
+    },
+    "lancedb-hybrid": {
+      "overall": {
+        "n_queries": 21,
+        "recall@1": 0.6269841269841271,
+        "recall@5": 0.9365079365079364,
+        "recall@10": 0.9761904761904762,
+        "mrr@10": 0.9142857142857143,
+        "ndcg@10": 0.8720374020091993
+      },
+      "by_category": {
+        "acronym-synonym": {
+          "n_queries": 3,
+          "recall@1": 0.6666666666666666,
+          "recall@5": 0.8333333333333334,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8696443388695808
+        },
+        "keyword-trap": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "lexical-exact": {
+          "n_queries": 3,
+          "recall@1": 0.6666666666666666,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8401250222879124
+        },
+        "negation-constraint": {
+          "n_queries": 3,
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.8333333333333334,
+          "ndcg@10": 0.8302161511412182
+        },
+        "paraphrase": {
+          "n_queries": 3,
+          "recall@1": 0.16666666666666666,
+          "recall@5": 0.8333333333333334,
+          "recall@10": 0.8333333333333334,
+          "mrr@10": 0.5666666666666667,
+          "ndcg@10": 0.6055707190535468
+        },
+        "semantic-distractor": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "version-pinning": {
+          "n_queries": 3,
+          "recall@1": 0.38888888888888884,
+          "recall@5": 0.8888888888888888,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9587055827121373
+        }
+      },
+      "per_query": [
+        {
+          "query_id": "q-lex-1",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-err-index",
+            "qrv-api-index",
+            "qrv-err-4012",
+            "qrv-config-reference",
+            "qrv-troubleshooting",
+            "qrv-changelog",
+            "qrv-guide-dlq",
+            "qrv-migration",
+            "qrv-sinks-overview",
+            "qrv-v2-execute"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.7601875334318685,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-2",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-sink-postgres",
+            "qrv-config-reference",
+            "qrv-guide-checkpointing",
+            "qrv-guide-retries",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-observability",
+            "qrv-sink-s3",
+            "qrv-migration",
+            "qrv-source-s3"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-3",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-guide-checkpointing",
+            "qrv-howto-ephemeral",
+            "qrv-config-reference",
+            "qrv-v2-execute",
+            "qrv-guide-dlq",
+            "qrv-err-index",
+            "qrv-migration",
+            "qrv-api-index",
+            "qrv-observability",
+            "qrv-source-s3"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.7601875334318685,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-1",
+          "category": "paraphrase",
+          "top": [
+            "qrv-migration",
+            "qrv-config-reference",
+            "qrv-guide-dlq",
+            "qrv-architecture",
+            "qrv-guide-backpressure",
+            "qrv-quickstart",
+            "qrv-guide-checkpointing",
+            "qrv-sources-overview",
+            "qrv-err-4012",
+            "qrv-howto-ephemeral"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.2,
+          "ndcg@10": 0.38685280723454163,
+          "first_relevant_rank": 5
+        },
+        {
+          "query_id": "q-par-2",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-howto-ephemeral",
+            "qrv-guide-checkpointing",
+            "qrv-guide-dlq",
+            "qrv-guide-batching",
+            "qrv-observability",
+            "qrv-guide-backpressure",
+            "qrv-migration",
+            "qrv-guide-retries",
+            "qrv-sink-postgres"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9502344167898356,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-3",
+          "category": "paraphrase",
+          "top": [
+            "qrv-err-4012",
+            "qrv-guide-dlq",
+            "qrv-guide-backpressure",
+            "qrv-guide-batching",
+            "qrv-glossary",
+            "qrv-troubleshooting",
+            "qrv-guide-delivery",
+            "qrv-howto-ephemeral",
+            "qrv-guide-checkpointing",
+            "qrv-observability"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 0.5,
+          "recall@10": 0.5,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.4796249331362629,
+          "first_relevant_rank": 2
+        },
+        {
+          "query_id": "q-trap-1",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-auth-oauth",
+            "qrv-changelog",
+            "qrv-auth-env",
+            "qrv-config-reference",
+            "qrv-auth-apikey",
+            "qrv-quickstart",
+            "qrv-cli-deploy",
+            "qrv-glossary",
+            "qrv-source-s3",
+            "qrv-v1-run"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-2",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-retries",
+            "qrv-api-index",
+            "qrv-troubleshooting",
+            "qrv-sink-postgres",
+            "qrv-guide-dlq",
+            "qrv-sinks-overview",
+            "qrv-guide-delivery",
+            "qrv-changelog",
+            "qrv-guide-batching",
+            "qrv-auth-env"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-3",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-schema",
+            "qrv-faq",
+            "qrv-err-4012",
+            "qrv-source-s3",
+            "qrv-cli-deploy",
+            "qrv-cli-overview",
+            "qrv-sources-overview",
+            "qrv-config-reference",
+            "qrv-sink-s3",
+            "qrv-troubleshooting"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-1",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-config-reference",
+            "qrv-auth-oauth",
+            "qrv-changelog",
+            "qrv-guide-rate-limits",
+            "qrv-guide-checkpointing",
+            "qrv-sink-s3",
+            "qrv-guide-retries",
+            "qrv-v1-run"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-2",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-guide-batching",
+            "qrv-guide-retries",
+            "qrv-sink-s3",
+            "qrv-architecture",
+            "qrv-sink-postgres",
+            "qrv-quickstart",
+            "qrv-migration",
+            "qrv-transforms",
+            "qrv-guide-dlq",
+            "qrv-v2-execute"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-3",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-sink-s3",
+            "qrv-source-s3",
+            "qrv-observability",
+            "qrv-config-reference",
+            "qrv-err-4012",
+            "qrv-quickstart",
+            "qrv-install",
+            "qrv-sinks-overview",
+            "qrv-v1-run",
+            "qrv-architecture"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-1",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v1-run",
+            "qrv-cli-deploy",
+            "qrv-troubleshooting",
+            "qrv-config-reference",
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-faq",
+            "qrv-architecture",
+            "qrv-cli-overview",
+            "qrv-auth-apikey"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 0.6666666666666666,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8761167481364122,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-2",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-v1-run",
+            "qrv-transforms",
+            "qrv-cli-overview",
+            "qrv-glossary",
+            "qrv-architecture",
+            "qrv-sink-s3"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-3",
+          "category": "version-pinning",
+          "top": [
+            "qrv-migration",
+            "qrv-v1-run",
+            "qrv-v2-execute",
+            "qrv-cli-deploy",
+            "qrv-howto-ephemeral",
+            "qrv-cli-overview",
+            "qrv-source-s3",
+            "qrv-auth-env",
+            "qrv-config-reference",
+            "qrv-guide-checkpointing"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-1",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-glossary",
+            "qrv-quickstart",
+            "qrv-troubleshooting",
+            "qrv-auth-env",
+            "qrv-sink-s3",
+            "qrv-auth-apikey",
+            "qrv-migration",
+            "qrv-config-reference",
+            "qrv-guide-dlq",
+            "qrv-err-index"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.6089330166087422,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-2",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-install",
+            "qrv-auth-env",
+            "qrv-cli-overview",
+            "qrv-howto-ephemeral",
+            "qrv-architecture",
+            "qrv-faq",
+            "qrv-v1-run",
+            "qrv-err-4012",
+            "qrv-v2-execute"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-3",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-rate-limits",
+            "qrv-glossary",
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-sink-postgres",
+            "qrv-sinks-overview",
+            "qrv-auth-apikey",
+            "qrv-err-index"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-1",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-guide-checkpointing",
+            "qrv-howto-ephemeral",
+            "qrv-v1-run",
+            "qrv-migration",
+            "qrv-v2-execute",
+            "qrv-config-reference",
+            "qrv-quickstart",
+            "qrv-cli-overview",
+            "qrv-guide-backpressure",
+            "qrv-guide-dlq"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8597186998521972,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-2",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-auth-env",
+            "qrv-auth-oauth",
+            "qrv-auth-apikey",
+            "qrv-config-reference",
+            "qrv-cli-overview",
+            "qrv-howto-ephemeral",
+            "qrv-err-index",
+            "qrv-sink-s3",
+            "qrv-changelog",
+            "qrv-sources-overview"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-3",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-cli-deploy",
+            "qrv-deploy-api",
+            "qrv-quickstart",
+            "qrv-cli-overview",
+            "qrv-config-reference",
+            "qrv-glossary",
+            "qrv-migration",
+            "qrv-source-s3",
+            "qrv-install",
+            "qrv-v2-execute"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.6309297535714575,
+          "first_relevant_rank": 2
+        }
+      ]
+    },
+    "rrf": {
+      "overall": {
+        "n_queries": 21,
+        "recall@1": 0.6269841269841271,
+        "recall@5": 0.9365079365079364,
+        "recall@10": 0.9761904761904762,
+        "mrr@10": 0.9166666666666666,
+        "ndcg@10": 0.8684591277047373
+      },
+      "by_category": {
+        "acronym-synonym": {
+          "n_queries": 3,
+          "recall@1": 0.6666666666666666,
+          "recall@5": 0.8333333333333334,
+          "recall@10": 0.8333333333333334,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.7933645889053115
+        },
+        "keyword-trap": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "lexical-exact": {
+          "n_queries": 3,
+          "recall@1": 0.6666666666666666,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8401250222879124
+        },
+        "negation-constraint": {
+          "n_queries": 3,
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.8333333333333334,
+          "ndcg@10": 0.8302161511412182
+        },
+        "paraphrase": {
+          "n_queries": 3,
+          "recall@1": 0.16666666666666666,
+          "recall@5": 0.8333333333333334,
+          "recall@10": 1.0,
+          "mrr@10": 0.5833333333333334,
+          "ndcg@10": 0.6568025488865816
+        },
+        "semantic-distractor": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "version-pinning": {
+          "n_queries": 3,
+          "recall@1": 0.38888888888888884,
+          "recall@5": 0.8888888888888888,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9587055827121373
+        }
+      },
+      "per_query": [
+        {
+          "query_id": "q-lex-1",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-err-index",
+            "qrv-api-index",
+            "qrv-err-4012",
+            "qrv-howto-ephemeral",
+            "qrv-config-reference",
+            "qrv-troubleshooting",
+            "qrv-sinks-overview",
+            "qrv-changelog",
+            "qrv-guide-dlq",
+            "qrv-migration"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.7601875334318685,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-2",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-sink-postgres",
+            "qrv-config-reference",
+            "qrv-guide-checkpointing",
+            "qrv-guide-retries",
+            "qrv-observability",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-sink-s3",
+            "qrv-migration",
+            "qrv-source-s3"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-3",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-guide-checkpointing",
+            "qrv-howto-ephemeral",
+            "qrv-config-reference",
+            "qrv-v2-execute",
+            "qrv-guide-dlq",
+            "qrv-err-index",
+            "qrv-migration",
+            "qrv-auth-env",
+            "qrv-sources-overview",
+            "qrv-sinks-overview"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.7601875334318685,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-1",
+          "category": "paraphrase",
+          "top": [
+            "qrv-migration",
+            "qrv-config-reference",
+            "qrv-guide-dlq",
+            "qrv-guide-backpressure",
+            "qrv-architecture",
+            "qrv-quickstart",
+            "qrv-guide-checkpointing",
+            "qrv-sink-s3",
+            "qrv-v1-run",
+            "qrv-guide-rate-limits"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.25,
+          "ndcg@10": 0.43067655807339306,
+          "first_relevant_rank": 4
+        },
+        {
+          "query_id": "q-par-2",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-howto-ephemeral",
+            "qrv-guide-checkpointing",
+            "qrv-guide-dlq",
+            "qrv-observability",
+            "qrv-guide-backpressure",
+            "qrv-guide-batching",
+            "qrv-migration",
+            "qrv-err-4012",
+            "qrv-v2-execute"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9502344167898356,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-3",
+          "category": "paraphrase",
+          "top": [
+            "qrv-err-4012",
+            "qrv-guide-dlq",
+            "qrv-guide-backpressure",
+            "qrv-guide-delivery",
+            "qrv-observability",
+            "qrv-guide-batching",
+            "qrv-troubleshooting",
+            "qrv-howto-ephemeral",
+            "qrv-guide-schema",
+            "qrv-guide-retries"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 0.5,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.5894966717965162,
+          "first_relevant_rank": 2
+        },
+        {
+          "query_id": "q-trap-1",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-auth-oauth",
+            "qrv-changelog",
+            "qrv-config-reference",
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-quickstart",
+            "qrv-v1-run",
+            "qrv-cli-deploy",
+            "qrv-source-s3",
+            "qrv-guide-checkpointing"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-2",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-retries",
+            "qrv-api-index",
+            "qrv-troubleshooting",
+            "qrv-sink-postgres",
+            "qrv-guide-dlq",
+            "qrv-sinks-overview",
+            "qrv-guide-delivery",
+            "qrv-guide-batching",
+            "qrv-changelog",
+            "qrv-err-4012"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-3",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-schema",
+            "qrv-faq",
+            "qrv-err-4012",
+            "qrv-source-s3",
+            "qrv-cli-deploy",
+            "qrv-cli-overview",
+            "qrv-sources-overview",
+            "qrv-guide-retries",
+            "qrv-api-index",
+            "qrv-troubleshooting"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-1",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-auth-apikey",
+            "qrv-auth-env",
+            "qrv-config-reference",
+            "qrv-auth-oauth",
+            "qrv-sink-s3",
+            "qrv-changelog",
+            "qrv-guide-rate-limits",
+            "qrv-guide-retries",
+            "qrv-api-index",
+            "qrv-v1-run"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-2",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-guide-batching",
+            "qrv-guide-retries",
+            "qrv-sink-s3",
+            "qrv-architecture",
+            "qrv-guide-dlq",
+            "qrv-sink-postgres",
+            "qrv-quickstart",
+            "qrv-err-4012",
+            "qrv-v2-execute",
+            "qrv-v1-run"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-3",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-sink-s3",
+            "qrv-source-s3",
+            "qrv-observability",
+            "qrv-config-reference",
+            "qrv-err-4012",
+            "qrv-quickstart",
+            "qrv-architecture",
+            "qrv-sinks-overview",
+            "qrv-v1-run",
+            "qrv-transforms"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-1",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v1-run",
+            "qrv-cli-deploy",
+            "qrv-troubleshooting",
+            "qrv-config-reference",
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-cli-overview",
+            "qrv-architecture",
+            "qrv-install",
+            "qrv-auth-apikey"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 0.6666666666666666,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8761167481364122,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-2",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-v1-run",
+            "qrv-transforms",
+            "qrv-cli-overview",
+            "qrv-glossary",
+            "qrv-architecture",
+            "qrv-sink-s3"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-3",
+          "category": "version-pinning",
+          "top": [
+            "qrv-migration",
+            "qrv-v1-run",
+            "qrv-v2-execute",
+            "qrv-cli-deploy",
+            "qrv-howto-ephemeral",
+            "qrv-cli-overview",
+            "qrv-source-s3",
+            "qrv-auth-env",
+            "qrv-sink-s3",
+            "qrv-architecture"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-1",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-glossary",
+            "qrv-auth-env",
+            "qrv-guide-retries",
+            "qrv-err-4012",
+            "qrv-quickstart",
+            "qrv-troubleshooting",
+            "qrv-sink-s3",
+            "qrv-auth-apikey",
+            "qrv-migration",
+            "qrv-config-reference"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 0.5,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.38009376671593426,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-2",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-install",
+            "qrv-auth-env",
+            "qrv-cli-overview",
+            "qrv-howto-ephemeral",
+            "qrv-architecture",
+            "qrv-v1-run",
+            "qrv-cli-deploy",
+            "qrv-troubleshooting",
+            "qrv-v2-execute"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-3",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-rate-limits",
+            "qrv-glossary",
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-sink-postgres",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-v1-run",
+            "qrv-sinks-overview",
+            "qrv-auth-apikey"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-1",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-guide-checkpointing",
+            "qrv-howto-ephemeral",
+            "qrv-v1-run",
+            "qrv-migration",
+            "qrv-v2-execute",
+            "qrv-config-reference",
+            "qrv-quickstart",
+            "qrv-cli-overview",
+            "qrv-guide-backpressure",
+            "qrv-troubleshooting"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8597186998521972,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-2",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-auth-env",
+            "qrv-auth-oauth",
+            "qrv-auth-apikey",
+            "qrv-config-reference",
+            "qrv-cli-overview",
+            "qrv-howto-ephemeral",
+            "qrv-changelog",
+            "qrv-err-index",
+            "qrv-sinks-overview",
+            "qrv-sources-overview"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-3",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-cli-deploy",
+            "qrv-deploy-api",
+            "qrv-quickstart",
+            "qrv-cli-overview",
+            "qrv-glossary",
+            "qrv-config-reference",
+            "qrv-howto-ephemeral",
+            "qrv-v1-run",
+            "qrv-migration",
+            "qrv-v2-execute"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.6309297535714575,
+          "first_relevant_rank": 2
+        }
+      ]
+    },
+    "weighted": {
+      "overall": {
+        "n_queries": 21,
+        "recall@1": 0.6031746031746033,
+        "recall@5": 0.896825396825397,
+        "recall@10": 0.9761904761904762,
+        "mrr@10": 0.8809523809523809,
+        "ndcg@10": 0.8680181224265413
+      },
+      "by_category": {
+        "acronym-synonym": {
+          "n_queries": 3,
+          "recall@1": 0.6666666666666666,
+          "recall@5": 0.8333333333333334,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8778298703977412
+        },
+        "keyword-trap": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "lexical-exact": {
+          "n_queries": 3,
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.8333333333333334,
+          "ndcg@10": 0.8089753722696894
+        },
+        "negation-constraint": {
+          "n_queries": 3,
+          "recall@1": 0.16666666666666666,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.611111111111111,
+          "ndcg@10": 0.7103099178571526
+        },
+        "paraphrase": {
+          "n_queries": 3,
+          "recall@1": 0.5,
+          "recall@5": 0.6666666666666666,
+          "recall@10": 0.8333333333333334,
+          "mrr@10": 0.7222222222222222,
+          "ndcg@10": 0.7260040456855433
+        },
+        "semantic-distractor": {
+          "n_queries": 3,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0
+        },
+        "version-pinning": {
+          "n_queries": 3,
+          "recall@1": 0.38888888888888884,
+          "recall@5": 0.7777777777777777,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9530076507756619
+        }
+      },
+      "per_query": [
+        {
+          "query_id": "q-lex-1",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-err-index",
+            "qrv-err-4012",
+            "qrv-sinks-overview",
+            "qrv-howto-ephemeral",
+            "qrv-api-index",
+            "qrv-troubleshooting",
+            "qrv-guide-dlq",
+            "qrv-faq",
+            "qrv-config-reference",
+            "qrv-changelog"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8597186998521972,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-2",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-sink-postgres",
+            "qrv-guide-checkpointing",
+            "qrv-config-reference",
+            "qrv-guide-retries",
+            "qrv-observability",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-sink-s3",
+            "qrv-migration",
+            "qrv-source-s3"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-lex-3",
+          "category": "lexical-exact",
+          "top": [
+            "qrv-howto-ephemeral",
+            "qrv-guide-checkpointing",
+            "qrv-v2-execute",
+            "qrv-config-reference",
+            "qrv-guide-dlq",
+            "qrv-err-index",
+            "qrv-auth-env",
+            "qrv-migration",
+            "qrv-sinks-overview",
+            "qrv-sources-overview"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.5672074169568709,
+          "first_relevant_rank": 2
+        },
+        {
+          "query_id": "q-par-1",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-backpressure",
+            "qrv-sources-overview",
+            "qrv-migration",
+            "qrv-guide-dlq",
+            "qrv-architecture",
+            "qrv-howto-ephemeral",
+            "qrv-config-reference",
+            "qrv-guide-rate-limits",
+            "qrv-sink-s3",
+            "qrv-guide-retries"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-2",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-guide-batching",
+            "qrv-observability",
+            "qrv-guide-backpressure",
+            "qrv-guide-checkpointing",
+            "qrv-howto-ephemeral",
+            "qrv-guide-dlq",
+            "qrv-architecture",
+            "qrv-glossary",
+            "qrv-guide-rate-limits"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.9072278740982787,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-par-3",
+          "category": "paraphrase",
+          "top": [
+            "qrv-guide-backpressure",
+            "qrv-glossary",
+            "qrv-err-4012",
+            "qrv-observability",
+            "qrv-howto-ephemeral",
+            "qrv-guide-dlq",
+            "qrv-config-reference",
+            "qrv-faq",
+            "qrv-guide-schema",
+            "qrv-guide-batching"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 0.0,
+          "recall@10": 0.5,
+          "mrr@10": 0.16666666666666666,
+          "ndcg@10": 0.27078426295835145,
+          "first_relevant_rank": 6
+        },
+        {
+          "query_id": "q-trap-1",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-auth-oauth",
+            "qrv-auth-env",
+            "qrv-auth-apikey",
+            "qrv-changelog",
+            "qrv-config-reference",
+            "qrv-source-s3",
+            "qrv-glossary",
+            "qrv-observability",
+            "qrv-guide-backpressure",
+            "qrv-howto-ephemeral"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-2",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-retries",
+            "qrv-sink-postgres",
+            "qrv-troubleshooting",
+            "qrv-api-index",
+            "qrv-sinks-overview",
+            "qrv-guide-dlq",
+            "qrv-changelog",
+            "qrv-guide-delivery",
+            "qrv-guide-batching",
+            "qrv-err-4012"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-trap-3",
+          "category": "keyword-trap",
+          "top": [
+            "qrv-guide-schema",
+            "qrv-faq",
+            "qrv-err-4012",
+            "qrv-cli-deploy",
+            "qrv-cli-overview",
+            "qrv-troubleshooting",
+            "qrv-sources-overview",
+            "qrv-guide-retries",
+            "qrv-source-s3",
+            "qrv-api-index"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-1",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-auth-apikey",
+            "qrv-config-reference",
+            "qrv-auth-env",
+            "qrv-auth-oauth",
+            "qrv-guide-rate-limits",
+            "qrv-v1-run",
+            "qrv-api-index",
+            "qrv-install",
+            "qrv-sink-s3",
+            "qrv-guide-retries"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-2",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-guide-batching",
+            "qrv-sink-s3",
+            "qrv-guide-retries",
+            "qrv-guide-dlq",
+            "qrv-err-4012",
+            "qrv-architecture",
+            "qrv-sink-postgres",
+            "qrv-transforms",
+            "qrv-v1-run",
+            "qrv-quickstart"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-sem-3",
+          "category": "semantic-distractor",
+          "top": [
+            "qrv-sink-s3",
+            "qrv-source-s3",
+            "qrv-observability",
+            "qrv-config-reference",
+            "qrv-sinks-overview",
+            "qrv-architecture",
+            "qrv-err-4012",
+            "qrv-transforms",
+            "qrv-install",
+            "qrv-sink-postgres"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-1",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v1-run",
+            "qrv-config-reference",
+            "qrv-troubleshooting",
+            "qrv-faq",
+            "qrv-cli-deploy",
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-auth-apikey",
+            "qrv-howto-ephemeral",
+            "qrv-cli-overview"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 0.3333333333333333,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.8590229523269858,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-2",
+          "category": "version-pinning",
+          "top": [
+            "qrv-v2-execute",
+            "qrv-migration",
+            "qrv-api-index",
+            "qrv-howto-ephemeral",
+            "qrv-transforms",
+            "qrv-v1-run",
+            "qrv-cli-overview",
+            "qrv-glossary",
+            "qrv-architecture",
+            "qrv-sinks-overview"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-ver-3",
+          "category": "version-pinning",
+          "top": [
+            "qrv-migration",
+            "qrv-v1-run",
+            "qrv-v2-execute",
+            "qrv-source-s3",
+            "qrv-cli-deploy",
+            "qrv-auth-env",
+            "qrv-cli-overview",
+            "qrv-howto-ephemeral",
+            "qrv-sink-s3",
+            "qrv-quickstart"
+          ],
+          "recall@1": 0.3333333333333333,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-1",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-glossary",
+            "qrv-auth-env",
+            "qrv-guide-retries",
+            "qrv-err-4012",
+            "qrv-troubleshooting",
+            "qrv-auth-apikey",
+            "qrv-guide-dlq",
+            "qrv-changelog",
+            "qrv-quickstart",
+            "qrv-sink-s3"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 0.6334896111932237,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-2",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-delivery",
+            "qrv-auth-env",
+            "qrv-faq",
+            "qrv-install",
+            "qrv-howto-ephemeral",
+            "qrv-cli-overview",
+            "qrv-err-4012",
+            "qrv-glossary",
+            "qrv-cli-deploy",
+            "qrv-troubleshooting"
+          ],
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-acr-3",
+          "category": "acronym-synonym",
+          "top": [
+            "qrv-guide-rate-limits",
+            "qrv-glossary",
+            "qrv-sinks-overview",
+            "qrv-v2-execute",
+            "qrv-howto-ephemeral",
+            "qrv-migration",
+            "qrv-v1-run",
+            "qrv-auth-apikey",
+            "qrv-api-index",
+            "qrv-sink-postgres"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-1",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-howto-ephemeral",
+            "qrv-guide-checkpointing",
+            "qrv-v1-run",
+            "qrv-v2-execute",
+            "qrv-config-reference",
+            "qrv-cli-overview",
+            "qrv-migration",
+            "qrv-guide-backpressure",
+            "qrv-quickstart",
+            "qrv-err-index"
+          ],
+          "recall@1": 0.5,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "first_relevant_rank": 1
+        },
+        {
+          "query_id": "q-neg-2",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-auth-oauth",
+            "qrv-auth-env",
+            "qrv-cli-overview",
+            "qrv-config-reference",
+            "qrv-howto-ephemeral",
+            "qrv-auth-apikey",
+            "qrv-sources-overview",
+            "qrv-err-index",
+            "qrv-changelog",
+            "qrv-guide-dlq"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.6309297535714575,
+          "first_relevant_rank": 2
+        },
+        {
+          "query_id": "q-neg-3",
+          "category": "negation-constraint",
+          "top": [
+            "qrv-cli-deploy",
+            "qrv-cli-overview",
+            "qrv-deploy-api",
+            "qrv-quickstart",
+            "qrv-glossary",
+            "qrv-source-s3",
+            "qrv-install",
+            "qrv-howto-ephemeral",
+            "qrv-sinks-overview",
+            "qrv-guide-backpressure"
+          ],
+          "recall@1": 0.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr@10": 0.3333333333333333,
+          "ndcg@10": 0.5,
+          "first_relevant_rank": 3
+        }
+      ]
+    }
+  }
+}
