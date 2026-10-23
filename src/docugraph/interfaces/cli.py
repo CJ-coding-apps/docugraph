@@ -979,5 +979,181 @@ def index_remove(name: str) -> None:
         console.print(f"[red]Failed to remove repository: {name}[/red]")
 
 
+@main.group()
+def bench() -> None:
+    """Retrieval-quality benchmark (committed corpus, graded judgments)."""
+
+
+def _fmt(value: float | None) -> str:
+    return "—" if value is None else f"{value:.3f}"
+
+
+@bench.command("run")
+@click.option(
+    "--dataset",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+    default=None,
+    help="Dataset directory (default: benchmarks/retrieval in the checkout)",
+)
+@click.option(
+    "--arms",
+    "arms_csv",
+    default=None,
+    help="Comma-separated arm names (default: every non-rerank arm)",
+)
+@click.option(
+    "--rerank",
+    is_flag=True,
+    help=(
+        "Also measure the reranking arms with the local cross-encoder "
+        "(BAAI/bge-reranker-v2-m3, multilingual; downloads ~1.8 GB on first use)"
+    ),
+)
+@click.option(
+    "--json",
+    "json_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the full report (per-query rows included) to this file",
+)
+def bench_run(
+    dataset: Path | None, arms_csv: str | None, rerank: bool, json_path: Path | None
+) -> None:
+    """Run the retrieval benchmark against the committed corpus.
+
+    Ingests the benchmark corpus into a temporary store (your indexed data is
+    not touched and not used), runs each retrieval arm over the query set, and
+    reports recall@k, MRR@10 and nDCG@10 overall and per failure-mode category.
+
+    Examples:
+        docugraph bench run
+        docugraph bench run --arms vector,fts,rrf --json report.json
+        docugraph bench run --rerank
+    """
+    import json as json_module
+    import tempfile
+
+    from docugraph.evals.dataset import default_dataset_dir
+    from docugraph.evals.runner import run_bench
+
+    dataset_dir = dataset or default_dataset_dir()
+    if not (dataset_dir / "MANIFEST.json").exists():
+        console.print(
+            f"[red]No benchmark dataset at {dataset_dir}.[/red] The dataset ships "
+            "in the repository (benchmarks/retrieval), not in the installed "
+            "package; run from a checkout or pass --dataset."
+        )
+        raise SystemExit(1)
+
+    arm_names = [a.strip() for a in arms_csv.split(",")] if arms_csv else None
+
+    with (
+        tempfile.TemporaryDirectory(prefix="docugraph-bench-") as tmp,
+        Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress,
+    ):
+        progress.add_task("Running benchmark (fresh store, committed corpus)...", total=None)
+        report = run_bench(
+            dataset_dir,
+            Path(tmp),
+            arm_names=arm_names,
+            include_rerank=rerank,
+        )
+
+    env = report["environment"]
+    console.print(
+        f"\n[bold]Retrieval benchmark[/bold] — dataset {env['dataset_version']}, "
+        f"embedder {env['embedder']}\n"
+    )
+
+    overall = Table(title="Overall (macro-averaged over queries)")
+    overall.add_column("Arm", style="cyan")
+    for col in ("recall@1", "recall@5", "recall@10", "mrr@10", "ndcg@10"):
+        overall.add_column(col, justify="right")
+    for arm_name, arm_report in report["arms"].items():
+        o = arm_report["overall"]
+        columns = ("recall@1", "recall@5", "recall@10", "mrr@10", "ndcg@10")
+        overall.add_row(arm_name, *[_fmt(o[c]) for c in columns])
+    console.print(overall)
+
+    categories = sorted(next(iter(report["arms"].values()))["by_category"])
+    per_cat = Table(title="nDCG@10 by failure-mode category")
+    per_cat.add_column("Arm", style="cyan")
+    for category in categories:
+        per_cat.add_column(category, justify="right")
+    for arm_name, arm_report in report["arms"].items():
+        per_cat.add_row(
+            arm_name,
+            *[_fmt(arm_report["by_category"][c]["ndcg@10"]) for c in categories],
+        )
+    console.print(per_cat)
+
+    if json_path is not None:
+        json_path.write_text(json_module.dumps(report, indent=2) + "\n", encoding="utf-8")
+        console.print(f"\n[green]Report written to {json_path}[/green]")
+
+
+@bench.command("compare")
+@click.argument("baseline", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("new", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--tolerance",
+    default=0.02,
+    show_default=True,
+    help="Largest nDCG@10 drop (overall or per category) that still passes",
+)
+def bench_compare(baseline: Path, new: Path, tolerance: float) -> None:
+    """Hold a new benchmark report against a committed baseline.
+
+    Exits 1 when any arm's nDCG@10 — overall or in any single category —
+    drops by more than the tolerance. Per-category gating is the point: a
+    change that wins on average but destroys one failure mode must not pass.
+
+    Examples:
+        docugraph bench compare benchmarks/retrieval/baselines/bge-small-en-v1.5.json report.json
+    """
+    import json as json_module
+
+    from docugraph.evals.compare import IncomparableReports, compare_reports
+
+    base_report = json_module.loads(baseline.read_text(encoding="utf-8"))
+    new_report = json_module.loads(new.read_text(encoding="utf-8"))
+
+    try:
+        passed, findings = compare_reports(base_report, new_report, tolerance=tolerance)
+    except IncomparableReports as e:
+        console.print(f"[red]Not comparable: {e}[/red]")
+        raise SystemExit(1) from e
+
+    table = Table(title=f"nDCG@10 vs baseline (tolerance {tolerance})")
+    table.add_column("Arm", style="cyan")
+    table.add_column("Scope")
+    table.add_column("Baseline", justify="right")
+    table.add_column("New", justify="right")
+    table.add_column("Delta", justify="right")
+    for f in findings:
+        delta = f["delta"]
+        style = "red" if f["regression"] else ("green" if delta is not None and delta > 0 else "")
+        table.add_row(
+            f["arm"],
+            f["scope"],
+            _fmt(f["baseline"]),
+            _fmt(f["new"]),
+            "—"
+            if delta is None
+            else (f"[{style}]{delta:+.4f}[/{style}]" if style else f"{delta:+.4f}"),
+        )
+    console.print(table)
+
+    if passed:
+        console.print("[green]No regression beyond tolerance.[/green]")
+    else:
+        console.print("[red]Regression beyond tolerance; see rows above.[/red]")
+        raise SystemExit(1)
+
+
 if __name__ == "__main__":
     main()

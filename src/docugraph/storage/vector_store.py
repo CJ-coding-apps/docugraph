@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import lancedb
 import pyarrow as pa
@@ -37,6 +38,16 @@ class VectorStore:
         self._db = lancedb.connect(str(self._db_path))
         self._embedder = embedder or get_embedder()
         self._table: lancedb.table.Table | None = None
+        # Rebuilt lazily by search_fts / search_hybrid after new chunks arrive.
+        self._fts_stale = True
+        # Why the most recent search_hybrid call fell back to vector-only, or
+        # None when it ran as native hybrid. The graph leg records its reasons
+        # (GraphLegStatus) instead of failing silently; the keyword side now
+        # does the same, because "hybrid was unavailable" and "hybrid ran"
+        # must not be indistinguishable to a caller -- the retrieval benchmark
+        # refuses to score a 'lancedb-hybrid' arm that silently measured
+        # vector search.
+        self.last_hybrid_fallback_reason: str | None = None
 
     @property
     def embedding_model(self) -> str:
@@ -164,7 +175,86 @@ class VectorStore:
             )
 
         table.add(records)
+        # The FTS index does not cover rows added after it was built; rebuild
+        # before the next keyword search rather than serving a partial index.
+        self._fts_stale = True
         return len(records)
+
+    def _row_to_chunk(self, row: Any) -> Chunk:
+        """One row of a LanceDB result frame as a Chunk."""
+        import json
+
+        return Chunk(
+            id=row["id"],
+            document_id=row["document_id"],
+            content=row["content"],
+            embedding=row["vector"].tolist() if hasattr(row["vector"], "tolist") else row["vector"],
+            start_char=row["start_char"],
+            end_char=row["end_char"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def ensure_fts_index(self) -> None:
+        """Build (or rebuild) the full-text index over `content`. Idempotent.
+
+        Nothing created this index before v0.1.1, which is why
+        `query_type="hybrid"` always raised and `search_hybrid` always fell
+        back to vector-only -- "keyword search" silently was vector search.
+        The retrieval benchmark exposed it; this is the fix. `replace=True`
+        because LanceDB's FTS index is build-time, not incremental: rows added
+        after the build are invisible to it, so a stale index must be rebuilt,
+        not reused.
+        """
+        table = self._ensure_table()
+        if table.count_rows() == 0:
+            return
+        table.create_fts_index("content", replace=True)
+        self._fts_stale = False
+
+    def search_fts(
+        self,
+        query: str,
+        top_k: int = 10,
+        filter_expr: str | None = None,
+    ) -> list[SearchResult]:
+        """Keyword (BM25 full-text) search only -- no embeddings involved.
+
+        This is the true keyword leg: `HybridRetriever` fuses it with vector
+        search, and the benchmark measures it as its own arm. Scores are the
+        index's BM25 scores (higher is better), not similarities; compare them
+        by rank, not magnitude.
+
+        Args:
+            query: Search query text.
+            top_k: Number of results to return.
+            filter_expr: Optional SQL-like filter expression.
+
+        Returns:
+            List of search results with BM25 scores.
+        """
+        table = self._ensure_table()
+        if self._fts_stale:
+            self.ensure_fts_index()
+
+        search_query = table.search(query, query_type="fts").limit(top_k)
+        if filter_expr:
+            search_query = search_query.where(filter_expr)
+        results = search_query.to_pandas()
+
+        if results.empty:
+            return []
+
+        search_results = []
+        for _, row in results.iterrows():
+            # LanceDB FTS reports BM25 relevance as `_score` (newer releases)
+            # or `score` (older ones within the pinned range).
+            raw = row.get("_score")
+            if raw is None:
+                raw = row.get("score", 0.0)
+            search_results.append(SearchResult(chunk=self._row_to_chunk(row), score=float(raw)))
+
+        return search_results
 
     def search(
         self,
@@ -242,43 +332,54 @@ class VectorStore:
             List of search results with combined scores.
         """
         table = self._ensure_table()
+        self.last_hybrid_fallback_reason = None
+
+        # Native hybrid needs the FTS index just as search_fts does; before
+        # this was built, every hybrid query raised and the except below made
+        # "hybrid" mean "vector" without anyone being told.
+        if self._fts_stale:
+            try:
+                self.ensure_fts_index()
+            except Exception as e:  # pragma: no cover - backend-version specific
+                self.last_hybrid_fallback_reason = f"the FTS index could not be built: {e}"
+                return self.search(query, top_k, filter_expr)
 
         # Embed the query
         query_embedding = self._embedder.embed_query(query)
 
         # LanceDB hybrid search
         try:
-            search_query = table.search(query_embedding, query_type="hybrid").limit(top_k)
+            search_query = (
+                table.search(query_type="hybrid").vector(query_embedding).text(query).limit(top_k)
+            )
             if filter_expr:
                 search_query = search_query.where(filter_expr)
             results = search_query.to_pandas()
-        except Exception:
-            # Fall back to vector-only search if hybrid not available
+        except Exception as e:
+            # Still a degrade, not a failure -- hybrid is an enhancement over
+            # vector search -- but a *recorded* one. The caller can tell the
+            # difference; the benchmark refuses to score this arm when the
+            # reason is set.
+            self.last_hybrid_fallback_reason = f"native hybrid search failed: {e}"
             return self.search(query, top_k, filter_expr)
 
         if results.empty:
             return []
 
-        import json
-
         search_results = []
         for _, row in results.iterrows():
-            chunk = Chunk(
-                id=row["id"],
-                document_id=row["document_id"],
-                content=row["content"],
-                embedding=row["vector"].tolist()
-                if hasattr(row["vector"], "tolist")
-                else row["vector"],
-                start_char=row["start_char"],
-                end_char=row["end_char"],
-                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
-                created_at=datetime.fromisoformat(row["created_at"]),
-            )
-            distance = row.get("_distance", 0)
-            score = 1.0 / (1.0 + distance)
+            # Hybrid results carry a fused `_relevance_score` (higher is
+            # better). The previous code read `_distance` with a default of 0,
+            # which scored every hybrid row 1.0 -- harmless under rank-based
+            # fusion, wrong everywhere else.
+            raw = row.get("_relevance_score")
+            if raw is not None:
+                score = float(raw)
+            else:
+                distance = row.get("_distance", 0)
+                score = 1.0 / (1.0 + distance)
 
-            search_results.append(SearchResult(chunk=chunk, score=score))
+            search_results.append(SearchResult(chunk=self._row_to_chunk(row), score=score))
 
         return search_results
 

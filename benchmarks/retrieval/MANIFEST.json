@@ -1,0 +1,13 @@
+{
+  "dataset": "docugraph-retrieval-bench",
+  "version": "0.1.0-pilot",
+  "description": "Hand-authored adversarial documentation corpus (fictional 'Quorva' SDK) with graded relevance judgments across seven retrieval failure modes. Pilot scale; see the benchmark README section for authoring rules.",
+  "counts": {
+    "corpus": 36,
+    "queries": 21
+  },
+  "sha256": {
+    "corpus.jsonl": "6318b464c188eccd62a4f6eea8c457e7c63780d1d3b7d3e6a0728795955ea5ca",
+    "queries.jsonl": "afcc08a10c73d350244fd13c2006a047aa82d18a4be4fbfc2323cb3741979344"
+  }
+}

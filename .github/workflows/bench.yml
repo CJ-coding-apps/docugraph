@@ -1,0 +1,79 @@
+# The retrieval benchmark, run against the real embedder, weekly and on demand.
+#
+# Fast CI proves the harness with a deterministic fake embedder
+# (tests/integration/test_bench_runner.py) and never downloads weights. What
+# that leaves unexercised is the thing the benchmark exists for: the numbers
+# on the shipped model. This job runs `docugraph bench run` on the real
+# bge-small-en-v1.5 (~130 MB, cached between runs) and holds the result
+# against the committed baseline with `docugraph bench compare`, which exits 1
+# when nDCG@10 -- overall or in any single failure-mode category -- drops by
+# more than the tolerance.
+#
+# The baseline under benchmarks/retrieval/baselines/ is committed, per
+# embedding model, and regenerated deliberately: when the dataset or the
+# retrieval stack changes on purpose, a human reruns the benchmark, reads the
+# delta table, and commits the new baseline with the change that moved it.
+# Until a baseline exists for the model, this job fails -- a comparison
+# against nothing proving nothing would be green that means "checked nothing"
+# (the live-reranker header has the longer form of this argument).
+#
+# Reranking arms are not measured here: the cross-encoder is ~2.3 GB and has
+# its own opt-in workflow; run `docugraph bench run --rerank` locally when a
+# reranker change needs numbers.
+name: Retrieval benchmark
+
+on:
+  # Manual: Actions -> Retrieval benchmark -> Run workflow.
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 06:17 UTC. An off-hour minute, deliberately: scheduled
+    # workflows on :00 queue behind everyone else's.
+    - cron: "17 6 * * 1"
+
+env:
+  FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+
+jobs:
+  bench:
+    name: bench run · compare to baseline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+
+      - name: Run benchmark
+        run: uv run docugraph bench run --json bench-report.json
+
+      - name: Compare against committed baseline
+        run: |
+          baseline="benchmarks/retrieval/baselines/bge-small-en-v1.5.json"
+          if [ ! -f "$baseline" ]; then
+            echo "::error::No committed baseline at $baseline. Run 'docugraph bench run --json' locally and commit the report as the baseline; a compare against nothing is not a gate."
+            exit 1
+          fi
+          uv run docugraph bench compare "$baseline" bench-report.json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-report
+          path: bench-report.json
+          if-no-files-found: ignore
