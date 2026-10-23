@@ -163,9 +163,14 @@ jobs:
       - name: Assert the handshake
         run: |
           python3 - <<'PY'
-          import json, pathlib, sys
+          import json, pathlib, sys, tomllib
 
-          EXPECTED = "0.1.1"  # the version this repo publishes; pinned deliberately
+          # Read the expected version from pyproject.toml rather than pinning a
+          # literal. pyproject is the single source of the version -- the
+          # package, the CLI and this handshake all derive from it -- so a
+          # hardcoded constant only goes stale at the next release, which is
+          # exactly how it broke: it stayed "0.1.1" into the 0.2.0 release.
+          EXPECTED = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
           raw = pathlib.Path("/tmp/handshake.jsonl").read_text()
 
           # stdout carries the JSON-RPC stream and nothing else. A stray line
