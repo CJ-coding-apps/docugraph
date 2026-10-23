@@ -1,13 +1,13 @@
 {
   "dataset": "docugraph-retrieval-bench",
-  "version": "0.1.0-pilot",
-  "description": "Hand-authored adversarial documentation corpus (fictional 'Quorva' SDK) with graded relevance judgments across seven retrieval failure modes. Pilot scale; see the benchmark README section for authoring rules.",
+  "version": "0.2.0-full",
+  "description": "Hand-authored adversarial documentation corpus (fictional 'Quorva' SDK) with graded relevance judgments across seven retrieval failure modes. Full scale: keyword-trap distractors cover many distinct query terms (not one repeated token), semantic-distractor queries share few exact tokens with their target, and background is grown so top-10 is not near-saturated. See the benchmark README section for authoring rules.",
   "counts": {
-    "corpus": 36,
-    "queries": 21
+    "corpus": 70,
+    "queries": 56
   },
   "sha256": {
-    "corpus.jsonl": "6318b464c188eccd62a4f6eea8c457e7c63780d1d3b7d3e6a0728795955ea5ca",
-    "queries.jsonl": "afcc08a10c73d350244fd13c2006a047aa82d18a4be4fbfc2323cb3741979344"
+    "corpus.jsonl": "edc8be7d9aefb93cc994e1d2e4cec0d2b08d1e786ce6df26c42e645626fd859f",
+    "queries.jsonl": "8ad5156171fb8d91a360f888c79fdc020c24711619c774daf5f22f566d1d3fe1"
   }
 }
