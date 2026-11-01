@@ -51,21 +51,21 @@ jobs:
       FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       # Keyed on the model, not on a hash of anything: the weights at a given
       # revision never change, and the job accesses the entry weekly so it does
       # not age out under GitHub's eviction policy.
       - name: Restore the reranker weights
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.FASTEMBED_CACHE_PATH }}
           key: fastembed-bge-reranker-v2-m3
