@@ -7,7 +7,7 @@
 # ============================================================
 # Stage 1: Base image with Python and system dependencies
 # ============================================================
-FROM python:3.11-slim as base
+FROM python:3.15-slim as base
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
