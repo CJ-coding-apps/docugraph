@@ -336,9 +336,7 @@ class DocCrawler:
                         break
 
             document = Document(
-                # The page is attributed to where it actually ended up, not the
-                # first hop of a redirect chain (LOW-5).
-                source_url=final_url,
+                source_url=url,
                 title=title,
                 content=result.markdown.fit_markdown
                 if hasattr(result.markdown, "fit_markdown")
@@ -470,9 +468,7 @@ class DocCrawler:
                     )
 
                     document = Document(
-                        # Attribute the page and resolve its links against the
-                        # final hop, not the URL that started the redirect (LOW-5).
-                        source_url=final_url,
+                        source_url=url,
                         title=title,
                         content=content,
                         content_type=ContentType.MARKDOWN,
@@ -492,7 +488,7 @@ class DocCrawler:
                         targets = await asyncio.to_thread(
                             enqueue_targets,
                             result.links["internal"],
-                            page_url=final_url,
+                            page_url=url,
                             base_netloc=base_domain,
                             url_pattern=url_regex,
                             policy=self._url_policy,
