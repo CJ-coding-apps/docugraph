@@ -1,0 +1,476 @@
+"""Crawl guards at the pure/unit level: link filter, route hook, backstop, clamp.
+
+C1 exercises ``enqueue_targets`` with a dict-backed resolver. C2 exercises
+``make_page_route_hook`` with fake Playwright route/request objects -- every
+effect (abort, continue, fetch, fulfill) is recorded, so the decision can be
+adjudicated without a browser. The redirect rows encode A-3: the handler must
+fetch the navigation itself with ``max_redirects=0`` and inspect ``Location``.
+
+The backstop and clamp rows go through ``_crawl_url`` with the crawler and the
+vector store replaced, so they always run and touch nothing.
+"""
+
+from types import SimpleNamespace
+
+import pytest
+
+from docugraph.core.config import reset_config
+from docugraph.ingestion import crawler as crawler_module
+from docugraph.ingestion.crawler import (
+    enqueue_targets,
+    final_page_url,
+    make_page_route_hook,
+)
+from docugraph.interfaces import mcp_server
+from docugraph.security.url_policy import (
+    RefusalReason,
+    UrlKind,
+    UrlPolicy,
+    UrlRefusal,
+)
+
+PRIVATE_URL = "http://169.254.169.254/"
+
+
+# ---------------------------------------------------------------------------
+# Helpers: policy, fake route/request, a store that absorbs anything
+# ---------------------------------------------------------------------------
+
+
+def _mapping(table: dict[str, tuple[str, ...]]):
+    def resolve(host: str) -> tuple[str, ...]:
+        return table[host]
+
+    return resolve
+
+
+def _web_policy(table: dict[str, tuple[str, ...]], **kwargs) -> UrlPolicy:
+    return UrlPolicy(kind=UrlKind.WEB, resolver=_mapping(table), **kwargs)
+
+
+class _Request:
+    def __init__(self, url: str, navigation: bool) -> None:
+        self.url = url
+        self._navigation = navigation
+
+    def is_navigation_request(self) -> bool:
+        return self._navigation
+
+
+class _Response:
+    def __init__(self, status: int, headers: dict[str, str] | None = None) -> None:
+        self.status = status
+        self.headers = headers or {}
+
+
+class _Route:
+    """A Playwright Route stand-in that records everything it is asked to do."""
+
+    def __init__(
+        self,
+        url: str,
+        *,
+        navigation: bool = True,
+        response: _Response | None = None,
+        fetch_error: Exception | None = None,
+    ) -> None:
+        self.request = _Request(url, navigation)
+        self.calls: list[str] = []
+        self.fetch_kwargs: dict | None = None
+        self.fulfilled_with = None
+        self._response = response
+        self._fetch_error = fetch_error
+
+    async def abort(self) -> None:
+        self.calls.append("abort")
+
+    async def continue_(self) -> None:
+        self.calls.append("continue_")
+
+    async def fetch(self, **kwargs) -> _Response:
+        self.calls.append("fetch")
+        self.fetch_kwargs = kwargs
+        if self._fetch_error is not None:
+            raise self._fetch_error
+        return self._response if self._response is not None else _Response(200)
+
+    async def fulfill(self, **kwargs) -> None:
+        self.calls.append("fulfill")
+        self.fulfilled_with = kwargs.get("response")
+
+
+class _Null(int):
+    """Zero that can be awaited, called, indexed and iterated.
+
+    ``_crawl_url``'s indexing effect is not under test here; the rows need a
+    store that never blocks or fails regardless of which method the handler
+    calls on it (sync or async).
+    """
+
+    def __new__(cls) -> "_Null":
+        return int.__new__(cls, 0)
+
+    def __await__(self):
+        if False:  # makes this a generator without yielding
+            yield
+        return self
+
+    def __call__(self, *args, **kwargs) -> "_Null":
+        return _Null()
+
+    def __getattr__(self, name: str) -> "_Null":
+        return _Null()
+
+    def __getitem__(self, key) -> "_Null":
+        return _Null()
+
+    def __iter__(self):
+        return iter(())
+
+
+def _result_text(result) -> str:
+    return "\n".join(
+        item.text
+        for item in getattr(result, "content", [])
+        if getattr(item, "text", None) is not None
+    )
+
+
+@pytest.fixture
+def mcp_env(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("DOCUGRAPH_STORAGE__DATA_DIR", str(tmp_path / "data"))
+    reset_config()
+    yield
+    reset_config()
+
+
+def _fake_web_policy() -> UrlPolicy:
+    return UrlPolicy(kind=UrlKind.WEB, resolver=lambda host: ("1.1.1.1",))
+
+
+def _patch_mcp_effects(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stop ``_crawl_url`` from resolving, embedding or indexing anything."""
+    monkeypatch.setattr(mcp_server, "_web_policy", _fake_web_policy)
+    monkeypatch.setattr(mcp_server, "get_vector_store", lambda: _Null())
+
+
+def _install_fake_crawler(
+    monkeypatch: pytest.MonkeyPatch,
+    recorder: dict,
+    *,
+    site_docs: list | None = None,
+    on_site=None,
+) -> None:
+    """Replace DocCrawler everywhere the handler can have bound it."""
+
+    class FakeCrawler:
+        def __init__(self, *args, **kwargs) -> None:
+            recorder["constructed"] = True
+
+        async def crawl_site(self, url: str, max_pages: int = 100, **kwargs):
+            recorder["crawl_site"] = True
+            recorder["max_pages"] = max_pages
+            if on_site is not None:
+                on_site(kwargs)
+            return [] if site_docs is None else site_docs
+
+        async def crawl_single(self, url: str, **kwargs):
+            recorder["crawl_single"] = True
+            return [] if site_docs is None else site_docs
+
+    monkeypatch.setattr(mcp_server, "DocCrawler", FakeCrawler, raising=False)
+    monkeypatch.setattr(crawler_module, "DocCrawler", FakeCrawler)
+
+
+# ---------------------------------------------------------------------------
+# C1: enqueue_targets
+# ---------------------------------------------------------------------------
+
+
+def test_c1_private_link_is_not_enqueued() -> None:
+    """ORACLE: C1 / §3.2 — the policy decides each candidate link."""
+    policy = _web_policy({"example.com": ("127.0.0.1",)})
+    targets = enqueue_targets(
+        [{"href": "/admin"}],
+        page_url="http://example.com/",
+        base_netloc="example.com",
+        url_pattern=None,
+        policy=policy,
+    )
+    assert targets == []
+
+
+def test_c1_public_link_is_enqueued() -> None:
+    """ORACLE: C1 / §3.2."""
+    policy = _web_policy({"example.com": ("1.1.1.1",)})
+    targets = enqueue_targets(
+        [{"href": "/docs"}],
+        page_url="http://example.com/",
+        base_netloc="example.com",
+        url_pattern=None,
+        policy=policy,
+    )
+    assert targets == ["http://example.com/docs"]
+
+
+def test_c1_empty_offsite_and_fragment_links_are_handled() -> None:
+    """ORACLE: C1 / §3.2 — empty href, other netloc, and query/fragment stripping."""
+    policy = _web_policy({"example.com": ("1.1.1.1",)})
+    targets = enqueue_targets(
+        [
+            {"href": ""},
+            {"href": "https://other.example/x"},
+            {"href": "/docs?page=2#section"},
+            {"href": "guide#top"},
+        ],
+        page_url="http://example.com/",
+        base_netloc="example.com",
+        url_pattern=None,
+        policy=policy,
+    )
+    assert targets == ["http://example.com/docs", "http://example.com/guide"]
+
+
+def test_c1_no_policy_reproduces_the_old_behaviour() -> None:
+    """ORACLE: C1 / §3.2 — the policy is injected; None means today's rules."""
+    targets = enqueue_targets(
+        [{"href": "/admin"}, {"href": "https://other.example/x"}, {"href": ""}],
+        page_url="http://example.com/",
+        base_netloc="example.com",
+        url_pattern=None,
+        policy=None,
+    )
+    assert targets == ["http://example.com/admin"]
+
+
+# ---------------------------------------------------------------------------
+# C2: the browser route hook
+# ---------------------------------------------------------------------------
+
+
+def _hook_policy() -> UrlPolicy:
+    return _web_policy(
+        {
+            "docs.example": ("1.1.1.1",),
+            "cdn.example": ("1.1.1.1",),
+            "169.254.169.254": ("169.254.169.254",),
+        }
+    )
+
+
+async def test_c2_private_navigation_is_aborted() -> None:
+    """ORACLE: C2 / §3.2 — a navigation to a link-local address is aborted."""
+    hook = make_page_route_hook(_hook_policy())
+    route = _Route(PRIVATE_URL, navigation=True)
+
+    await hook(route)
+
+    assert "abort" in route.calls
+    assert "fetch" not in route.calls
+
+
+async def test_c2_allowed_navigation_is_not_aborted() -> None:
+    """ORACLE: C2 / A-3 — the handler fetches the navigation itself."""
+    hook = make_page_route_hook(_hook_policy())
+    route = _Route("https://docs.example/page", navigation=True, response=_Response(200))
+
+    await hook(route)
+
+    assert "abort" not in route.calls
+    assert route.fetch_kwargs is not None
+    assert route.fetch_kwargs.get("max_redirects") == 0
+    assert "fulfill" in route.calls
+
+
+async def test_c2_data_scheme_passes() -> None:
+    """ORACLE: C2 / A-3 — data:, blob: and about: are not network requests."""
+    hook = make_page_route_hook(_hook_policy())
+    route = _Route("data:text/html,<p>hi</p>", navigation=True)
+
+    await hook(route)
+
+    assert "continue_" in route.calls
+    assert "abort" not in route.calls
+
+
+async def test_c2_file_scheme_is_aborted() -> None:
+    """ORACLE: C2 / A-3 — every other scheme fails closed."""
+    hook = make_page_route_hook(_hook_policy())
+    route = _Route("file:///etc/hosts", navigation=True)
+
+    await hook(route)
+
+    assert "abort" in route.calls
+    assert "continue_" not in route.calls
+
+
+async def test_c2_private_subresource_is_aborted() -> None:
+    """ORACLE: C2 / §3.2 — sub-resource requests are checked by URL."""
+    hook = make_page_route_hook(_hook_policy())
+    route = _Route(PRIVATE_URL, navigation=False)
+
+    await hook(route)
+
+    assert "abort" in route.calls
+    assert "fetch" not in route.calls
+
+
+async def test_c2_public_subresource_continues() -> None:
+    """ORACLE: C2 / §3.2."""
+    hook = make_page_route_hook(_hook_policy())
+    route = _Route("https://cdn.example/app.js", navigation=False)
+
+    await hook(route)
+
+    assert "continue_" in route.calls
+    assert "abort" not in route.calls
+
+
+async def test_c2_redirect_to_private_address_is_aborted() -> None:
+    """ORACLE: C2 / A-3 — page.route sees only the first URL of a redirect."""
+    hook = make_page_route_hook(_hook_policy())
+    route = _Route(
+        "https://docs.example/redirect",
+        navigation=True,
+        response=_Response(302, {"location": PRIVATE_URL}),
+    )
+
+    await hook(route)
+
+    assert "abort" in route.calls
+    assert "fulfill" not in route.calls
+
+
+async def test_c2_redirect_to_allowed_address_is_fulfilled() -> None:
+    """ORACLE: C2 / A-3 — the next hop re-enters the handler as a new request."""
+    hook = make_page_route_hook(_hook_policy())
+    response = _Response(302, {"location": "https://docs.example/next"})
+    route = _Route("https://docs.example/redirect", navigation=True, response=response)
+
+    await hook(route)
+
+    assert "abort" not in route.calls
+    assert "fulfill" in route.calls
+    assert route.fulfilled_with is response
+
+
+async def test_c2_fetch_failure_fails_closed() -> None:
+    """ORACLE: C2 / A-3 — route.fetch raising aborts rather than continuing."""
+    hook = make_page_route_hook(_hook_policy())
+    route = _Route(
+        "https://docs.example/page",
+        navigation=True,
+        fetch_error=RuntimeError("network failed"),
+    )
+
+    await hook(route)
+
+    assert "abort" in route.calls
+    assert "fulfill" not in route.calls
+
+
+# ---------------------------------------------------------------------------
+# final_page_url: the backstop's input
+# ---------------------------------------------------------------------------
+
+
+def test_final_page_url_prefers_the_redirected_url() -> None:
+    """ORACLE: A-3.3 — the page is judged by where it ended up."""
+    result = SimpleNamespace(redirected_url="http://169.254.169.254/", url="http://ok.example/")
+    assert final_page_url(result, "http://ok.example/") == "http://169.254.169.254/"
+
+
+def test_final_page_url_falls_back_to_url() -> None:
+    """ORACLE: A-3.3 — no redirect means the result's own url."""
+    result = SimpleNamespace(redirected_url=None, url="http://ok.example/")
+    assert final_page_url(result, "http://requested.example/") == "http://ok.example/"
+
+
+# ---------------------------------------------------------------------------
+# The backstop and the A-6 clamp, through _crawl_url
+# ---------------------------------------------------------------------------
+
+
+async def test_a3_dropped_page_is_reported_in_the_result_text(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-3.3 / N8 — a refused final URL is dropped and counted."""
+    _patch_mcp_effects(monkeypatch)
+    recorder: dict = {}
+
+    def _refuse(kwargs: dict) -> None:
+        callback = kwargs.get("on_refused")
+        assert callback is not None, "crawl_site must receive on_refused"
+        callback(
+            PRIVATE_URL,
+            UrlRefusal(RefusalReason.PRIVATE_ADDRESS, "link-local address"),
+        )
+
+    doc = SimpleNamespace(
+        url="https://docs.example/",
+        title="Docs",
+        content="hello",
+        markdown="hello",
+        html="<html>hello</html>",
+        cleaned_html="<html>hello</html>",
+        metadata={},
+        links={},
+        success=True,
+    )
+    _install_fake_crawler(monkeypatch, recorder, site_docs=[doc], on_site=_refuse)
+
+    result = await mcp_server._crawl_url(
+        {"url": "https://docs.example/", "max_pages": 2}
+    )
+
+    text = _result_text(result)
+    assert "Dropped 1 page(s) by policy:" in text, text
+    assert PRIVATE_URL in text, text
+    assert "private_address" in text, text
+
+
+async def test_a6_max_pages_is_capped_at_50(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-6 / D-5 — the shell-level clamp always runs."""
+    _patch_mcp_effects(monkeypatch)
+    recorder: dict = {}
+    _install_fake_crawler(monkeypatch, recorder, site_docs=[])
+
+    result = await mcp_server._crawl_url(
+        {"url": "https://docs.example/", "max_pages": 500}
+    )
+
+    assert recorder.get("crawl_site") is True
+    assert recorder.get("max_pages") == 50
+    assert "max_pages capped at 50" in _result_text(result)
+
+
+@pytest.mark.parametrize("value", [0, -1, "abc"])
+async def test_a6_max_pages_below_one_or_not_an_int_is_refused(
+    value, mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-6 / §3.4 — max_pages < 1 is an isError, never a crawl."""
+    _patch_mcp_effects(monkeypatch)
+    recorder: dict = {}
+    _install_fake_crawler(monkeypatch, recorder, site_docs=[])
+
+    result = await mcp_server._crawl_url({"url": "https://docs.example/", "max_pages": value})
+
+    assert result.isError
+    assert "max_pages" in _result_text(result)
+    assert "crawl_site" not in recorder and "crawl_single" not in recorder
+
+
+async def test_a6_max_pages_one_uses_crawl_single(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-6 — one page is the existing single-page path."""
+    _patch_mcp_effects(monkeypatch)
+    recorder: dict = {}
+    _install_fake_crawler(monkeypatch, recorder, site_docs=[])
+
+    await mcp_server._crawl_url({"url": "https://docs.example/", "max_pages": 1})
+
+    assert recorder.get("crawl_single") is True
+    assert "crawl_site" not in recorder
