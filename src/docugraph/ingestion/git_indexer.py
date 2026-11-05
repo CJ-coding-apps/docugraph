@@ -84,6 +84,15 @@ def validate_repo_name(name: str) -> UrlRefusal | None:
     return None
 
 
+def _restricted_config(restrict_protocols: bool) -> list[str]:
+    """The ``-c`` pairs, in order, when the policy is in force."""
+    args: list[str] = []
+    if restrict_protocols:
+        for pair in _RESTRICTED_CONFIG_PAIRS:
+            args.extend(pair)
+    return args
+
+
 def build_clone_args(
     *,
     url: str,
@@ -93,10 +102,7 @@ def build_clone_args(
     restrict_protocols: bool,
 ) -> list[str]:
     """Assemble ``git clone`` argv; ``--`` ends options before url and path."""
-    args: list[str] = []
-    if restrict_protocols:
-        for pair in _RESTRICTED_CONFIG_PAIRS:
-            args.extend(pair)
+    args = _restricted_config(restrict_protocols)
 
     args.append("clone")
     if depth is not None:
@@ -111,6 +117,16 @@ def build_clone_args(
 def build_checkout_args(ref: str) -> list[str]:
     """``git checkout <ref> --`` so git reads a revision, never a path."""
     return ["checkout", ref, "--"]
+
+
+def build_pull_args(*, restrict_protocols: bool) -> list[str]:
+    """``git pull --ff-only`` under the same lockdown as clone (MED-1)."""
+    return [*_restricted_config(restrict_protocols), "pull", "--ff-only"]
+
+
+def build_fetch_args(*, restrict_protocols: bool) -> list[str]:
+    """The pull fallback, locked down the same way."""
+    return [*_restricted_config(restrict_protocols), "fetch", "origin"]
 
 
 class InvalidGitRefError(RuntimeError):
@@ -383,8 +399,9 @@ class GitIndexer:
 
         # Check if already cloned
         if local_path.exists():
-            # Update existing repo
-            return self.update(local_path)
+            # Update existing repo. The URL just judged is not necessarily the
+            # one pull will use: update() reads the existing origin (MED-1).
+            return self.update(local_path, expected_url=url)
 
         clone_args = build_clone_args(
             url=url,
@@ -417,11 +434,19 @@ class GitIndexer:
             metadata={"url": url, "ref": ref},
         )
 
-    def update(self, repo_path: Path | str) -> RepoInfo:
+    def update(
+        self,
+        repo_path: Path | str,
+        *,
+        expected_url: str | None = None,
+    ) -> RepoInfo:
         """Update an existing repository with git pull.
 
         Args:
             repo_path: Path to repository
+            expected_url: The URL the caller judged. Under a policy, the
+                existing origin must equal it; pull would otherwise run against
+                a remote that was never checked (MED-1).
 
         Returns:
             Updated RepoInfo
@@ -442,15 +467,34 @@ class GitIndexer:
         )
         url = stdout.strip() if code == 0 else "unknown"
 
+        policy = self._url_policy
+        restrict_protocols = policy is not None
+        if policy is not None:
+            # pull uses the origin, not the requested URL, so the origin is
+            # what has to match and pass the policy before any request is made.
+            if expected_url is not None and url != expected_url:
+                raise RepoPathRefusedError(
+                    UrlRefusal(
+                        RefusalReason.PATH_ESCAPE,
+                        "existing repository's origin differs",
+                    )
+                )
+            origin_refusal = policy.check(url)
+            if origin_refusal is not None:
+                raise UrlRefusedError(origin_refusal)
+
         # Pull updates
         stdout, stderr, code = self._run_git_command(
-            ["pull", "--ff-only"],
+            build_pull_args(restrict_protocols=restrict_protocols),
             cwd=repo_path,
         )
 
         if code != 0:
             # Try fetch + reset as fallback
-            self._run_git_command(["fetch", "origin"], cwd=repo_path)
+            self._run_git_command(
+                build_fetch_args(restrict_protocols=restrict_protocols),
+                cwd=repo_path,
+            )
 
         return RepoInfo(
             url=url,

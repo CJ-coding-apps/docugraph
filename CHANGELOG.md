@@ -24,7 +24,12 @@ public API.
   whose final URL is refused is dropped and reported (`Dropped N page(s) by policy:`) and never
   indexed.
 - **Service workers cannot bypass the route handler.** The page-context hook removes
-  `navigator.serviceWorker` in every frame before page scripts run. Websockets are closed.
+  `navigator.serviceWorker` in every frame before page scripts run. Websockets are closed. Routing is
+  registered on the browser context, so popups, frames and workers are judged by the same handler.
+- **An existing clone is updated only from the origin that was judged.** When the clone destination
+  already exists, its `origin` must equal the requested URL and pass the same policy; a mismatch is
+  refused as `path_escape`. Pull and the fetch fallback carry the same protocol and redirect lockdown
+  as the clone.
 - **`index_git` cannot write outside the repository directory.** The name — or the one derived from
   the URL — must be a single path component, and the resolved destination must stay inside the
   configured repos directory. An escaping name is refused as `path_escape`, not renamed.
@@ -46,6 +51,11 @@ public API.
 
 - `CrawlerConfig` gains `allow_private_networks` (default `false`) and `allowed_domains` (default
   empty).
+- `crawl_site` now counts pages it **attempts**, not pages that produced a document, so a page that
+  fails to scrape still consumes the budget. This changes the CLI too: `docugraph crawl --max-pages`
+  now limits attempted pages.
+- Under a URL policy the crawl cache is not read, so a page cached by an earlier unpoliced crawl is
+  never served without its final URL being judged. Cached documents are still written.
 
 ## [0.2.0] - 2026-10-23
 

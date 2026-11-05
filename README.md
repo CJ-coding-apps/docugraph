@@ -270,7 +270,8 @@ DocuGraph runs locally, but these connections are possible — each only in the 
 - **Graphiti telemetry**, to PostHog, **off unless you opt in** with
   `GRAPHITI_TELEMETRY_ENABLED=true`.
 
-CLI crawls and clones are user-directed and are not restricted by the MCP URL policy.
+CLI crawls and clones are user-directed: they are exempt from the scheme, DNS and address rules,
+but the repository-name containment and the git hardening apply to every caller.
 
 ## The documentation knowledge graph
 

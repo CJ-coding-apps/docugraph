@@ -108,7 +108,7 @@ def make_page_route_hook(policy: UrlPolicy) -> Callable[[Any], Awaitable[None]]:
                 await route.abort()
             return
 
-        refusal = policy.check(url)
+        refusal = await asyncio.to_thread(policy.check, url)
         if refusal is not None:
             await route.abort()
             return
@@ -137,7 +137,7 @@ def make_page_route_hook(policy: UrlPolicy) -> Callable[[Any], Awaitable[None]]:
                 break
 
             target = urljoin(current_url, location)
-            if policy.check(target) is not None:
+            if await asyncio.to_thread(policy.check, target) is not None:
                 await route.abort()
                 return
             if target == current_url:
@@ -165,15 +165,22 @@ async def _close_websocket(websocket: Any) -> None:
 
 
 def _install_page_guards(crawler: Any, policy: UrlPolicy) -> None:
-    """Register the route, websocket and service-worker guards on one crawler."""
+    """Register the route, websocket and service-worker guards on one crawler.
+
+    The route handler is registered on the **context**, not the page: a page
+    that calls ``window.open`` opens a new page whose requests a page-level
+    route never sees (MED-2). The page-level registration remains only as a
+    fallback for a hook that was given no context.
+    """
     route_hook = make_page_route_hook(policy)
 
     async def on_page_context_created(
         page: Any, context: Any = None, _config: Any = None, **_kwargs: Any
     ) -> None:
-        await page.route("**/*", route_hook)
+        target = context if context is not None else page
+        await target.route("**/*", route_hook)
 
-        route_web_socket = getattr(page, "route_web_socket", None)
+        route_web_socket = getattr(target, "route_web_socket", None)
         if route_web_socket is not None:
             await route_web_socket("**/*", _close_websocket)
 
@@ -276,8 +283,9 @@ class DocCrawler:
         if refusal is not None:
             raise UrlRefusedError(refusal)
 
-        # Check cache first
-        if use_cache:
+        # Under a policy a cached page has no final URL to judge, and it may
+        # have been written by an unpoliced CLI crawl (LOW-3), so it is skipped.
+        if use_cache and self._url_policy is None:
             cached = self._get_cached(url)
             if cached:
                 return cached
@@ -328,7 +336,9 @@ class DocCrawler:
                         break
 
             document = Document(
-                source_url=url,
+                # The page is attributed to where it actually ended up, not the
+                # first hop of a redirect chain (LOW-5).
+                source_url=final_url,
                 title=title,
                 content=result.markdown.fit_markdown
                 if hasattr(result.markdown, "fit_markdown")
@@ -421,8 +431,9 @@ class DocCrawler:
 
                 visited.add(url)
 
-                # Check cache
-                if use_cache:
+                # Under a policy a cached page has no final URL to judge, and
+                # it may have been written by an unpoliced CLI crawl (LOW-3).
+                if use_cache and self._url_policy is None:
                     cached = self._get_cached(url)
                     if cached:
                         documents.append(cached)
@@ -459,7 +470,9 @@ class DocCrawler:
                     )
 
                     document = Document(
-                        source_url=url,
+                        # Attribute the page and resolve its links against the
+                        # final hop, not the URL that started the redirect (LOW-5).
+                        source_url=final_url,
                         title=title,
                         content=content,
                         content_type=ContentType.MARKDOWN,
@@ -479,7 +492,7 @@ class DocCrawler:
                         targets = await asyncio.to_thread(
                             enqueue_targets,
                             result.links["internal"],
-                            page_url=url,
+                            page_url=final_url,
                             base_netloc=base_domain,
                             url_pattern=url_regex,
                             policy=self._url_policy,

@@ -49,21 +49,26 @@ untrusted and decide before any effect:
 - Redirects are walked hop by hop. Each `Location` is judged before its request is made, because
   Chromium otherwise follows a redirect internally without re-entering the route handler. A page whose
   final URL is refused is dropped and reported, never indexed.
-- Inside the browser every request is routed: sub-resource URLs are judged, non-network schemes are
-  refused, and websockets are closed. A page script cannot register a service worker — the context hook
-  removes `navigator.serviceWorker` in every frame before page scripts run — so a worker cannot fetch a
-  blocked address outside the route handler. That removal is defence in depth; the route handler is the
-  primary control.
+- Inside the browser every request in the **context** is routed, not only the page that started the
+  crawl: sub-resource URLs are judged, popups (`window.open`, `target=_blank`), workers and frames pass
+  through the same handler, non-network schemes are refused, and websockets are closed. A page script
+  cannot register a service worker — the context hook removes `navigator.serviceWorker` in every frame
+  before page scripts run — so a worker cannot fetch a blocked address outside the route handler. That
+  removal is defence in depth; the route handler is the primary control.
 - Git runs with `--` before the URL and path, a closed ref grammar, `protocol.file.allow=never`,
   `protocol.ext.allow=never` and `http.followRedirects=false`. The clone destination is resolved and must
-  stay inside the configured repos directory; a name that escapes it is refused, not renamed.
+  stay inside the configured repos directory; a name that escapes it is refused, not renamed. When a
+  clone directory already exists, its **origin** must equal the requested URL and pass the same policy,
+  and the pull and fetch fallback run under the same `-c` lockdown — the requested URL is not what pull
+  would contact.
 
 Two limits are stated here rather than hidden. **DNS rebinding between the policy check and the
 browser's own resolution is narrowed, not closed:** the route-level re-check catches a request that
 resolves differently on the second look, but a name that changes after that look can still be
-fetched. And **the CLI is not restricted by these rules** — `docugraph crawl` and `docugraph index git`
-clone and fetch exactly what the person at the keyboard asked for. The policy above is the MCP
-tools' contract, where the input is chosen by a model.
+fetched. And **the CLI is exempt from the scheme, DNS and address rules only** — `docugraph crawl` and
+`docugraph index git` fetch and clone exactly what the person at the keyboard asked for. The
+destination-containment, `--` and ref-grammar rules apply to every caller. The address policy above is
+the MCP tools' contract, where the input is chosen by a model.
 
 Anything that breaks one of those statements — an index written outside the configured storage
 directory, a provider request made when no cloud provider was named in the config, a path escaping the
