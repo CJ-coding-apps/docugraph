@@ -590,3 +590,61 @@ async def test_low3_policy_does_not_serve_a_cached_page(
         "a policy crawl must not serve a page whose final URL was never judged: "
         f"{cache_reads!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Round-2 review: LOW-5 deferred to 0.3.0 (MED-5)
+# ---------------------------------------------------------------------------
+
+
+class _RedirectAwareFakeCrawler:
+    """Answers per URL and records every request a site crawl makes."""
+
+    calls: list[str] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.crawler_strategy = SimpleNamespace(set_hook=lambda *a, **k: None)
+
+    async def __aenter__(self) -> "_RedirectAwareFakeCrawler":
+        return self
+
+    async def __aexit__(self, *exc) -> bool:
+        return False
+
+    async def arun(self, url: str | None = None, config=None):
+        assert url is not None
+        _RedirectAwareFakeCrawler.calls.append(url)
+        if url == "http://example.com/":
+            return _FakeResult(
+                redirected_url="http://www.example.com/",
+                links={"internal": [{"href": "/page"}]},
+            )
+        return _FakeResult(redirected_url=url, links={"internal": []})
+
+
+async def test_med5_a_relative_link_is_enqueued_when_the_start_redirects_to_another_host(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: MED-5 — LOW-5 is deferred, so links resolve against the start URL.
+
+    The link filter compares a candidate's netloc with the *start* URL's. If a
+    relative link were resolved against the redirected URL of an apex -> www
+    crawl, the candidate would be on another host and dropped: the crawl would
+    stop after one page. This pins the 0.2.0 resolution the round-2 review
+    asked to restore; LOW-5 (final-URL attribution) is deferred to 0.3.0.
+    """
+    import crawl4ai
+
+    _RedirectAwareFakeCrawler.calls = []
+    monkeypatch.setattr(crawl4ai, "AsyncWebCrawler", _RedirectAwareFakeCrawler)
+
+    crawler = crawler_module.DocCrawler()  # no policy: the CLI path
+    await crawler.crawl_site("http://example.com/", max_pages=5, use_cache=False)
+
+    assert _RedirectAwareFakeCrawler.calls == [
+        "http://example.com/",
+        "http://example.com/page",
+    ], (
+        "the relative link of a page that redirected to another host was not "
+        f"enqueued: {_RedirectAwareFakeCrawler.calls!r}"
+    )
