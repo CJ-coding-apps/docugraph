@@ -158,7 +158,7 @@ async def test_c4_mcp_caps_the_crawl_at_fifty_pages(
     assert "max_pages capped at 50" in _result_text(result)
 
 
-async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
+async def test_c6_a_service_worker_cannot_reach_a_blocked_host(loopback_alias) -> None:
     """ORACLE: C6 / A-10 — the init script removes navigator.serviceWorker.
 
     Two adjudicators, because they fail differently. The page reports what it
@@ -169,6 +169,7 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
     ``_KEEP_OPEN`` holds the document open long enough for that request to be
     attempted before the crawler closes the browser.
     """
+    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
     blocked_routes = {
         "/blocked": (
@@ -270,7 +271,9 @@ async def _crawl_ignoring_the_outcome(crawler: DocCrawler, url: str) -> None:
         pass
 
 
-async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_blocked_host() -> None:
+async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_blocked_host(
+    loopback_alias,
+) -> None:
     """ORACLE: MED-3 / C6b — the init script must also reach an about:blank frame.
 
     About:blank cannot register a worker at all (measured: ``InvalidStateError``,
@@ -279,6 +282,7 @@ async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_bl
     own ``navigator`` is the adjudicator: ``frame-sw:undefined`` proves the init
     script reached it before the frame's scripts.
     """
+    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
     blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
     blocked_port = blocked_server.server_address[1]
@@ -336,8 +340,9 @@ async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_bl
         _stop(blocked_server, blocked_thread)
 
 
-async def test_c7_popup_requests_are_routed() -> None:
+async def test_c7_popup_requests_are_routed(loopback_alias) -> None:
     """ORACLE: MED-2 / C7 — window.open opens a new page; the context routing must cover it."""
+    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
     blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
     blocked_port = blocked_server.server_address[1]
@@ -372,8 +377,9 @@ async def test_c7_popup_requests_are_routed() -> None:
         _stop(blocked_server, blocked_thread)
 
 
-async def test_c8_dedicated_worker_requests_are_routed() -> None:
+async def test_c8_dedicated_worker_requests_are_routed(loopback_alias) -> None:
     """ORACLE: MED-2 / C8 — a Worker's fetch must pass the same route handler."""
+    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
     blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
     blocked_port = blocked_server.server_address[1]

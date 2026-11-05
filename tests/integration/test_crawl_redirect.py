@@ -95,8 +95,9 @@ async def _crawl_without_caring_about_the_error(crawler: DocCrawler, url: str) -
         return
 
 
-async def test_c3_redirect_to_a_blocked_host_is_never_fetched() -> None:
+async def test_c3_redirect_to_a_blocked_host_is_never_fetched(loopback_alias) -> None:
     """ORACLE: C3 / §3.2, A-3 — a 302 to a refused host must not reach it."""
+    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
     blocked_server, blocked_thread = _start(
         "127.0.0.2", {"/blocked": _html("<html>secret</html>")}, blocked_log
@@ -132,8 +133,10 @@ async def test_c3_redirect_to_a_blocked_host_is_never_fetched() -> None:
         _stop(blocked_server, blocked_thread)
 
 
-async def test_c5_second_hop_to_a_blocked_host_is_never_fetched() -> None:
+async def test_c5_second_hop_to_a_blocked_host_is_never_fetched(loopback_alias) -> None:
     """ORACLE: C5 / A-3 — 302 -> 302 -> blocked; the final host stays untouched."""
+    loopback_alias("127.0.0.2")
+    loopback_alias("127.0.0.3")
     blocked_log: list[str] = []
     blocked_server, blocked_thread = _start(
         "127.0.0.3", {"/blocked": _html("<html>secret</html>")}, blocked_log
