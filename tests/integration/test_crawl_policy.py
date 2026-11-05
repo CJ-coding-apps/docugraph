@@ -220,3 +220,157 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
     finally:
         _stop(start_server, start_thread)
         _stop(blocked_server, blocked_thread)
+
+
+# ---------------------------------------------------------------------------
+# Round-1 review: frames, popups and workers (MED-2/MED-3: C6b, C7, C8)
+# ---------------------------------------------------------------------------
+
+# Blocking the load event keeps the page open while the request is attempted:
+# crawl4ai waits for domcontentloaded, and the crawler closes the browser as
+# soon as arun returns, so a request issued after that point proves nothing.
+_KEEP_OPEN = "const end = Date.now() + 3000; while (Date.now() < end) {}"
+
+
+def _blocked_routes() -> dict[str, tuple[int, dict[str, str], bytes]]:
+    return {
+        "/blocked": (
+            200,
+            {
+                "Content-Type": "text/plain",
+                "Access-Control-Allow-Origin": "*",
+            },
+            b"blocked",
+        )
+    }
+
+
+async def _crawl_ignoring_the_outcome(crawler: DocCrawler, url: str) -> None:
+    try:
+        await asyncio.wait_for(crawler.crawl_single(url, use_cache=False), timeout=90)
+    except Exception:  # noqa: BLE001 - the server log is the adjudicator
+        pass
+
+
+async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_blocked_host() -> None:
+    """ORACLE: MED-3 / C6b — the init script must also reach an about:blank frame."""
+    blocked_log: list[str] = []
+    blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
+    blocked_port = blocked_server.server_address[1]
+
+    start_log: list[str] = []
+    start_routes = {
+        "/": _html(
+            "<html><body><iframe id='frame'></iframe><script>"
+            "const frame = document.getElementById('frame');"
+            "try { frame.contentWindow.navigator.serviceWorker.register('/sw.js'); }"
+            " catch (error) {}"
+            f"{_KEEP_OPEN}"
+            "</script>page</body></html>"
+        ),
+        "/sw.js": (
+            200,
+            {"Content-Type": "application/javascript"},
+            (
+                "self.addEventListener('install', (event) => {"
+                f"  event.waitUntil(fetch('http://127.0.0.2:{blocked_port}/blocked'));"
+                "});"
+            ).encode(),
+        ),
+    }
+    start_server, start_thread = _start("127.0.0.1", start_routes, start_log)
+    start_port = start_server.server_address[1]
+
+    policy = UrlPolicy(
+        kind=UrlKind.WEB,
+        allow_private=True,
+        allowed_domains=("127.0.0.1",),
+    )
+    crawler = DocCrawler(url_policy=policy)
+    try:
+        await _crawl_ignoring_the_outcome(crawler, f"http://127.0.0.1:{start_port}/")
+        assert "/" in start_log, "the crawler never requested the start page"
+        assert blocked_log == [], (
+            "a service worker in an about:blank frame contacted the blocked host: "
+            f"{blocked_log}"
+        )
+    finally:
+        _stop(start_server, start_thread)
+        _stop(blocked_server, blocked_thread)
+
+
+async def test_c7_popup_requests_are_routed() -> None:
+    """ORACLE: MED-2 / C7 — window.open opens a new page; the context routing must cover it."""
+    blocked_log: list[str] = []
+    blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
+    blocked_port = blocked_server.server_address[1]
+
+    start_log: list[str] = []
+    start_routes = {
+        "/": _html(
+            "<html><body><script>"
+            f"window.open('http://127.0.0.2:{blocked_port}/blocked');"
+            f"{_KEEP_OPEN}"
+            "</script>page</body></html>"
+        )
+    }
+    start_server, start_thread = _start("127.0.0.1", start_routes, start_log)
+    start_port = start_server.server_address[1]
+
+    policy = UrlPolicy(
+        kind=UrlKind.WEB,
+        allow_private=True,
+        allowed_domains=("127.0.0.1",),
+    )
+    crawler = DocCrawler(url_policy=policy)
+    try:
+        await _crawl_ignoring_the_outcome(crawler, f"http://127.0.0.1:{start_port}/")
+        assert "/" in start_log, "the crawler never requested the start page"
+        assert blocked_log == [], (
+            "a popup contacted the blocked host outside the policy: "
+            f"{blocked_log}"
+        )
+    finally:
+        _stop(start_server, start_thread)
+        _stop(blocked_server, blocked_thread)
+
+
+async def test_c8_dedicated_worker_requests_are_routed() -> None:
+    """ORACLE: MED-2 / C8 — a Worker's fetch must pass the same route handler."""
+    blocked_log: list[str] = []
+    blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
+    blocked_port = blocked_server.server_address[1]
+
+    start_log: list[str] = []
+    start_routes = {
+        "/": _html(
+            "<html><body><script>"
+            "const worker = new Worker('/worker.js');"
+            f"{_KEEP_OPEN}"
+            "</script>page</body></html>"
+        ),
+        "/worker.js": (
+            200,
+            {"Content-Type": "application/javascript"},
+            f"fetch('http://127.0.0.2:{blocked_port}/blocked').catch(() => {{}});".encode(),
+        ),
+    }
+    start_server, start_thread = _start("127.0.0.1", start_routes, start_log)
+    start_port = start_server.server_address[1]
+
+    policy = UrlPolicy(
+        kind=UrlKind.WEB,
+        allow_private=True,
+        allowed_domains=("127.0.0.1",),
+    )
+    crawler = DocCrawler(url_policy=policy)
+    try:
+        await _crawl_ignoring_the_outcome(crawler, f"http://127.0.0.1:{start_port}/")
+        assert "/" in start_log, "the crawler never requested the start page"
+        assert blocked_log == [], (
+            "a dedicated worker contacted the blocked host outside the policy: "
+            f"{blocked_log}"
+        )
+    finally:
+        _stop(start_server, start_thread)
+        _stop(blocked_server, blocked_thread)

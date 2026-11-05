@@ -295,3 +295,106 @@ def test_a1_refusal_precedes_update_on_an_existing_path(
 
     with pytest.raises(RepoPathRefusedError):
         indexer.clone(URL, name=str(outside_repo))
+
+
+# ---------------------------------------------------------------------------
+# Round-1 review: the update path (MED-1 / G17, G18) and `a/b` (LOW-1)
+# ---------------------------------------------------------------------------
+
+
+def test_a1_multi_component_name_is_refused_before_git(
+    tmp_path: Path,
+    fake_git_policy: UrlPolicy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ORACLE: LOW-1 / A-1 — `a/b` is two components; resolve() alone admits it.
+
+    ``repos_dir/a/b`` resolves *inside* the repos directory when ``b`` does not
+    exist, so the containment stage cannot catch this name. Only the
+    single-component rule can, and it must run before git.
+    """
+    repos_dir = tmp_path / "repos"
+    repos_dir.mkdir()
+    monkeypatch.setattr(GitIndexer, "_run_git_command", _no_git)
+    indexer = GitIndexer(
+        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
+    )
+
+    with pytest.raises(RepoPathRefusedError) as excinfo:
+        indexer.clone(URL, name="a/b")
+
+    assert "Refused: path_escape" in str(excinfo.value)
+
+
+@requires_git
+def test_g17_existing_repo_with_a_different_origin_is_refused(
+    tmp_path: Path,
+    outside_repo: Path,
+    fake_git_policy: UrlPolicy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ORACLE: MED-1 / G17 — pull would use the origin, so the origin is what is judged.
+
+    The requested URL passes the policy; the existing clone's origin is a
+    different value. Refuse before any pull or fetch.
+    """
+    repos_dir = tmp_path / "repos"
+    repos_dir.mkdir()
+    existing = repos_dir / "existing"
+    _git("init", str(existing))
+    _git("-C", str(existing), "remote", "add", "origin", str(outside_repo))
+
+    calls: list[list[str]] = []
+    real = GitIndexer._run_git_command
+
+    def _record(self, args, **kwargs):
+        calls.append(list(args))
+        return real(self, args, **kwargs)
+
+    monkeypatch.setattr(GitIndexer, "_run_git_command", _record)
+    indexer = GitIndexer(
+        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
+    )
+
+    with pytest.raises(RepoPathRefusedError) as excinfo:
+        indexer.clone(URL, name="existing")
+
+    assert "origin differs" in str(excinfo.value), str(excinfo.value)
+    assert not any(
+        "pull" in args or "fetch" in args for args in calls
+    ), f"a refused origin must not be pulled: {calls!r}"
+
+
+def test_g18_pull_carries_the_restricted_config_under_policy(
+    tmp_path: Path,
+    fake_git_policy: UrlPolicy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ORACLE: MED-1 / G18 — pull and the fetch fallback carry the same -c lockdown."""
+    repos_dir = tmp_path / "repos"
+    existing = repos_dir / "existing"
+    (existing / ".git").mkdir(parents=True)
+
+    calls: list[list[str]] = []
+
+    def _fake(self, args, cwd=None, timeout=None):
+        calls.append(list(args))
+        if args[:3] == ["remote", "get-url", "origin"]:
+            return URL, "", 0
+        return "", "", 0
+
+    monkeypatch.setattr(GitIndexer, "_run_git_command", _fake)
+    indexer = GitIndexer(
+        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
+    )
+
+    indexer.update(existing, expected_url=URL)
+
+    pulls = [args for args in calls if "pull" in args]
+    assert pulls, f"update() never ran pull: {calls!r}"
+    pull = pulls[0]
+    pull_at = pull.index("pull")
+    for pair in RESTRICTED_CONFIG_PAIRS:
+        assert _occurs_before(pull, pair, pull_at), (
+            f"missing {pair!r} before pull in {pull!r}"
+        )

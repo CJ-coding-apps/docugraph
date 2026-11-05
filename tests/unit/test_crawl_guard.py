@@ -474,3 +474,119 @@ async def test_a6_max_pages_one_uses_crawl_single(
 
     assert recorder.get("crawl_single") is True
     assert "crawl_site" not in recorder
+
+
+# ---------------------------------------------------------------------------
+# Round-1 review: the post-crawl backstop (MED-4) and the policy cache (LOW-3)
+# ---------------------------------------------------------------------------
+
+
+class _FakeResult:
+    """The slice of a crawl4ai result the backstop reads."""
+
+    def __init__(self, *, redirected_url: str, links: dict | None = None) -> None:
+        self.url = "https://docs.example/"
+        self.redirected_url = redirected_url
+        self.success = True
+        self.metadata = {}
+        self.markdown = "# Docs"
+        self.html = "<html><body>Docs</body></html>"
+        self.links = links if links is not None else {"internal": []}
+
+
+class _FakeAsyncCrawler:
+    """A browser replacement: ``arun`` returns a result with a chosen final URL."""
+
+    result: _FakeResult
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.crawler_strategy = SimpleNamespace(set_hook=lambda *a, **k: None)
+
+    async def __aenter__(self) -> "_FakeAsyncCrawler":
+        return self
+
+    async def __aexit__(self, *exc) -> bool:
+        return False
+
+    async def arun(self, url: str | None = None, config=None):
+        return self.result
+
+
+def _install_fake_browser(monkeypatch: pytest.MonkeyPatch, result: _FakeResult) -> None:
+    import crawl4ai
+
+    _FakeAsyncCrawler.result = result
+    monkeypatch.setattr(crawl4ai, "AsyncWebCrawler", _FakeAsyncCrawler)
+
+
+def _backstop_policy() -> UrlPolicy:
+    return _web_policy(
+        {
+            "docs.example": ("1.1.1.1",),
+            "169.254.169.254": ("169.254.169.254",),
+        }
+    )
+
+
+async def test_a33_single_page_with_a_blocked_final_url_is_refused(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-3.3 / MED-4 — the backstop raises even when the route hook saw nothing."""
+    _install_fake_browser(monkeypatch, _FakeResult(redirected_url=PRIVATE_URL))
+    crawler = crawler_module.DocCrawler(url_policy=_backstop_policy())
+
+    with pytest.raises(crawler_module.UrlRefusedError) as excinfo:
+        await crawler.crawl_single("https://docs.example/", use_cache=False)
+
+    assert excinfo.value.refusal.reason is RefusalReason.PRIVATE_ADDRESS
+
+
+async def test_a33_site_crawl_drops_a_page_with_a_blocked_final_url(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-3.3 / MED-4 — the page is dropped, reported, and not indexed."""
+    _install_fake_browser(monkeypatch, _FakeResult(redirected_url=PRIVATE_URL))
+    crawler = crawler_module.DocCrawler(url_policy=_backstop_policy())
+    dropped: list[tuple[str, UrlRefusal]] = []
+
+    documents = await crawler.crawl_site(
+        "https://docs.example/",
+        max_pages=2,
+        use_cache=False,
+        on_refused=lambda url, refusal: dropped.append((url, refusal)),
+    )
+
+    assert documents == []
+    assert len(dropped) == 1, dropped
+    assert dropped[0][0] == PRIVATE_URL, dropped
+    assert dropped[0][1].reason is RefusalReason.PRIVATE_ADDRESS
+
+
+async def test_low3_policy_does_not_serve_a_cached_page(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: LOW-3 — a cached page has no backstop, so a policy crawl skips the cache."""
+    _install_fake_browser(
+        monkeypatch,
+        _FakeResult(redirected_url="https://docs.example/", links={}),
+    )
+    crawler = crawler_module.DocCrawler(url_policy=_backstop_policy())
+
+    cache_reads: list[str] = []
+    real_get_cached = crawler._get_cached
+
+    def _record(url: str):
+        cache_reads.append(url)
+        return real_get_cached(url)
+
+    monkeypatch.setattr(crawler, "_get_cached", _record)
+
+    documents = await crawler.crawl_site(
+        "https://docs.example/", max_pages=1, use_cache=True
+    )
+
+    assert documents, "the fake browser returned a page"
+    assert cache_reads == [], (
+        "a policy crawl must not serve a page whose final URL was never judged: "
+        f"{cache_reads!r}"
+    )
