@@ -159,7 +159,16 @@ async def test_c4_mcp_caps_the_crawl_at_fifty_pages(
 
 
 async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
-    """ORACLE: C6 / A-10 — the init script removes navigator.serviceWorker."""
+    """ORACLE: C6 / A-10 — the init script removes navigator.serviceWorker.
+
+    Two adjudicators, because they fail differently. The page reports what it
+    saw (``sw:undefined`` when the init script ran, ``sw:object`` when it did
+    not) and the blocked host's log must stay empty. Measured: without the init
+    script a top-level page registers the worker and its install handler does
+    reach the blocked host, so this is a real request, not a hypothetical one.
+    ``_KEEP_OPEN`` holds the document open long enough for that request to be
+    attempted before the crawler closes the browser.
+    """
     blocked_log: list[str] = []
     blocked_routes = {
         "/blocked": (
@@ -178,7 +187,11 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
     start_routes = {
         "/": _html(
             "<html><body><script>"
-            "navigator.serviceWorker.register('/sw.js');"
+            "document.title = 'sw:' + typeof navigator.serviceWorker;"
+            "if (navigator.serviceWorker) {"
+            "  navigator.serviceWorker.register('/sw.js');"
+            "}"
+            f"{_KEEP_OPEN}"
             "</script>page</body></html>"
         ),
         "/sw.js": (
@@ -200,9 +213,10 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
         allowed_domains=("127.0.0.1",),
     )
     crawler = DocCrawler(url_policy=policy)
+    document = None
     try:
         try:
-            await asyncio.wait_for(
+            document = await asyncio.wait_for(
                 crawler.crawl_single(
                     f"http://127.0.0.1:{start_port}/", use_cache=False
                 ),
@@ -213,6 +227,10 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
         # Give a registered worker time to run its install handler.
         await asyncio.sleep(1.0)
         assert "/" in start_log, "the crawler never requested the start page"
+        assert document is not None and document.title == "sw:undefined", (
+            "the init script did not remove navigator.serviceWorker before page "
+            f"scripts ran; the page reported {getattr(document, 'title', None)!r}"
+        )
         assert blocked_log == [], (
             "a service worker contacted the blocked host outside page.route: "
             f"{blocked_log}"
@@ -253,7 +271,14 @@ async def _crawl_ignoring_the_outcome(crawler: DocCrawler, url: str) -> None:
 
 
 async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_blocked_host() -> None:
-    """ORACLE: MED-3 / C6b — the init script must also reach an about:blank frame."""
+    """ORACLE: MED-3 / C6b — the init script must also reach an about:blank frame.
+
+    About:blank cannot register a worker at all (measured: ``InvalidStateError``,
+    because the document URL is not a fetchable script base), so the blocked
+    log alone would stay empty whether or not the init script ran. The frame's
+    own ``navigator`` is the adjudicator: ``frame-sw:undefined`` proves the init
+    script reached it before the frame's scripts.
+    """
     blocked_log: list[str] = []
     blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
     blocked_port = blocked_server.server_address[1]
@@ -263,8 +288,9 @@ async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_bl
         "/": _html(
             "<html><body><iframe id='frame'></iframe><script>"
             "const frame = document.getElementById('frame');"
-            "try { frame.contentWindow.navigator.serviceWorker.register('/sw.js'); }"
-            " catch (error) {}"
+            "const sw = frame.contentWindow.navigator.serviceWorker;"
+            "document.title = 'frame-sw:' + typeof sw;"
+            "if (sw) { try { sw.register('/sw.js'); } catch (error) {} }"
             f"{_KEEP_OPEN}"
             "</script>page</body></html>"
         ),
@@ -287,9 +313,20 @@ async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_bl
         allowed_domains=("127.0.0.1",),
     )
     crawler = DocCrawler(url_policy=policy)
+    document = None
     try:
-        await _crawl_ignoring_the_outcome(crawler, f"http://127.0.0.1:{start_port}/")
+        try:
+            document = await asyncio.wait_for(
+                crawler.crawl_single(f"http://127.0.0.1:{start_port}/", use_cache=False),
+                timeout=90,
+            )
+        except Exception:  # noqa: BLE001 - the log is the adjudicator
+            pass
         assert "/" in start_log, "the crawler never requested the start page"
+        assert document is not None and document.title == "frame-sw:undefined", (
+            "the init script did not reach the about:blank frame; the frame "
+            f"reported {getattr(document, 'title', None)!r}"
+        )
         assert blocked_log == [], (
             "a service worker in an about:blank frame contacted the blocked host: "
             f"{blocked_log}"
