@@ -14,6 +14,7 @@ Provides tools for Claude Code and other MCP-compatible clients:
 
 import asyncio
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from mcp.server import Server
@@ -26,8 +27,88 @@ from mcp.types import (
 )
 
 from docugraph._version import __version__
+from docugraph.core.config import get_config
 from docugraph.core.llm import LLMUnavailableError
+from docugraph.ingestion.git_indexer import (
+    InvalidGitRefError,
+    RepoPathRefusedError,
+)
+from docugraph.security.url_policy import (
+    UrlKind,
+    UrlPolicy,
+    UrlRefusal,
+    UrlRefusedError,
+    format_refusal,
+)
 from docugraph.storage.vector_store import VectorStore
+
+# The MCP surface caps a site crawl regardless of what the caller asks for, so
+# a single agent call cannot turn into an unbounded crawl (A-6 / D-5).
+CRAWL_MAX_PAGES = 50
+
+
+def _web_policy() -> UrlPolicy:
+    """The page policy for one tool call: one instance, so one DNS memo."""
+    crawler_config = get_config().crawler
+    return UrlPolicy(
+        kind=UrlKind.WEB,
+        allow_private=crawler_config.allow_private_networks,
+        allowed_domains=tuple(crawler_config.allowed_domains),
+    )
+
+
+def _git_policy() -> UrlPolicy:
+    """The remote policy for one tool call."""
+    crawler_config = get_config().crawler
+    return UrlPolicy(
+        kind=UrlKind.GIT_REMOTE,
+        allow_private=crawler_config.allow_private_networks,
+        allowed_domains=tuple(crawler_config.allowed_domains),
+    )
+
+
+def _refusal_result(refusal: UrlRefusal) -> CallToolResult:
+    """A refusal is an error whose text is exactly the one-line reason."""
+    return CallToolResult(
+        content=[TextContent(type="text", text=format_refusal(refusal))],
+        isError=True,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class MaxPagesOk:
+    """A usable page cap and whether the request was clamped to it."""
+
+    cap: int
+    capped: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MaxPagesRefused:
+    """The caller's value cannot be used; ``detail`` says why."""
+
+    detail: str
+
+
+def decide_max_pages(value: object) -> MaxPagesOk | MaxPagesRefused:
+    """Parse and clamp ``max_pages`` without touching any effect."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return MaxPagesRefused("must be an integer")
+    if value < 1:
+        return MaxPagesRefused("must be at least 1")
+    if value > CRAWL_MAX_PAGES:
+        return MaxPagesOk(cap=CRAWL_MAX_PAGES, capped=True)
+    return MaxPagesOk(cap=value, capped=False)
+
+
+def _format_dropped(dropped: list[tuple[str, UrlRefusal]]) -> str:
+    """N8: one line, then the first five URLs with their reasons."""
+    lines = [f"Dropped {len(dropped)} page(s) by policy:"]
+    lines.extend(f"{url} ({refusal.reason})" for url, refusal in dropped[:5])
+    if len(dropped) > 5:
+        lines.append("…")
+    return "\n".join(lines)
+
 
 # Initialize server. `version` is passed explicitly: without it the MCP SDK
 # falls back to the *mcp* package's version (server.py: `server_version =
@@ -536,27 +617,46 @@ async def _hybrid_search(arguments: dict[str, Any]) -> CallToolResult:
 async def _crawl_url(arguments: dict[str, Any]) -> CallToolResult:
     """Crawl a URL and index its content."""
     url = arguments.get("url", "")
-    max_pages = arguments.get("max_pages", 1)
-
-    if not url:
+    if not isinstance(url, str) or not url:
         return CallToolResult(
             content=[TextContent(type="text", text="Error: url is required")],
             isError=True,
         )
 
+    pages = decide_max_pages(arguments.get("max_pages", 1))
+    if isinstance(pages, MaxPagesRefused):
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Error: max_pages {pages.detail}.")],
+            isError=True,
+        )
+
+    policy = _web_policy()
+
     try:
+        # Refused before the store, the crawler or the cache is touched.
+        refusal = await asyncio.to_thread(policy.check, url)
+        if refusal is not None:
+            return _refusal_result(refusal)
+
         from docugraph.ingestion.chunker import Chunker
         from docugraph.ingestion.crawler import DocCrawler
 
-        crawler = DocCrawler()
-        chunker = Chunker()
-        vector_store = get_vector_store()
+        crawler = DocCrawler(url_policy=policy)
+        dropped: list[tuple[str, UrlRefusal]] = []
+
+        def collect_refusal(dropped_url: str, dropped_refusal: UrlRefusal) -> None:
+            dropped.append((dropped_url, dropped_refusal))
 
         # Crawl
-        if max_pages == 1:
+        if pages.cap == 1:
             documents = [await crawler.crawl_single(url)]
         else:
-            documents = await crawler.crawl_site(url, max_pages=max_pages)
+            documents = await crawler.crawl_site(
+                url, max_pages=pages.cap, on_refused=collect_refusal
+            )
+
+        chunker = Chunker()
+        vector_store = get_vector_store()
 
         # Chunk and index
         all_chunks = []
@@ -566,15 +666,21 @@ async def _crawl_url(arguments: dict[str, Any]) -> CallToolResult:
 
         count = vector_store.add_chunks(all_chunks)
 
+        text = (
+            f"Successfully indexed {count} chunks from {len(documents)} pages.\n"
+            f"Total chunks in store: {vector_store.count()}"
+        )
+        if pages.capped:
+            text += f"\nmax_pages capped at {CRAWL_MAX_PAGES}"
+        if dropped:
+            text += "\n" + _format_dropped(dropped)
+
         return CallToolResult(
-            content=[
-                TextContent(
-                    type="text",
-                    text=f"Successfully indexed {count} chunks from {len(documents)} pages.\nTotal chunks in store: {vector_store.count()}",
-                )
-            ],
+            content=[TextContent(type="text", text=text)],
         )
 
+    except UrlRefusedError as e:
+        return _refusal_result(e.refusal)
     except Exception as e:
         return CallToolResult(
             content=[TextContent(type="text", text=f"Error crawling: {str(e)}")],
@@ -595,7 +701,14 @@ async def _index_git(arguments: dict[str, Any]) -> CallToolResult:
             isError=True,
         )
 
+    policy = _git_policy()
+
     try:
+        # Refused before git, the filesystem or the store is touched.
+        refusal = await asyncio.to_thread(policy.check, url)
+        if refusal is not None:
+            return _refusal_result(refusal)
+
         from docugraph.ingestion.chunker import Chunker
         from docugraph.ingestion.git_indexer import GitIndexer, GitIndexerConfig
 
@@ -605,12 +718,13 @@ async def _index_git(arguments: dict[str, Any]) -> CallToolResult:
             include_code=include_code,
         )
 
-        indexer = GitIndexer(config=config)
+        indexer = GitIndexer(config=config, url_policy=policy)
+
+        # Clone and index (name/ref/path refusals happen inside clone()).
+        repo_info, documents = indexer.clone_and_index(url, name=name, ref=ref)
+
         chunker = Chunker()
         vector_store = get_vector_store()
-
-        # Clone and index
-        repo_info, documents = indexer.clone_and_index(url, name=name, ref=ref)
 
         # Chunk and index
         all_chunks = []
@@ -634,6 +748,15 @@ async def _index_git(arguments: dict[str, Any]) -> CallToolResult:
             ],
         )
 
+    except UrlRefusedError as e:
+        return _refusal_result(e.refusal)
+    except RepoPathRefusedError as e:
+        return _refusal_result(e.refusal)
+    except InvalidGitRefError as e:
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Error: {e}")],
+            isError=True,
+        )
     except Exception as e:
         return CallToolResult(
             content=[TextContent(type="text", text=f"Error indexing git repo: {str(e)}")],
