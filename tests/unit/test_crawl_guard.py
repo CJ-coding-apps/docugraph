@@ -648,3 +648,56 @@ async def test_med5_a_relative_link_is_enqueued_when_the_start_redirects_to_anot
         "the relative link of a page that redirected to another host was not "
         f"enqueued: {_RedirectAwareFakeCrawler.calls!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Round-4 review: crawl4ai's anti-bot replay (retry / browser-less fallback)
+# ---------------------------------------------------------------------------
+
+
+async def test_round4_both_crawl_paths_pin_crawl4ais_replay_off(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: round-4 item 3 — the browser-less fallback must stay impossible.
+
+    The retry itself is guarded: it calls ``crawler_strategy.crawl`` again, and
+    the ``on_page_context_created`` hook docugraph installs runs for it (proven
+    against the real browser in tests/integration/test_crawl_antibot.py). The
+    fallback is not: ``await fallback_fetch_function(url)`` is a plain HTTP
+    fetch in Python, outside the browser and outside every guard. crawl4ai
+    0.9.3 defaults both off, and this pins them so a future default cannot
+    switch the fallback on. The stand-in config models exactly that future
+    release; without the pin both attributes stay on.
+    """
+    import crawl4ai
+
+    real_config = crawl4ai.CrawlerRunConfig
+    seen: list = []
+
+    def _future_default_config(*args, **kwargs):
+        """A crawl4ai whose anti-bot replay is on by default."""
+        kwargs.setdefault("max_retries", 3)
+        kwargs.setdefault("fallback_fetch_function", lambda url: "")
+        config = real_config(*args, **kwargs)
+        seen.append(config)
+        return config
+
+    monkeypatch.setattr(crawl4ai, "CrawlerRunConfig", _future_default_config)
+    _install_fake_browser(
+        monkeypatch, _FakeResult(redirected_url="https://docs.example/")
+    )
+
+    crawler = crawler_module.DocCrawler()  # no policy: the CLI path too
+    await crawler.crawl_single("https://docs.example/", use_cache=False)
+    await crawler.crawl_site("https://docs.example/", max_pages=1, use_cache=False)
+
+    assert len(seen) == 2, "both crawl paths must build a crawl4ai config"
+    for config in seen:
+        assert config.max_retries == 0, (
+            "the anti-bot retry was not pinned off: "
+            f"{getattr(config, 'max_retries', None)!r}"
+        )
+        assert config.fallback_fetch_function is None, (
+            "crawl4ai's browser-less fallback fetch was not pinned off: "
+            f"{getattr(config, 'fallback_fetch_function', None)!r}"
+        )

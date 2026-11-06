@@ -158,7 +158,7 @@ async def test_c4_mcp_caps_the_crawl_at_fifty_pages(
     assert "max_pages capped at 50" in _result_text(result)
 
 
-async def test_c6_a_service_worker_cannot_reach_a_blocked_host(loopback_alias) -> None:
+async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
     """ORACLE: C6 / A-10 — the init script removes navigator.serviceWorker.
 
     Two adjudicators, because they fail differently. The page reports what it
@@ -168,8 +168,15 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host(loopback_alias) -
     reach the blocked host, so this is a real request, not a hypothetical one.
     ``_KEEP_OPEN`` holds the document open long enough for that request to be
     attempted before the crawler closes the browser.
+
+    The blocked host is named ``localhost`` and answered by a server on
+    127.0.0.1, rather than bound to 127.0.0.2. On macOS a connection to a
+    non-primary loopback alias fails inside the OS (the client's selected
+    source address equals the alias, and the server's accepted socket raises
+    ``ENOTCONN``), so a ``127.0.0.2`` listener is unreachable whether or not the
+    policy holds -- the log would be empty for the wrong reason. The name is
+    reachable here and refused by ``allowed_domains``.
     """
-    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
     blocked_routes = {
         "/blocked": (
@@ -181,13 +188,15 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host(loopback_alias) -
             b"blocked",
         )
     }
-    blocked_server, blocked_thread = _start("127.0.0.2", blocked_routes, blocked_log)
+    blocked_server, blocked_thread = _start("127.0.0.1", blocked_routes, blocked_log)
     blocked_port = blocked_server.server_address[1]
 
     start_log: list[str] = []
     start_routes = {
         "/": _html(
-            "<html><body><script>"
+            "<html><head><title>fixture</title></head><body>"
+            "<p>This fixture page carries enough readable text for Crawl4AI's "
+            "structural check to accept it as a real document.</p><script>"
             "document.title = 'sw:' + typeof navigator.serviceWorker;"
             "if (navigator.serviceWorker) {"
             "  navigator.serviceWorker.register('/sw.js');"
@@ -200,7 +209,7 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host(loopback_alias) -
             {"Content-Type": "application/javascript"},
             (
                 "self.addEventListener('install', (event) => {"
-                f"  event.waitUntil(fetch('http://127.0.0.2:{blocked_port}/blocked'));"
+                f"  event.waitUntil(fetch('http://localhost:{blocked_port}/blocked'));"
                 "});"
             ).encode(),
         ),
@@ -271,26 +280,27 @@ async def _crawl_ignoring_the_outcome(crawler: DocCrawler, url: str) -> None:
         pass
 
 
-async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_blocked_host(
-    loopback_alias,
-) -> None:
+async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_blocked_host() -> None:
     """ORACLE: MED-3 / C6b — the init script must also reach an about:blank frame.
 
     About:blank cannot register a worker at all (measured: ``InvalidStateError``,
     because the document URL is not a fetchable script base), so the blocked
     log alone would stay empty whether or not the init script ran. The frame's
     own ``navigator`` is the adjudicator: ``frame-sw:undefined`` proves the init
-    script reached it before the frame's scripts.
+    script reached it before the frame's scripts. The blocked host is named
+    ``localhost`` for the reason given in C6.
     """
-    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
-    blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
+    blocked_server, blocked_thread = _start("127.0.0.1", _blocked_routes(), blocked_log)
     blocked_port = blocked_server.server_address[1]
 
     start_log: list[str] = []
     start_routes = {
         "/": _html(
-            "<html><body><iframe id='frame'></iframe><script>"
+            "<html><head><title>fixture</title></head><body>"
+            "<p>This fixture page carries enough readable text for Crawl4AI's "
+            "structural check to accept it as a real document.</p>"
+            "<iframe id='frame'></iframe><script>"
             "const frame = document.getElementById('frame');"
             "const sw = frame.contentWindow.navigator.serviceWorker;"
             "document.title = 'frame-sw:' + typeof sw;"
@@ -303,7 +313,7 @@ async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_bl
             {"Content-Type": "application/javascript"},
             (
                 "self.addEventListener('install', (event) => {"
-                f"  event.waitUntil(fetch('http://127.0.0.2:{blocked_port}/blocked'));"
+                f"  event.waitUntil(fetch('http://localhost:{blocked_port}/blocked'));"
                 "});"
             ).encode(),
         ),
@@ -340,18 +350,17 @@ async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_bl
         _stop(blocked_server, blocked_thread)
 
 
-async def test_c7_popup_requests_are_routed(loopback_alias) -> None:
+async def test_c7_popup_requests_are_routed() -> None:
     """ORACLE: MED-2 / C7 — window.open opens a new page; the context routing must cover it."""
-    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
-    blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
+    blocked_server, blocked_thread = _start("127.0.0.1", _blocked_routes(), blocked_log)
     blocked_port = blocked_server.server_address[1]
 
     start_log: list[str] = []
     start_routes = {
         "/": _html(
             "<html><body><script>"
-            f"window.open('http://127.0.0.2:{blocked_port}/blocked');"
+            f"window.open('http://localhost:{blocked_port}/blocked');"
             f"{_KEEP_OPEN}"
             "</script>page</body></html>"
         )
@@ -377,11 +386,10 @@ async def test_c7_popup_requests_are_routed(loopback_alias) -> None:
         _stop(blocked_server, blocked_thread)
 
 
-async def test_c8_dedicated_worker_requests_are_routed(loopback_alias) -> None:
+async def test_c8_dedicated_worker_requests_are_routed() -> None:
     """ORACLE: MED-2 / C8 — a Worker's fetch must pass the same route handler."""
-    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
-    blocked_server, blocked_thread = _start("127.0.0.2", _blocked_routes(), blocked_log)
+    blocked_server, blocked_thread = _start("127.0.0.1", _blocked_routes(), blocked_log)
     blocked_port = blocked_server.server_address[1]
 
     start_log: list[str] = []
@@ -395,7 +403,7 @@ async def test_c8_dedicated_worker_requests_are_routed(loopback_alias) -> None:
         "/worker.js": (
             200,
             {"Content-Type": "application/javascript"},
-            f"fetch('http://127.0.0.2:{blocked_port}/blocked').catch(() => {{}});".encode(),
+            f"fetch('http://localhost:{blocked_port}/blocked').catch(() => {{}});".encode(),
         ),
     }
     start_server, start_thread = _start("127.0.0.1", start_routes, start_log)

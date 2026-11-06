@@ -1,9 +1,13 @@
 """C3/C5: redirect enforcement, adjudicated by the blocked server's request log.
 
-The crawler runs a real headless Chromium against three loopback servers. The
-policy's resolver is the real one -- every target is a numeric loopback address,
-so DNS is local. The blocked server's log is the adjudicator: it must be empty
-for the address the policy refused, whatever the browser returned.
+The crawler runs a real headless Chromium against three servers, all bound to
+127.0.0.1 and told apart by the host name in the URL (``127.0.0.1``, ``127.1``,
+``localhost``). A second loopback alias such as 127.0.0.2 cannot be used on
+macOS: connecting to a non-primary alias makes the OS pick that same address as
+the client's source, and the connection dies (the server's accepted socket
+raises ``ENOTCONN``), so a 127.0.0.2 listener is unreachable regardless of the
+policy and the log would be empty for the wrong reason. The three names above
+all reach 127.0.0.1 and are refused by ``allowed_domains``.
 
 These tests need Chromium; the skip reason names the install command.
 """
@@ -95,19 +99,18 @@ async def _crawl_without_caring_about_the_error(crawler: DocCrawler, url: str) -
         return
 
 
-async def test_c3_redirect_to_a_blocked_host_is_never_fetched(loopback_alias) -> None:
+async def test_c3_redirect_to_a_blocked_host_is_never_fetched() -> None:
     """ORACLE: C3 / §3.2, A-3 — a 302 to a refused host must not reach it."""
-    loopback_alias("127.0.0.2")
     blocked_log: list[str] = []
     blocked_server, blocked_thread = _start(
-        "127.0.0.2", {"/blocked": _html("<html>secret</html>")}, blocked_log
+        "127.0.0.1", {"/blocked": _html("<html>secret</html>")}, blocked_log
     )
     blocked_port = blocked_server.server_address[1]
 
     start_log: list[str] = []
     start_server, start_thread = _start(
         "127.0.0.1",
-        {"/": _redirect(f"http://127.0.0.2:{blocked_port}/blocked")},
+        {"/": _redirect(f"http://localhost:{blocked_port}/blocked")},
         start_log,
     )
     start_port = start_server.server_address[1]
@@ -133,20 +136,18 @@ async def test_c3_redirect_to_a_blocked_host_is_never_fetched(loopback_alias) ->
         _stop(blocked_server, blocked_thread)
 
 
-async def test_c5_second_hop_to_a_blocked_host_is_never_fetched(loopback_alias) -> None:
+async def test_c5_second_hop_to_a_blocked_host_is_never_fetched() -> None:
     """ORACLE: C5 / A-3 — 302 -> 302 -> blocked; the final host stays untouched."""
-    loopback_alias("127.0.0.2")
-    loopback_alias("127.0.0.3")
     blocked_log: list[str] = []
     blocked_server, blocked_thread = _start(
-        "127.0.0.3", {"/blocked": _html("<html>secret</html>")}, blocked_log
+        "127.0.0.1", {"/blocked": _html("<html>secret</html>")}, blocked_log
     )
     blocked_port = blocked_server.server_address[1]
 
     middle_log: list[str] = []
     middle_server, middle_thread = _start(
-        "127.0.0.2",
-        {"/step2": _redirect(f"http://127.0.0.3:{blocked_port}/blocked")},
+        "127.0.0.1",
+        {"/step2": _redirect(f"http://localhost:{blocked_port}/blocked")},
         middle_log,
     )
     middle_port = middle_server.server_address[1]
@@ -154,7 +155,7 @@ async def test_c5_second_hop_to_a_blocked_host_is_never_fetched(loopback_alias) 
     start_log: list[str] = []
     start_server, start_thread = _start(
         "127.0.0.1",
-        {"/": _redirect(f"http://127.0.0.2:{middle_port}/step2")},
+        {"/": _redirect(f"http://127.1:{middle_port}/step2")},
         start_log,
     )
     start_port = start_server.server_address[1]
@@ -162,7 +163,7 @@ async def test_c5_second_hop_to_a_blocked_host_is_never_fetched(loopback_alias) 
     policy = UrlPolicy(
         kind=UrlKind.WEB,
         allow_private=True,
-        allowed_domains=("127.0.0.1", "127.0.0.2"),
+        allowed_domains=("127.0.0.1", "127.1"),
     )
     crawler = DocCrawler(url_policy=policy)
 
