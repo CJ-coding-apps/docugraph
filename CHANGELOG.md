@@ -26,6 +26,9 @@ public API.
 - **Service workers cannot bypass the route handler.** The page-context hook removes
   `navigator.serviceWorker` in every frame before page scripts run. Websockets are closed. Routing is
   registered on the browser context, so popups, frames and workers are judged by the same handler.
+- **crawl4ai's anti-bot replay cannot escape the guards.** Its retry navigates through the same hooked
+  context and is routed; its browser-less `fallback_fetch_function` would run outside every guard, so
+  the retry and the fallback are pinned off in both crawl paths.
 - **An existing clone is updated only from the origin that was judged.** When the clone destination
   already exists, its `origin` must equal the requested URL and pass the same policy; a mismatch is
   refused as `path_escape`. Pull and the fetch fallback carry the same protocol and redirect lockdown

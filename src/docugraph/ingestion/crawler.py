@@ -190,6 +190,24 @@ def _install_page_guards(crawler: Any, policy: UrlPolicy) -> None:
     crawler.crawler_strategy.set_hook("on_page_context_created", on_page_context_created)
 
 
+def _pin_replay_guards(crawler_config: Any) -> None:
+    """Turn crawl4ai's anti-bot replay off (round-4 item 3).
+
+    crawl4ai >= 0.9 retries a page it classifies as blocked up to
+    ``max_retries`` times. That retry calls ``crawler_strategy.crawl`` again,
+    which runs ``on_page_context_created``, so it navigates inside the same
+    guarded context and is covered by the route, websocket and init-script
+    guards. ``fallback_fetch_function`` is different: it is a plain HTTP fetch
+    run in Python, outside the browser and outside every guard, and a future
+    crawl4ai default must not be able to switch it on. Both are already off by
+    default; this pins them. Older crawl4ai has neither attribute.
+    """
+    if hasattr(crawler_config, "max_retries"):
+        crawler_config.max_retries = 0
+    if hasattr(crawler_config, "fallback_fetch_function"):
+        crawler_config.fallback_fetch_function = None
+
+
 class DocCrawler:
     """Web crawler for documentation sites using Crawl4AI."""
 
@@ -309,6 +327,7 @@ class DocCrawler:
             ),
             wait_until="domcontentloaded",
         )
+        _pin_replay_guards(crawler_config)
 
         async with AsyncWebCrawler(config=browser_config) as crawler:
             if self._url_policy is not None:
@@ -401,6 +420,7 @@ class DocCrawler:
             ),
             wait_until="domcontentloaded",
         )
+        _pin_replay_guards(crawler_config)
 
         # Parse base domain for filtering
         parsed_start = urlparse(start_url)

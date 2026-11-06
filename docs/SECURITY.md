@@ -54,7 +54,10 @@ untrusted and decide before any effect:
   through the same handler, non-network schemes are refused, and websockets are closed. A page script
   cannot register a service worker — the context hook removes `navigator.serviceWorker` in every frame
   before page scripts run — so a worker cannot fetch a blocked address outside the route handler. That
-  removal is defence in depth; the route handler is the primary control.
+  removal is defence in depth; the route handler is the primary control. crawl4ai's anti-bot retry
+  navigates through the same hooked context and is covered by these guards; its browser-less
+  `fallback_fetch_function` would run outside every guard, so the retry and the fallback are pinned off
+  in both crawl paths.
 - Git runs with `--` before the URL and path, a closed ref grammar, `protocol.file.allow=never`,
   `protocol.ext.allow=never` and `http.followRedirects=false`. The clone destination is resolved and must
   stay inside the configured repos directory; a name that escapes it is refused, not renamed. When a
