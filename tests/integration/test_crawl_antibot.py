@@ -121,9 +121,7 @@ async def test_antibot_retry_navigation_is_routed() -> None:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 
     try:
-        async with AsyncWebCrawler(
-            config=BrowserConfig(headless=True, verbose=False)
-        ) as crawler:
+        async with AsyncWebCrawler(config=BrowserConfig(headless=True, verbose=False)) as crawler:
             _install_page_guards(crawler, policy)
             result = await crawler.arun(
                 url=f"http://127.0.0.1:{start_port}/",
@@ -147,8 +145,7 @@ async def test_antibot_retry_navigation_is_routed() -> None:
             f"{getattr(result, 'error_message', None)!r}"
         )
         assert blocked_log == [], (
-            "crawl4ai's anti-bot retry navigated outside docugraph's guards: "
-            f"{blocked_log}"
+            f"crawl4ai's anti-bot retry navigated outside docugraph's guards: {blocked_log}"
         )
     finally:
         start_server.shutdown()

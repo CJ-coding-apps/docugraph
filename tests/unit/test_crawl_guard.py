@@ -677,7 +677,7 @@ async def test_round4_both_crawl_paths_pin_crawl4ais_replay_off(
     def _future_default_config(*args, **kwargs):
         """A crawl4ai whose anti-bot replay is on by default."""
         kwargs.setdefault("max_retries", 3)
-        kwargs.setdefault("fallback_fetch_function", lambda url: "")
+        kwargs.setdefault("fallback_fetch_function", lambda _url: "")
         config = real_config(*args, **kwargs)
         seen.append(config)
         return config
