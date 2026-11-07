@@ -14,11 +14,10 @@ This test drives the retry path directly: the first request answers with an
 anti-bot shell, every later request answers 302 to a blocked host, and the
 retry must not reach it.
 
-These tests need Chromium; the skip reason names the install command.
+This suite fails when DOCUGRAPH_REQUIRE_BROWSER=1 and Chromium is missing.
 """
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from threading import Thread
 
 import pytest
@@ -26,24 +25,7 @@ import pytest
 from docugraph.ingestion.crawler import _install_page_guards
 from docugraph.security.url_policy import UrlKind, UrlPolicy
 
-
-def _chromium_installed() -> bool:
-    """True when Playwright's Chromium executable is present on this machine."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception:  # pragma: no cover - playwright is a declared dependency
-        return False
-    try:
-        with sync_playwright() as playwright:
-            return Path(playwright.chromium.executable_path).exists()
-    except Exception:  # pragma: no cover - a broken browser install is a skip
-        return False
-
-
-pytestmark = pytest.mark.skipif(
-    not _chromium_installed(),
-    reason="Chromium not installed; run `uv run playwright install chromium`",
-)
+pytestmark = pytest.mark.usefixtures("require_chromium")
 
 # No visible text and no content element: two structural signals, so crawl4ai
 # classifies this as an anti-bot shell and enters the retry path.

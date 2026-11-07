@@ -616,7 +616,7 @@ class _RedirectAwareFakeCrawler:
         _RedirectAwareFakeCrawler.calls.append(url)
         if url == "http://example.com/":
             return _FakeResult(
-                redirected_url="http://www.example.com/",
+                redirected_url="https://www.example.com/",
                 links={"internal": [{"href": "/page"}]},
             )
         return _FakeResult(redirected_url=url, links={"internal": []})
@@ -625,13 +625,12 @@ class _RedirectAwareFakeCrawler:
 async def test_med5_a_relative_link_is_enqueued_when_the_start_redirects_to_another_host(
     mcp_env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ORACLE: MED-5 — LOW-5 is deferred, so links resolve against the start URL.
+    """ORACLE: A-2 (0.3.0) / MED-5 — links resolve against the page's final URL.
 
-    The link filter compares a candidate's netloc with the *start* URL's. If a
-    relative link were resolved against the redirected URL of an apex -> www
-    crawl, the candidate would be on another host and dropped: the crawl would
-    stop after one page. This pins the 0.2.0 resolution the round-2 review
-    asked to restore; LOW-5 (final-URL attribution) is deferred to 0.3.0.
+    A relative link is resolved against the URL the page ended up at, and the
+    same-host filter is seeded from that final URL. An apex -> www redirect
+    therefore still enqueues ``/page`` as ``https://www.example.com/page``:
+    LOW-5 (final-URL attribution) is fixed rather than deferred.
     """
     import crawl4ai
 
@@ -643,7 +642,7 @@ async def test_med5_a_relative_link_is_enqueued_when_the_start_redirects_to_anot
 
     assert _RedirectAwareFakeCrawler.calls == [
         "http://example.com/",
-        "http://example.com/page",
+        "https://www.example.com/page",
     ], (
         "the relative link of a page that redirected to another host was not "
         f"enqueued: {_RedirectAwareFakeCrawler.calls!r}"
@@ -701,3 +700,170 @@ async def test_round4_both_crawl_paths_pin_crawl4ais_replay_off(
             "crawl4ai's browser-less fallback fetch was not pinned off: "
             f"{getattr(config, 'fallback_fetch_function', None)!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# A-2 (0.3.0): the crawler self-check and final-URL link resolution
+# ---------------------------------------------------------------------------
+
+
+def _hooks_raises(*args, **kwargs):
+    """A set_hook that rejects the hook, as crawl4ai does for an unknown type."""
+    raise ValueError("Invalid hook type: on_page_context_created")
+
+
+class _SelfCheckFakeCrawler:
+    """A crawl4ai stand-in that records whether the browser was ever entered."""
+
+    crawler_strategy = SimpleNamespace()
+    entered = False
+    arun_called = False
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self) -> "_SelfCheckFakeCrawler":
+        type(self).entered = True
+        return self
+
+    async def __aexit__(self, *exc) -> bool:
+        return False
+
+    async def arun(self, url: str | None = None, config=None):
+        type(self).arun_called = True
+        return _FakeResult(redirected_url=url or "https://docs.example/")
+
+
+def _install_self_check_browser(monkeypatch: pytest.MonkeyPatch, strategy):
+    """Install a fake ``AsyncWebCrawler`` carrying the given strategy stand-in."""
+    import crawl4ai
+
+    class Fake(_SelfCheckFakeCrawler):
+        crawler_strategy = strategy
+        entered = False
+        arun_called = False
+
+    monkeypatch.setattr(crawl4ai, "AsyncWebCrawler", Fake)
+    return Fake
+
+
+async def test_s1_a_crawler_without_the_hook_is_refused_before_the_browser_starts(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-2 / S1 — a strategy that cannot take the hook is refused up front."""
+    fake = _install_self_check_browser(monkeypatch, SimpleNamespace())
+    crawler = crawler_module.DocCrawler(url_policy=_backstop_policy())
+
+    with pytest.raises(crawler_module.UrlRefusedError) as excinfo:
+        await crawler.crawl_single("https://docs.example/", use_cache=False)
+
+    assert excinfo.value.refusal.reason.value == "unsupported_crawler"
+    assert "on_page_context_created" in excinfo.value.refusal.detail
+    assert fake.entered is False
+    assert fake.arun_called is False
+
+
+async def test_s2_a_run_config_without_fallback_fetch_is_refused(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-2 / S2 — the config must expose fallback_fetch_function."""
+    import crawl4ai
+
+    fake = _install_self_check_browser(
+        monkeypatch, SimpleNamespace(set_hook=lambda *a, **k: None)
+    )
+
+    def _config(*args, **kwargs):
+        return SimpleNamespace(max_retries=0)
+
+    monkeypatch.setattr(crawl4ai, "CrawlerRunConfig", _config)
+    crawler = crawler_module.DocCrawler(url_policy=_backstop_policy())
+
+    with pytest.raises(crawler_module.UrlRefusedError) as excinfo:
+        await crawler.crawl_single("https://docs.example/", use_cache=False)
+
+    assert excinfo.value.refusal.reason.value == "unsupported_crawler"
+    assert "fallback_fetch_function" in excinfo.value.refusal.detail
+    assert fake.entered is False
+    assert fake.arun_called is False
+
+
+async def test_s3_the_self_check_does_not_apply_without_a_policy(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-2 / S3 — the CLI path has no policy, so no guards are installed."""
+    fake = _install_self_check_browser(monkeypatch, SimpleNamespace())
+    crawler = crawler_module.DocCrawler()  # no policy: the CLI path
+
+    document = await crawler.crawl_single("https://docs.example/", use_cache=False)
+
+    assert document.__class__.__name__ == "Document"
+    assert fake.arun_called is True
+
+
+async def test_s4_a_hook_registration_error_is_a_refusal_not_a_crash(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-2 / S4 — a set_hook ValueError becomes a typed refusal."""
+    strategy = SimpleNamespace(
+        hooks={"on_page_context_created": None}, set_hook=_hooks_raises
+    )
+    fake = _install_self_check_browser(monkeypatch, strategy)
+    crawler = crawler_module.DocCrawler(url_policy=_backstop_policy())
+
+    with pytest.raises(crawler_module.UrlRefusedError) as excinfo:
+        await crawler.crawl_single("https://docs.example/", use_cache=False)
+
+    assert excinfo.value.refusal.reason.value == "unsupported_crawler"
+    assert "could not install the browser guards" in excinfo.value.refusal.detail
+    assert fake.entered is False
+    assert fake.arun_called is False
+
+
+class _RelativeLinkFakeCrawler:
+    """Answers per URL with a final URL and internal links; records requests."""
+
+    calls: list[str] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.crawler_strategy = SimpleNamespace(set_hook=lambda *a, **k: None)
+
+    async def __aenter__(self) -> "_RelativeLinkFakeCrawler":
+        return self
+
+    async def __aexit__(self, *exc) -> bool:
+        return False
+
+    async def arun(self, url: str | None = None, config=None):
+        assert url is not None
+        _RelativeLinkFakeCrawler.calls.append(url)
+        if url == "http://example.com/":
+            return _FakeResult(
+                redirected_url="https://www.example.com/",
+                links={"internal": [{"href": "/page"}]},
+            )
+        return _FakeResult(redirected_url=url, links={"internal": []})
+
+
+async def test_r1_a_relative_link_resolves_against_the_final_url(
+    mcp_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ORACLE: A-2 / R1 — /page is resolved against the redirected URL."""
+    import crawl4ai
+
+    _RelativeLinkFakeCrawler.calls = []
+    monkeypatch.setattr(crawl4ai, "AsyncWebCrawler", _RelativeLinkFakeCrawler)
+    crawler = crawler_module.DocCrawler()  # no policy: the CLI path
+
+    documents = await crawler.crawl_site(
+        "http://example.com/", max_pages=2, use_cache=False
+    )
+
+    assert _RelativeLinkFakeCrawler.calls == [
+        "http://example.com/",
+        "https://www.example.com/page",
+    ], (
+        "the relative link was not resolved against the final URL: "
+        f"{_RelativeLinkFakeCrawler.calls!r}"
+    )
+    assert documents[0].source_url == "https://www.example.com/"

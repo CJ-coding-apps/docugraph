@@ -416,3 +416,152 @@ def test_url_refused_error_carries_the_refusal() -> None:
     refusal = UrlRefusal(RefusalReason.SCHEME_NOT_ALLOWED, "file scheme")
     error = UrlRefusedError(refusal)
     assert error.refusal is refusal
+
+
+# ---------------------------------------------------------------------------
+# A-2 (0.3.0): link-local and cloud-metadata addresses are never allowed
+# ---------------------------------------------------------------------------
+
+
+def test_p1_metadata_ipv4_is_refused_even_when_private_is_allowed() -> None:
+    """ORACLE: A-2 / P1 — 169.254.169.254 is metadata, not merely private."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"169.254.169.254": ("169.254.169.254",)}),
+    )
+    refusal = _refusal(policy, "http://169.254.169.254/latest/meta-data/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "never allowed" in refusal.detail
+
+
+def test_p2_aws_ipv6_metadata_is_refused_even_when_private_is_allowed() -> None:
+    """ORACLE: A-2 / P2 — fd00:ec2::254 is the AWS IPv6 metadata endpoint."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"fd00:ec2::254": ("fd00:ec2::254",)}),
+    )
+    refusal = _refusal(policy, "http://[fd00:ec2::254]/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+
+
+def test_p3_alibaba_metadata_is_refused_even_when_private_is_allowed() -> None:
+    """ORACLE: A-2 / P3 — 100.100.100.200 is a cloud-metadata address."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"metadata.example": ("100.100.100.200",)}),
+    )
+    refusal = _refusal(policy, "http://metadata.example/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+
+
+def test_p4_mapped_metadata_is_refused_even_when_private_is_allowed() -> None:
+    """ORACLE: A-2 / P4 — an IPv4-mapped literal is judged by its IPv4."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"::ffff:169.254.169.254": ("::ffff:169.254.169.254",)}),
+    )
+    refusal = _refusal(policy, "http://[::ffff:169.254.169.254]/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "169.254.169.254" in refusal.detail
+    assert "never allowed" in refusal.detail
+
+
+def test_p5_link_local_ipv6_is_refused_even_when_private_is_allowed() -> None:
+    """ORACLE: A-2 / P5 — fe80::/10 is link-local and never allowed."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"fe80::1": ("fe80::1",)}),
+    )
+    refusal = _refusal(policy, "http://[fe80::1]/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+
+
+def test_p6_allow_private_still_admits_an_ordinary_private_address() -> None:
+    """ORACLE: A-2 / P6 — the intranet setting still admits RFC 1918."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"docs.internal": ("10.0.0.5",)}),
+    )
+    _assert_allowed(policy, "http://docs.internal/")
+
+
+def test_p7_metadata_is_refused_under_the_default_setting() -> None:
+    """ORACLE: A-2 / P7 — the default policy refuses metadata too."""
+    policy = _policy(resolver=_mapping({"169.254.169.254": ("169.254.169.254",)}))
+    refusal = _refusal(policy, "http://169.254.169.254/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+
+
+def test_p9_ipv4_compatible_metadata_is_refused() -> None:
+    """ORACLE: A-2 / P9 — ::a9fe:a9fe carries 169.254.169.254."""
+    policy = _policy(resolver=_mapping({"::a9fe:a9fe": ("::a9fe:a9fe",)}))
+    refusal = _refusal(policy, "http://[::a9fe:a9fe]/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "169.254.169.254" in refusal.detail
+    assert "never allowed" in refusal.detail
+
+
+def test_p10_nat64_metadata_and_private_are_refused() -> None:
+    """ORACLE: A-2 / P10 — NAT64-embedded IPv4 is judged by the embedded address."""
+    policy = _policy(
+        resolver=_mapping(
+            {
+                "64:ff9b::a9fe:a9fe": ("64:ff9b::a9fe:a9fe",),
+                "64:ff9b::10.0.0.5": ("64:ff9b::10.0.0.5",),
+            }
+        )
+    )
+
+    metadata = _refusal(policy, "http://[64:ff9b::a9fe:a9fe]/")
+    assert metadata.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "169.254.169.254" in metadata.detail
+
+    private = _refusal(policy, "http://[64:ff9b::10.0.0.5]/")
+    assert private.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "10.0.0.5" in private.detail
+
+
+def test_p11_nat64_64_ff9b_1_metadata_is_refused_even_when_private_is_allowed() -> None:
+    """ORACLE: A-2 / P11 — RFC 6052 prefix 64:ff9b:1::/48 embeds IPv4 in bits 48-79."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"64:ff9b:1:a9fe:a9fe::": ("64:ff9b:1:a9fe:a9fe::",)}),
+    )
+    refusal = _refusal(policy, "http://[64:ff9b:1:a9fe:a9fe::]/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "169.254.169.254" in refusal.detail
+
+
+def test_p12_6to4_metadata_is_refused_even_when_private_is_allowed() -> None:
+    """ORACLE: A-2 / P12 — a 6to4 literal is judged by its embedded IPv4."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"2002:a9fe:a9fe::": ("2002:a9fe:a9fe::",)}),
+    )
+    refusal = _refusal(policy, "http://[2002:a9fe:a9fe::]/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+
+
+def test_p13_teredo_server_and_client_metadata_are_both_judged() -> None:
+    """ORACLE: A-2 / P13 — both the Teredo client and server IPv4 are judged."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping(
+            {
+                "2001:0:4136:e378:8000:63bf:5601:5601": (
+                    "2001:0:4136:e378:8000:63bf:5601:5601",
+                ),
+                "2001:0:a9fe:a9fe:8000:63bf:0000:0001": (
+                    "2001:0:a9fe:a9fe:8000:63bf:0000:0001",
+                ),
+            }
+        ),
+    )
+
+    client = _refusal(policy, "http://[2001:0:4136:e378:8000:63bf:5601:5601]/")
+    assert client.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "169.254.169.254" in client.detail
+
+    server = _refusal(policy, "http://[2001:0:a9fe:a9fe:8000:63bf:0000:0001]/")
+    assert server.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "169.254.169.254" in server.detail

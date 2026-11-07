@@ -9,12 +9,11 @@ raises ``ENOTCONN``), so a 127.0.0.2 listener is unreachable regardless of the
 policy and the log would be empty for the wrong reason. The three names above
 all reach 127.0.0.1 and are refused by ``allowed_domains``.
 
-These tests need Chromium; the skip reason names the install command.
+This suite fails when DOCUGRAPH_REQUIRE_BROWSER=1 and Chromium is missing.
 """
 
 import asyncio
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from threading import Thread
 
 import pytest
@@ -22,24 +21,7 @@ import pytest
 from docugraph.ingestion.crawler import DocCrawler
 from docugraph.security.url_policy import UrlKind, UrlPolicy
 
-
-def _chromium_installed() -> bool:
-    """True when Playwright's Chromium executable is present on this machine."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception:  # pragma: no cover - playwright is a declared dependency
-        return False
-    try:
-        with sync_playwright() as playwright:
-            return Path(playwright.chromium.executable_path).exists()
-    except Exception:  # pragma: no cover - a broken browser install is a skip
-        return False
-
-
-pytestmark = pytest.mark.skipif(
-    not _chromium_installed(),
-    reason="Chromium not installed; run `uv run playwright install chromium`",
-)
+pytestmark = pytest.mark.usefixtures("require_chromium")
 
 
 def _make_handler(routes: dict[str, tuple[int, dict[str, str], bytes]], log: list[str]):
@@ -182,4 +164,44 @@ async def test_c5_second_hop_to_a_blocked_host_is_never_fetched() -> None:
     finally:
         _stop(start_server, start_thread)
         _stop(middle_server, middle_thread)
+        _stop(blocked_server, blocked_thread)
+
+
+async def test_p8_redirect_hop_to_a_metadata_host_is_aborted() -> None:
+    """ORACLE: A-2 / P8 — a redirect hop to a metadata host is never fetched."""
+    blocked_log: list[str] = []
+    blocked_server, blocked_thread = _start(
+        "127.0.0.1", {"/blocked": _html("<html>secret</html>")}, blocked_log
+    )
+    blocked_port = blocked_server.server_address[1]
+
+    start_log: list[str] = []
+    start_server, start_thread = _start(
+        "127.0.0.1",
+        {"/start": _redirect(f"http://localhost:{blocked_port}/blocked")},
+        start_log,
+    )
+    start_port = start_server.server_address[1]
+
+    def _resolve(host: str) -> tuple[str, ...]:
+        if host == "localhost":
+            return ("169.254.169.254",)
+        return ("127.0.0.1",)
+
+    policy = UrlPolicy(kind=UrlKind.WEB, allow_private=True, resolver=_resolve)
+    crawler = DocCrawler(url_policy=policy)
+
+    try:
+        # As in C3/C5, the adjudicator is the blocked server's log: an aborted
+        # navigation surfaces either as a refusal or as a failed result, and the
+        # claim is that the hop was never made.
+        await _crawl_without_caring_about_the_error(
+            crawler, f"http://127.0.0.1:{start_port}/start"
+        )
+        assert blocked_log == [], (
+            "the redirect hop to a metadata host was fetched: "
+            f"{blocked_log}"
+        )
+    finally:
+        _stop(start_server, start_thread)
         _stop(blocked_server, blocked_thread)

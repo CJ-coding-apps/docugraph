@@ -1,15 +1,14 @@
 """C4 (page cap through MCP) and C6 (service workers cannot bypass the policy).
 
-Both need a real headless Chromium; the skip reason names the install command.
-C4 goes through ``_crawl_url`` with the vector store stubbed, so the claim is
-about the cap the shell applies, not about embeddings. C6's adjudicator is the
-blocked server's log: a registered service worker would fetch it outside
-``page.route``, so the log must stay empty.
+Both need a real headless Chromium. C4 goes through ``_crawl_url`` with the
+vector store stubbed, so the claim is about the cap the shell applies, not
+about embeddings. C6's adjudicator is the blocked server's log: a registered
+service worker would fetch it outside ``page.route``, so the log must stay
+empty. This suite fails when DOCUGRAPH_REQUIRE_BROWSER=1 and Chromium is missing.
 """
 
 import asyncio
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from threading import Thread
 
 import pytest
@@ -19,24 +18,7 @@ from docugraph.ingestion.crawler import DocCrawler
 from docugraph.interfaces import mcp_server
 from docugraph.security.url_policy import UrlKind, UrlPolicy
 
-
-def _chromium_installed() -> bool:
-    """True when Playwright's Chromium executable is present on this machine."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception:  # pragma: no cover - playwright is a declared dependency
-        return False
-    try:
-        with sync_playwright() as playwright:
-            return Path(playwright.chromium.executable_path).exists()
-    except Exception:  # pragma: no cover - a broken browser install is a skip
-        return False
-
-
-pytestmark = pytest.mark.skipif(
-    not _chromium_installed(),
-    reason="Chromium not installed; run `uv run playwright install chromium`",
-)
+pytestmark = pytest.mark.usefixtures("require_chromium")
 
 
 class _Null(int):

@@ -398,3 +398,33 @@ def test_g18_pull_carries_the_restricted_config_under_policy(
         assert _occurs_before(pull, pair, pull_at), (
             f"missing {pair!r} before pull in {pull!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# A-2 (0.3.0): a remote that resolves to metadata is refused under allow_private
+# ---------------------------------------------------------------------------
+
+
+async def test_p14_a_git_remote_resolving_to_metadata_is_refused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ORACLE: A-2 / P14 — allow_private never re-enables a metadata address."""
+    monkeypatch.setenv("DOCUGRAPH_STORAGE__DATA_DIR", str(tmp_path / "data"))
+    reset_config()
+    policy = UrlPolicy(
+        kind=UrlKind.GIT_REMOTE,
+        allow_private=True,
+        resolver=lambda host: ("169.254.169.254",),
+    )
+    monkeypatch.setattr(mcp_server, "_git_policy", lambda: policy)
+    monkeypatch.setattr(mcp_server, "get_vector_store", _no_store)
+    monkeypatch.setattr(GitIndexer, "_run_git_command", _no_git)
+
+    result = await mcp_server._index_git(
+        {"url": "https://example.invalid/repo.git", "name": "repo"}
+    )
+
+    text = _result_text(result)
+    assert result.isError
+    assert text.startswith("Refused: private_address"), text
