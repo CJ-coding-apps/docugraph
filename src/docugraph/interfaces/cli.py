@@ -784,7 +784,12 @@ def index_git(
         docugraph index git https://github.com/user/repo --stats-only
     """
     from docugraph.ingestion.chunker import Chunker
-    from docugraph.ingestion.git_indexer import GitIndexer, GitIndexerConfig
+    from docugraph.ingestion.git_indexer import (
+        GitIndexer,
+        GitIndexerConfig,
+        InvalidGitRefError,
+        RepoPathRefusedError,
+    )
     from docugraph.storage.vector_store import VectorStore
 
     config = GitIndexerConfig(
@@ -863,6 +868,9 @@ def index_git(
             if cleanup:
                 indexer.cleanup(repo_info.local_path)
 
+        except (RepoPathRefusedError, InvalidGitRefError) as e:
+            # A refusal is a command failure, not a note on standard output.
+            raise click.ClickException(str(e)) from e
         except RuntimeError as e:
             console.print(f"[red]Error: {e}[/red]")
             return

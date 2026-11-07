@@ -62,6 +62,16 @@ playwright install chromium
 This is ~190 MB and is cached, so it is a one-off. `index local`, `index git`,
 `search`, `memory` and `stats` do not need it — only fetching a URL does.
 
+**URLs that an agent supplies are treated as untrusted.** `crawl_url` and
+`index_git` refuse, before fetching or cloning, a value that is not `http(s)`
+(or, for git, `https`/`ssh`), that begins with `-`, that is not a public
+address, that leaves an allowlist you set, or that would write outside the
+repository directory. Refusals are one line — `Refused: private_address — …` —
+and appear in the tool result with `isError`. A site crawl is capped at 50 pages
+per call. Set `crawler.allow_private_networks: true` to crawl an intranet, and
+`crawler.allowed_domains` to narrow what may be reached; see
+[docs/configuration.md](docs/configuration.md#url-policy).
+
 ### MCP integration with Claude Code (primary surface)
 
 The MCP server is a console script, so where it lives depends on how you
@@ -224,7 +234,12 @@ crawler:
   max_concurrent: 5
   rate_limit: 2.0
   respect_robots: true
+  allow_private_networks: false   # opt in to intranet/loopback targets
+  allowed_domains: []             # empty = any public host
 ```
+
+Graphiti telemetry is **off** unless you set `GRAPHITI_TELEMETRY_ENABLED`
+yourself; an explicit value is never overridden.
 
 `provider: auto` resolves to **fastembed** (local ONNX) — nothing about your
 environment changes that, so documents are not sent anywhere for embedding
@@ -236,6 +251,27 @@ overridden by environment variable, e.g. `DOCUGRAPH_EMBEDDINGS__MODEL` or
 
 See [docs/configuration.md](https://github.com/CJ-coding-apps/docugraph/blob/main/docs/configuration.md) for the full reference,
 including the embedding-model consistency guard and the graph LLM requirement.
+
+## Network activity
+
+DocuGraph runs locally, but these connections are possible — each only in the situation named:
+
+- **Model downloads.** `fastembed` (the default embedder) downloads its ONNX model from Hugging
+  Face on first use, and the reranker (about 2 GB) when you first enable it. Afterwards the model is
+  read from the local cache. Nothing about your documents is sent.
+- **Crawl and clone targets.** `crawl_url` fetches the pages you point it at, and `index_git`
+  clones the repository URL you give it. The MCP tools treat those values as untrusted: pages must be
+  `http`/`https` and resolve to a global address, git remotes must pass the same check, and
+  `crawler.allow_private_networks` is the opt-in for an intranet or a local docs server.
+- **A named LLM or embedding provider.** Only if you name one: `embeddings.provider: openai` (or
+  `cohere`) sends the text being embedded there, and the graph tools send prompts to the configured
+  LLM — OpenAI, Anthropic, or Ollama.
+- **Ollama**, when configured — to your Ollama server, localhost by default.
+- **Graphiti telemetry**, to PostHog, **off unless you opt in** with
+  `GRAPHITI_TELEMETRY_ENABLED=true`.
+
+CLI crawls and clones are user-directed: they are exempt from the scheme, DNS and address rules,
+but the repository-name containment and the git hardening apply to every caller.
 
 ## The documentation knowledge graph
 

@@ -26,6 +26,119 @@ from docugraph.ingestion.local_files import (
     LocalFileConfig,
     LocalFileIndexer,
 )
+from docugraph.security.url_policy import (
+    RefusalReason,
+    UrlPolicy,
+    UrlRefusal,
+    UrlRefusedError,
+    format_refusal,
+)
+
+# Always applied under a URL policy (A-4): local and ext transports have no
+# place in a remote clone, and a redirect would hide the URL that was judged.
+_RESTRICTED_CONFIG_PAIRS = (
+    ("-c", "protocol.file.allow=never"),
+    ("-c", "protocol.ext.allow=never"),
+    ("-c", "http.followRedirects=false"),
+)
+
+
+def is_valid_git_ref(ref: str) -> bool:
+    """Whether ``ref`` is a legal revision name (git-check-ref-format shaped).
+
+    A value that begins with ``-`` would be read as an option, so it is
+    rejected here as well as by git.
+    """
+    if not ref or ref.startswith("-") or ref == "@":
+        return False
+    if ref.endswith("/") or ref.endswith(".") or "//" in ref or ".." in ref:
+        return False
+    if "@{" in ref or "\\" in ref:
+        return False
+    for char in ref:
+        if ord(char) <= 0x20 or ord(char) == 0x7F or char in "~^:?*[":
+            return False
+    for component in ref.split("/"):
+        if not component or component.startswith(".") or component.endswith(".lock"):
+            return False
+    return True
+
+
+def validate_repo_name(name: str) -> UrlRefusal | None:
+    """One non-empty path component that cannot leave the repos directory.
+
+    A derived name is judged by the same rule; it is refused, never repaired.
+    """
+    if (
+        not name
+        or name in {".", ".."}
+        or "/" in name
+        or "\\" in name
+        or "\x00" in name
+        or Path(name).is_absolute()
+    ):
+        return UrlRefusal(
+            RefusalReason.PATH_ESCAPE,
+            f"repository name {name!r} escapes the repos directory",
+        )
+    return None
+
+
+def _restricted_config(restrict_protocols: bool) -> list[str]:
+    """The ``-c`` pairs, in order, when the policy is in force."""
+    args: list[str] = []
+    if restrict_protocols:
+        for pair in _RESTRICTED_CONFIG_PAIRS:
+            args.extend(pair)
+    return args
+
+
+def build_clone_args(
+    *,
+    url: str,
+    local_path: Path,
+    depth: int | None,
+    ref: str | None,
+    restrict_protocols: bool,
+) -> list[str]:
+    """Assemble ``git clone`` argv; ``--`` ends options before url and path."""
+    args = _restricted_config(restrict_protocols)
+
+    args.append("clone")
+    if depth is not None:
+        args.extend(["--depth", str(depth)])
+    if ref and depth:
+        # For shallow clones the branch has to be named at clone time.
+        args.extend(["--branch", ref])
+    args.extend(["--", url, str(local_path)])
+    return args
+
+
+def build_checkout_args(ref: str) -> list[str]:
+    """``git checkout <ref> --`` so git reads a revision, never a path."""
+    return ["checkout", ref, "--"]
+
+
+def build_pull_args(*, restrict_protocols: bool) -> list[str]:
+    """``git pull --ff-only`` under the same lockdown as clone (MED-1)."""
+    return [*_restricted_config(restrict_protocols), "pull", "--ff-only"]
+
+
+def build_fetch_args(*, restrict_protocols: bool) -> list[str]:
+    """The pull fallback, locked down the same way."""
+    return [*_restricted_config(restrict_protocols), "fetch", "origin"]
+
+
+class InvalidGitRefError(RuntimeError):
+    """The requested ref is not a legal git revision name."""
+
+
+class RepoPathRefusedError(RuntimeError):
+    """The clone destination would leave the repos directory."""
+
+    def __init__(self, refusal: UrlRefusal) -> None:
+        self.refusal = refusal
+        super().__init__(format_refusal(refusal))
 
 
 @dataclass
@@ -120,15 +233,19 @@ class GitIndexer:
         self,
         config: GitIndexerConfig | None = None,
         chunker: Chunker | None = None,
+        url_policy: UrlPolicy | None = None,
     ) -> None:
         """Initialize the git indexer.
 
         Args:
             config: Indexer configuration
             chunker: Optional chunker for document splitting
+            url_policy: Optional remote URL policy. Its presence also turns on
+                the protocol and redirect restrictions in the git argv.
         """
         self._config = config or GitIndexerConfig()
         self._chunker = chunker
+        self._url_policy = url_policy
 
         # Set up repos directory
         if self._config.repos_dir is None:
@@ -254,25 +371,45 @@ class GitIndexer:
         Raises:
             RuntimeError: If clone fails
         """
+        if ref is not None and not is_valid_git_ref(ref):
+            raise InvalidGitRefError(f"Invalid git ref: {ref!r}")
+
         name = name or self._extract_repo_name(url)
+
+        # A-1: the name and the resolved destination are judged before any git
+        # process, so an escaping path can never reach clone or update.
+        refusal = validate_repo_name(name)
+        if refusal is not None:
+            raise RepoPathRefusedError(refusal)
+
         local_path = self._repos_dir / name
+        repos_root = self._repos_dir.resolve()
+        if not local_path.resolve().is_relative_to(repos_root):
+            raise RepoPathRefusedError(
+                UrlRefusal(
+                    RefusalReason.PATH_ESCAPE,
+                    f"{local_path} resolves outside {repos_root}",
+                )
+            )
+
+        if self._url_policy is not None:
+            url_refusal = self._url_policy.check(url)
+            if url_refusal is not None:
+                raise UrlRefusedError(url_refusal)
 
         # Check if already cloned
         if local_path.exists():
-            # Update existing repo
-            return self.update(local_path)
+            # Update existing repo. The URL just judged is not necessarily the
+            # one pull will use: update() reads the existing origin (MED-1).
+            return self.update(local_path, expected_url=url)
 
-        # Build clone command
-        clone_args = ["clone"]
-
-        if self._config.clone_depth is not None:
-            clone_args.extend(["--depth", str(self._config.clone_depth)])
-
-        if ref and self._config.clone_depth:
-            # For shallow clones, we need to specify the branch
-            clone_args.extend(["--branch", ref])
-
-        clone_args.extend([url, str(local_path)])
+        clone_args = build_clone_args(
+            url=url,
+            local_path=local_path,
+            depth=self._config.clone_depth,
+            ref=ref,
+            restrict_protocols=self._url_policy is not None,
+        )
 
         # Execute clone
         stdout, stderr, code = self._run_git_command(clone_args)
@@ -282,7 +419,7 @@ class GitIndexer:
 
         # Checkout specific ref if needed (and not already done via --branch)
         if ref and not self._config.clone_depth:
-            checkout_args = ["checkout", ref]
+            checkout_args = build_checkout_args(ref)
             _, stderr, code = self._run_git_command(checkout_args, cwd=local_path)
             if code != 0:
                 raise RuntimeError(f"Failed to checkout {ref}: {stderr}")
@@ -297,11 +434,19 @@ class GitIndexer:
             metadata={"url": url, "ref": ref},
         )
 
-    def update(self, repo_path: Path | str) -> RepoInfo:
+    def update(
+        self,
+        repo_path: Path | str,
+        *,
+        expected_url: str | None = None,
+    ) -> RepoInfo:
         """Update an existing repository with git pull.
 
         Args:
             repo_path: Path to repository
+            expected_url: The URL the caller judged. Under a policy, the
+                existing origin must equal it; pull would otherwise run against
+                a remote that was never checked (MED-1).
 
         Returns:
             Updated RepoInfo
@@ -322,15 +467,34 @@ class GitIndexer:
         )
         url = stdout.strip() if code == 0 else "unknown"
 
+        policy = self._url_policy
+        restrict_protocols = policy is not None
+        if policy is not None:
+            # pull uses the origin, not the requested URL, so the origin is
+            # what has to match and pass the policy before any request is made.
+            if expected_url is not None and url != expected_url:
+                raise RepoPathRefusedError(
+                    UrlRefusal(
+                        RefusalReason.PATH_ESCAPE,
+                        "existing repository's origin differs",
+                    )
+                )
+            origin_refusal = policy.check(url)
+            if origin_refusal is not None:
+                raise UrlRefusedError(origin_refusal)
+
         # Pull updates
         stdout, stderr, code = self._run_git_command(
-            ["pull", "--ff-only"],
+            build_pull_args(restrict_protocols=restrict_protocols),
             cwd=repo_path,
         )
 
         if code != 0:
             # Try fetch + reset as fallback
-            self._run_git_command(["fetch", "origin"], cwd=repo_path)
+            self._run_git_command(
+                build_fetch_args(restrict_protocols=restrict_protocols),
+                cwd=repo_path,
+            )
 
         return RepoInfo(
             url=url,
@@ -543,14 +707,16 @@ class GitIndexer:
 def get_git_indexer(
     config: GitIndexerConfig | None = None,
     chunker: Chunker | None = None,
+    url_policy: UrlPolicy | None = None,
 ) -> GitIndexer:
     """Factory function to get a GitIndexer instance.
 
     Args:
         config: Optional configuration
         chunker: Optional chunker instance
+        url_policy: Optional remote URL policy
 
     Returns:
         GitIndexer instance
     """
-    return GitIndexer(config=config, chunker=chunker)
+    return GitIndexer(config=config, chunker=chunker, url_policy=url_policy)

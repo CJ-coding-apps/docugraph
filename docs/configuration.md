@@ -128,11 +128,54 @@ crawler:
   respect_robots: true
   cache_ttl: 86400          # 24 hours
   timeout: 30               # seconds
+  allow_private_networks: false   # false: only globally routable addresses
+  allowed_domains: []             # empty: no host restriction
 ```
 
 > There is no `server:` or `mcp:` section. The MCP server speaks stdio and is
 > launched by the MCP client (or `docugraph-mcp` / `docugraph mcp-server`);
 > there is no HTTP transport and no REST API.
+
+## URL policy
+
+`crawl_url` and `index_git` judge every value before they fetch, clone or
+index. A refusal is returned as an error whose text is exactly
+`Refused: <reason> — <detail>`; the reason vocabulary is closed:
+
+- `malformed` — empty, a control character, a bad port, a scoped IPv6 literal, or
+  a suspicious raw authority (backslash/whitespace)
+- `scheme_not_allowed` — pages: only `http`/`https`; git: only `https`/`ssh` or
+  `user@host:path`
+- `option_like` — the value begins with `-` and would be read as an option by git
+- `domain_not_allowed` — the host is outside `allowed_domains`
+- `unresolvable` — DNS failed or returned no usable address
+- `private_address` — loopback, link-local, private or otherwise non-global
+- `path_escape` — a repository name (given or derived from the URL) would leave
+  the repos directory
+
+(The list is deliberately not a markdown table: the docs-consistency check reads
+a table whose first cell is a backticked name as a table of MCP tool names.)
+
+`allow_private_networks: true` is the opt-in for an intranet or a local docs
+server; it does not disable the scheme or path rules. `allowed_domains` is a
+host allowlist: an entry matches itself and its subdomains, while an IP literal
+matches exactly (so `127.0.0.1` does not admit `127.0.0.10`). A crawl follows
+redirects hop by hop and refuses a `Location` before requesting it; a page whose
+final URL is refused is dropped and reported in the result (`Dropped N page(s)
+by policy:`). A site crawl is capped at 50 pages per call whatever `max_pages`
+says.
+
+Git clones run with `protocol.file.allow=never`, `protocol.ext.allow=never` and
+`http.followRedirects=false`, put `--` before the URL and path, and accept only
+refs shaped like `git-check-ref-format` names. The clone destination must
+resolve inside the configured repos directory.
+
+Environment overrides: `DOCUGRAPH_CRAWLER__ALLOW_PRIVATE_NETWORKS=true` and
+`DOCUGRAPH_CRAWLER__ALLOWED_DOMAINS='["python.org","docs.python.org"]'`.
+
+Graphiti telemetry is disabled by default. `apply_telemetry_default` sets
+`GRAPHITI_TELEMETRY_ENABLED=false` only when the variable is absent; set it to
+`true` to opt in.
 
 ## The embedding-model consistency guard
 

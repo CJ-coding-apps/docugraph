@@ -116,6 +116,12 @@ class CrawlerConfig(BaseModel):
     cache_ttl: int = 86400  # 24 hours
     timeout: int = 30  # seconds
 
+    # URL policy. Private networks stay off unless an operator opts in (an
+    # intranet docs site is a deliberate, explicit choice); an empty allowlist
+    # means "any public host".
+    allow_private_networks: bool = False
+    allowed_domains: list[str] = Field(default_factory=list)
+
 
 class Config(BaseSettings):
     """Main configuration for DocuGraph AI."""

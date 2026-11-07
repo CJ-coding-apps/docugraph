@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import MutableMapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,17 @@ from docugraph.core.embeddings import (
 )
 from docugraph.core.llm import get_graphiti_llm_client
 from docugraph.core.models import Entity, EntityType, RelationshipType
+
+# graphiti-core reads this variable at construction time and treats *absent* as
+# enabled, so an offline-first tool that never mentions telemetry would still
+# send PostHog events. Absent means off; an explicit value is the user's call.
+TELEMETRY_ENV_VAR = "GRAPHITI_TELEMETRY_ENABLED"
+
+
+def apply_telemetry_default(environ: MutableMapping[str, str]) -> None:
+    """Disable graphiti telemetry unless the environment already decides."""
+    environ.setdefault(TELEMETRY_ENV_VAR, "false")
+
 
 # Graphiti 0.30 validates injected clients with pydantic is_instance_of, so
 # our adapters must actually subclass its base classes (duck-typing no longer
@@ -177,6 +189,8 @@ class GraphStore:
         """Lazily initialize Graphiti; returns the ready Graphiti instance."""
         if self._initialized:
             return self._graphiti
+
+        apply_telemetry_default(os.environ)
 
         try:
             from graphiti_core import Graphiti

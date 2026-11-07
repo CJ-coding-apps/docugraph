@@ -8,6 +8,7 @@ touch the network on a cold cache.
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -187,3 +188,104 @@ async def test_graph_query_degrades_gracefully_without_llm(server_params):
         # Degraded path: message should guide the user toward an LLM.
         assert any(kw in text for kw in ("LLM", "Ollama", "OPENAI_API_KEY"))
     assert "total_chunks" in _text(stats)
+
+
+# ---------------------------------------------------------------------------
+# §3.4: the MCP surface refuses before fetching, cloning or indexing
+# ---------------------------------------------------------------------------
+
+_CHUNK_COUNT = re.compile(r"total_chunks\D{0,20}(\d+)", re.IGNORECASE)
+
+
+def _chunk_count(text: str) -> int:
+    match = _CHUNK_COUNT.search(text)
+    assert match is not None, f"no total_chunks in get_stats output: {text!r}"
+    return int(match.group(1))
+
+
+@pytest.mark.asyncio
+async def test_m1_crawl_url_refuses_file_scheme_without_indexing(server_params):
+    """ORACLE: M1 / §3.4 — file:// is refused and the store does not change."""
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        before = _chunk_count(_text(await session.call_tool("get_stats", {})))
+        result = await session.call_tool("crawl_url", {"url": "file:///etc/hosts"})
+        after = _chunk_count(_text(await session.call_tool("get_stats", {})))
+
+    assert result.isError
+    assert _text(result).startswith("Refused: scheme_not_allowed"), _text(result)
+    assert after == before, "a refused crawl must not index anything"
+
+
+@pytest.mark.asyncio
+async def test_m2_crawl_url_refuses_link_local_metadata_address(server_params):
+    """ORACLE: M2 / §3.4 — 169.254.169.254 is private_address, count unchanged."""
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        before = _chunk_count(_text(await session.call_tool("get_stats", {})))
+        result = await session.call_tool(
+            "crawl_url", {"url": "http://169.254.169.254/"}
+        )
+        after = _chunk_count(_text(await session.call_tool("get_stats", {})))
+
+    assert result.isError
+    assert "Refused: private_address" in _text(result), _text(result)
+    assert after == before, "a refused crawl must not index anything"
+
+
+@pytest.mark.asyncio
+async def test_m3_index_git_refuses_an_option_like_url(server_params, tmp_path):
+    """ORACLE: M3 / §3.4 — a leading - is option_like, and no marker is made.
+
+    On 0.2.0 the marker may or may not exist; either observation is recorded by
+    the red run. The permanent claim here is the refusal.
+    """
+    marker = tmp_path / "pwned"
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        result = await session.call_tool(
+            "index_git", {"url": f"--upload-pack=touch {marker}"}
+        )
+
+    assert result.isError
+    assert "Refused: option_like" in _text(result), _text(result)
+    assert not marker.exists(), "an option-like URL was passed to git"
+
+
+@pytest.mark.asyncio
+async def test_m4_index_git_refuses_file_scheme(server_params):
+    """ORACLE: M4 / §3.4 — a file:// remote is scheme_not_allowed."""
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        result = await session.call_tool("index_git", {"url": "file:///tmp"})
+
+    assert result.isError
+    assert "Refused: scheme_not_allowed" in _text(result), _text(result)
+
+
+@pytest.mark.asyncio
+async def test_m5_crawl_url_refuses_max_pages_below_one(server_params):
+    """ORACLE: M5 / §3.4 — max_pages < 1 is an isError that names the argument."""
+    async with (
+        stdio_client(server_params) as (read, write),
+        ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        result = await session.call_tool(
+            "crawl_url", {"url": "https://example.invalid/", "max_pages": 0}
+        )
+
+    assert result.isError
+    assert "max_pages" in _text(result), _text(result)
