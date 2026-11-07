@@ -11,6 +11,8 @@ public API.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-07
+
 ### Security
 
 - **`crawl_url` and `index_git` now judge model-supplied URLs before acting.** Pages must be
@@ -110,3 +112,6 @@ First public release, on PyPI.
 - Python 3.11–3.13 on Linux. `kuzu` is pinned `==0.11.3`, the final release upstream, and is treated
   as a migration boundary rather than a floor.
 - URL crawling needs Playwright's Chromium (`playwright install chromium`).
+
+[Unreleased]: https://github.com/CJ-coding-apps/docugraph/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/CJ-coding-apps/docugraph/compare/v0.2.0...v0.2.1
