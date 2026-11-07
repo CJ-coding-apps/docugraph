@@ -35,6 +35,7 @@ class RefusalReason(StrEnum):
     UNRESOLVABLE = "unresolvable"
     PRIVATE_ADDRESS = "private_address"
     PATH_ESCAPE = "path_escape"
+    UNSUPPORTED_CRAWLER = "unsupported_crawler"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,25 @@ Resolver = Callable[[str], Sequence[str]]
 _WEB_SCHEMES = frozenset({"http", "https"})
 _GIT_SCHEMES = frozenset({"https", "ssh"})
 _PASS_THROUGH_SCHEMES = frozenset({"data", "blob", "about"})
+
+# Link-local and cloud-metadata endpoints. They stay refused whatever
+# ``allow_private`` says: "this intranet" never means "this machine's cloud
+# credentials". 169.254.0.0/16 and fe80::/10 are link-local; the other two are
+# the AWS and Alibaba metadata services.
+_METADATA_NETWORKS = (
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("fd00:ec2::254/128"),
+    ipaddress.ip_network("100.100.100.200/32"),
+)
+
+# Address formats that carry an IPv4 inside an IPv6 literal. ``is_global`` on
+# the IPv6 wrapper is not the IPv4's answer: 64:ff9b::10.0.0.5 is reported
+# global while denoting a private address.
+_IPV4_COMPATIBLE = ipaddress.ip_network("::/96")
+_NAT64_96 = ipaddress.ip_network("64:ff9b::/96")
+# RFC 6052 puts the IPv4 in bits 48-79 for a /48 prefix, not in the low 32.
+_NAT64_48 = ipaddress.ip_network("64:ff9b:1::/48")
 
 
 def resolve_host(host: str) -> tuple[str, ...]:
@@ -132,6 +152,46 @@ def _domain_allowed(host: str, allowed_domains: tuple[str, ...]) -> bool:
     return False
 
 
+def _is_metadata_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """True for link-local and cloud-metadata endpoints."""
+    return any(address in network for network in _METADATA_NETWORKS)
+
+
+def _embedded_ipv4s(address: ipaddress.IPv6Address) -> tuple[ipaddress.IPv4Address, ...]:
+    """Every IPv4 an IPv6 literal denotes, in the order the forms are checked.
+
+    These forms exist so an IPv6 spelling can carry an IPv4 past a check that
+    only looks at the wrapper: IPv4-mapped, IPv4-compatible, NAT64 (both
+    prefixes), 6to4 and Teredo (its server *and* its client). Duplicates are
+    removed in order.
+    """
+    candidates: list[ipaddress.IPv4Address] = []
+
+    mapped = address.ipv4_mapped
+    if mapped is not None:
+        candidates.append(mapped)
+
+    value = int(address)
+    if address in _IPV4_COMPATIBLE or address in _NAT64_96:
+        candidates.append(ipaddress.IPv4Address(value & 0xFFFFFFFF))
+    if address in _NAT64_48:
+        candidates.append(ipaddress.IPv4Address((value >> 48) & 0xFFFFFFFF))
+
+    sixtofour = address.sixtofour
+    if sixtofour is not None:
+        candidates.append(sixtofour)
+
+    teredo = address.teredo
+    if teredo is not None:
+        candidates.extend(teredo)
+
+    deduped: list[ipaddress.IPv4Address] = []
+    for candidate in candidates:
+        if candidate not in deduped:
+            deduped.append(candidate)
+    return tuple(deduped)
+
+
 def _judge_addresses(addresses: Sequence[str], allow_private: bool) -> UrlRefusal | None:
     for raw_address in addresses:
         if "%" in raw_address:
@@ -145,14 +205,31 @@ def _judge_addresses(addresses: Sequence[str], allow_private: bool) -> UrlRefusa
                 f"resolver returned an unparsable address {raw_address!r}",
             )
 
-        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
-            address = address.ipv4_mapped
+        embedded: tuple[ipaddress.IPv4Address, ...] = ()
+        if isinstance(address, ipaddress.IPv6Address):
+            embedded = _embedded_ipv4s(address)
 
-        if not allow_private and not address.is_global:
-            return _refuse(
-                RefusalReason.PRIVATE_ADDRESS,
-                f"{address} is not a global address",
-            )
+        # Link-local and cloud metadata are refused even when private
+        # networks are allowed; the detail names the address that failed.
+        for candidate in (address, *embedded):
+            if _is_metadata_address(candidate):
+                return _refuse(
+                    RefusalReason.PRIVATE_ADDRESS,
+                    f"{candidate} is a link-local or cloud-metadata address and is never allowed",
+                )
+
+        if not allow_private:
+            for candidate in embedded:
+                if not candidate.is_global:
+                    return _refuse(
+                        RefusalReason.PRIVATE_ADDRESS,
+                        f"{candidate} is not a global address",
+                    )
+            if not address.is_global:
+                return _refuse(
+                    RefusalReason.PRIVATE_ADDRESS,
+                    f"{address} is not a global address",
+                )
     return None
 
 
