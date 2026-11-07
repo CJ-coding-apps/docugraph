@@ -62,7 +62,13 @@ dependencies = [
     "kuzu==0.11.3",
 
     # Web Crawling
-    "crawl4ai>=0.7.8",
+    # The guards are bound to crawl4ai 0.9.x's hook table and to Playwright's
+    # routing API. crawl4ai is capped below the next minor because the hook and
+    # retry surfaces the guards pin are not a compatibility promise; Playwright's
+    # floor is route_web_socket (1.48, Playwright's own docs), and the cap is the
+    # next minor above the version CI installs.
+    "crawl4ai>=0.9.3,<0.10",
+    "playwright>=1.48,<1.63",
 
     # CLI
     "click>=8.1.0",
