@@ -103,9 +103,7 @@ def test_w6_rfc1918_address_is_private() -> None:
 
 def test_w7_one_private_address_refuses_the_host() -> None:
     """ORACLE: W7 / §3.1 rule 5 — every returned address must be global."""
-    policy = _policy(
-        resolver=_mapping({"cdn.example": ("93.184.216.34", "192.168.1.10")})
-    )
+    policy = _policy(resolver=_mapping({"cdn.example": ("93.184.216.34", "192.168.1.10")}))
     refusal = _refusal(policy, "https://cdn.example/")
     assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
 
@@ -128,9 +126,7 @@ def test_w9_public_address_is_allowed() -> None:
 
 def test_w10_allow_private_permits_loopback() -> None:
     """ORACLE: W10 / D-1 — the intranet setting re-enables private addresses."""
-    policy = _policy(
-        allow_private=True, resolver=_mapping({"127.0.0.1": ("127.0.0.1",)})
-    )
+    policy = _policy(allow_private=True, resolver=_mapping({"127.0.0.1": ("127.0.0.1",)}))
     _assert_allowed(policy, "http://127.0.0.1/")
 
 
@@ -189,9 +185,7 @@ def test_g2_short_option_like_remote_is_refused() -> None:
     assert refusal.reason is RefusalReason.OPTION_LIKE
 
 
-@pytest.mark.parametrize(
-    "value", ["/Users/me/private-repo", "./repo", "file:///tmp/repo"]
-)
+@pytest.mark.parametrize("value", ["/Users/me/private-repo", "./repo", "file:///tmp/repo"])
 def test_g3_local_paths_are_not_git_remotes(value: str) -> None:
     """ORACLE: G3 / D-1 — local paths and file:// are refused."""
     refusal = _refusal(_policy(UrlKind.GIT_REMOTE), value)
@@ -255,11 +249,7 @@ def test_idn_host_is_judged_by_its_resolved_address() -> None:
 
 def test_trailing_dot_loopback_host_is_private() -> None:
     """ORACLE: §5 — a trailing dot does not change the address denoted."""
-    policy = _policy(
-        resolver=_mapping(
-            {"localhost.": ("127.0.0.1",), "localhost": ("127.0.0.1",)}
-        )
-    )
+    policy = _policy(resolver=_mapping({"localhost.": ("127.0.0.1",), "localhost": ("127.0.0.1",)}))
     refusal = _refusal(policy, "http://localhost./")
     assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
 
@@ -286,9 +276,7 @@ def test_credentials_do_not_change_the_judged_host() -> None:
 
 def test_ipv4_mapped_ipv6_loopback_is_private() -> None:
     """ORACLE: §5 / A-2 — judged by the mapped IPv4."""
-    policy = _policy(
-        resolver=_mapping({"::ffff:127.0.0.1": ("::ffff:127.0.0.1",)})
-    )
+    policy = _policy(resolver=_mapping({"::ffff:127.0.0.1": ("::ffff:127.0.0.1",)}))
     refusal = _refusal(policy, "http://[::ffff:127.0.0.1]/")
     assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
 
@@ -353,9 +341,7 @@ def test_scoped_ipv6_literal_is_malformed_even_when_private_is_allowed() -> None
 
 def test_ipv4_mapped_public_address_is_allowed() -> None:
     """ORACLE: A-2 — IPv4-mapped IPv6 is judged by its mapped IPv4 (global)."""
-    policy = _policy(
-        resolver=_mapping({"::ffff:9.9.9.9": ("::ffff:9.9.9.9",)})
-    )
+    policy = _policy(resolver=_mapping({"::ffff:9.9.9.9": ("::ffff:9.9.9.9",)}))
     _assert_allowed(policy, "http://[::ffff:9.9.9.9]/")
 
 
@@ -548,12 +534,8 @@ def test_p13_teredo_server_and_client_metadata_are_both_judged() -> None:
         allow_private=True,
         resolver=_mapping(
             {
-                "2001:0:4136:e378:8000:63bf:5601:5601": (
-                    "2001:0:4136:e378:8000:63bf:5601:5601",
-                ),
-                "2001:0:a9fe:a9fe:8000:63bf:0000:0001": (
-                    "2001:0:a9fe:a9fe:8000:63bf:0000:0001",
-                ),
+                "2001:0:4136:e378:8000:63bf:5601:5601": ("2001:0:4136:e378:8000:63bf:5601:5601",),
+                "2001:0:a9fe:a9fe:8000:63bf:0000:0001": ("2001:0:a9fe:a9fe:8000:63bf:0000:0001",),
             }
         ),
     )

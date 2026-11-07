@@ -229,9 +229,7 @@ async def test_m2_crawl_url_refuses_link_local_metadata_address(server_params):
     ):
         await session.initialize()
         before = _chunk_count(_text(await session.call_tool("get_stats", {})))
-        result = await session.call_tool(
-            "crawl_url", {"url": "http://169.254.169.254/"}
-        )
+        result = await session.call_tool("crawl_url", {"url": "http://169.254.169.254/"})
         after = _chunk_count(_text(await session.call_tool("get_stats", {})))
 
     assert result.isError
@@ -252,9 +250,7 @@ async def test_m3_index_git_refuses_an_option_like_url(server_params, tmp_path):
         ClientSession(read, write) as session,
     ):
         await session.initialize()
-        result = await session.call_tool(
-            "index_git", {"url": f"--upload-pack=touch {marker}"}
-        )
+        result = await session.call_tool("index_git", {"url": f"--upload-pack=touch {marker}"})
 
     assert result.isError
     assert "Refused: option_like" in _text(result), _text(result)

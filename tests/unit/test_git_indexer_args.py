@@ -28,9 +28,7 @@ from docugraph.security.url_policy import RefusalReason, UrlKind, UrlPolicy
 
 URL = "https://example.invalid/repo.git"
 GIT = shutil.which("git")
-requires_git = pytest.mark.skipif(
-    GIT is None, reason="git executable not found on PATH"
-)
+requires_git = pytest.mark.skipif(GIT is None, reason="git executable not found on PATH")
 
 # The three config flags A-4 adds under policy, in order.
 RESTRICTED_CONFIG_PAIRS = [
@@ -155,9 +153,7 @@ def test_g16_policy_adds_redirect_lockdown_before_clone() -> None:
     )
     clone_at = args.index("clone")
     for pair in RESTRICTED_CONFIG_PAIRS:
-        assert _occurs_before(args, pair, clone_at), (
-            f"missing {pair!r} before clone in {args!r}"
-        )
+        assert _occurs_before(args, pair, clone_at), f"missing {pair!r} before clone in {args!r}"
     assert args[-3:] == ["--", URL, "/data/repos/ok-name"]
 
 
@@ -166,9 +162,7 @@ def test_g16_policy_adds_redirect_lockdown_before_clone() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "name", ["", ".", "..", "a/b", "a\\b", "a\x00b", "/abs"]
-)
+@pytest.mark.parametrize("name", ["", ".", "..", "a/b", "a\\b", "a\x00b", "/abs"])
 def test_a1_validate_repo_name_rejects_escaping_components(name: str) -> None:
     """ORACLE: A-1 / N3 — one non-empty path component, no separators, no NUL."""
     refusal = validate_repo_name(name)
@@ -248,9 +242,7 @@ def test_g14_symlink_inside_repos_dir_is_refused(
         pytest.skip(f"filesystem cannot create a symlink: {exc}")
 
     monkeypatch.setattr(GitIndexer, "_run_git_command", _no_git)
-    indexer = GitIndexer(
-        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
-    )
+    indexer = GitIndexer(config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy)
 
     with pytest.raises(RepoPathRefusedError):
         indexer.clone(URL, name="link")
@@ -265,9 +257,7 @@ def test_derived_dotdot_name_is_refused_not_renamed(
     repos_dir = tmp_path / "repos"
     repos_dir.mkdir()
     monkeypatch.setattr(GitIndexer, "_run_git_command", _no_git)
-    indexer = GitIndexer(
-        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
-    )
+    indexer = GitIndexer(config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy)
 
     with pytest.raises(RepoPathRefusedError):
         indexer.clone("https://host/a/..")
@@ -289,9 +279,7 @@ def test_a1_refusal_precedes_update_on_an_existing_path(
     repos_dir.mkdir()
     monkeypatch.setattr(GitIndexer, "update", _update_must_not_run)
     monkeypatch.setattr(GitIndexer, "_run_git_command", _no_git)
-    indexer = GitIndexer(
-        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
-    )
+    indexer = GitIndexer(config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy)
 
     with pytest.raises(RepoPathRefusedError):
         indexer.clone(URL, name=str(outside_repo))
@@ -316,9 +304,7 @@ def test_a1_multi_component_name_is_refused_before_git(
     repos_dir = tmp_path / "repos"
     repos_dir.mkdir()
     monkeypatch.setattr(GitIndexer, "_run_git_command", _no_git)
-    indexer = GitIndexer(
-        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
-    )
+    indexer = GitIndexer(config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy)
 
     with pytest.raises(RepoPathRefusedError) as excinfo:
         indexer.clone(URL, name="a/b")
@@ -352,17 +338,15 @@ def test_g17_existing_repo_with_a_different_origin_is_refused(
         return real(self, args, **kwargs)
 
     monkeypatch.setattr(GitIndexer, "_run_git_command", _record)
-    indexer = GitIndexer(
-        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
-    )
+    indexer = GitIndexer(config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy)
 
     with pytest.raises(RepoPathRefusedError) as excinfo:
         indexer.clone(URL, name="existing")
 
     assert "origin differs" in str(excinfo.value), str(excinfo.value)
-    assert not any(
-        "pull" in args or "fetch" in args for args in calls
-    ), f"a refused origin must not be pulled: {calls!r}"
+    assert not any("pull" in args or "fetch" in args for args in calls), (
+        f"a refused origin must not be pulled: {calls!r}"
+    )
 
 
 def test_g18_pull_carries_the_restricted_config_under_policy(
@@ -384,9 +368,7 @@ def test_g18_pull_carries_the_restricted_config_under_policy(
         return "", "", 0
 
     monkeypatch.setattr(GitIndexer, "_run_git_command", _fake)
-    indexer = GitIndexer(
-        config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy
-    )
+    indexer = GitIndexer(config=GitIndexerConfig(repos_dir=repos_dir), url_policy=fake_git_policy)
 
     indexer.update(existing, expected_url=URL)
 
@@ -395,9 +377,7 @@ def test_g18_pull_carries_the_restricted_config_under_policy(
     pull = pulls[0]
     pull_at = pull.index("pull")
     for pair in RESTRICTED_CONFIG_PAIRS:
-        assert _occurs_before(pull, pair, pull_at), (
-            f"missing {pair!r} before pull in {pull!r}"
-        )
+        assert _occurs_before(pull, pair, pull_at), f"missing {pair!r} before pull in {pull!r}"
 
 
 # ---------------------------------------------------------------------------

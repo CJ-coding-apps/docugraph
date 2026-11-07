@@ -124,9 +124,7 @@ async def test_c4_mcp_caps_the_crawl_at_fifty_pages(
     monkeypatch.setattr(mcp_server, "get_vector_store", lambda: _Null())
     try:
         result = await asyncio.wait_for(
-            mcp_server._crawl_url(
-                {"url": f"http://127.0.0.1:{port}/", "max_pages": 500}
-            ),
+            mcp_server._crawl_url({"url": f"http://127.0.0.1:{port}/", "max_pages": 500}),
             timeout=240,
         )
     finally:
@@ -134,9 +132,7 @@ async def test_c4_mcp_caps_the_crawl_at_fifty_pages(
 
     page_requests = sum(1 for path in log if path == "/" or path.startswith("/page/"))
     assert page_requests >= 1, "the crawler never fetched anything"
-    assert page_requests <= 50, (
-        f"the shell crawled {page_requests} pages; max_pages must cap at 50"
-    )
+    assert page_requests <= 50, f"the shell crawled {page_requests} pages; max_pages must cap at 50"
     assert "max_pages capped at 50" in _result_text(result)
 
 
@@ -207,11 +203,9 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
     crawler = DocCrawler(url_policy=policy)
     document = None
     try:
-        try:
+        try:  # noqa: SIM105
             document = await asyncio.wait_for(
-                crawler.crawl_single(
-                    f"http://127.0.0.1:{start_port}/", use_cache=False
-                ),
+                crawler.crawl_single(f"http://127.0.0.1:{start_port}/", use_cache=False),
                 timeout=90,
             )
         except Exception:  # noqa: BLE001 - the log is the adjudicator
@@ -224,8 +218,7 @@ async def test_c6_a_service_worker_cannot_reach_a_blocked_host() -> None:
             f"scripts ran; the page reported {getattr(document, 'title', None)!r}"
         )
         assert blocked_log == [], (
-            "a service worker contacted the blocked host outside page.route: "
-            f"{blocked_log}"
+            f"a service worker contacted the blocked host outside page.route: {blocked_log}"
         )
     finally:
         _stop(start_server, start_thread)
@@ -256,13 +249,15 @@ def _blocked_routes() -> dict[str, tuple[int, dict[str, str], bytes]]:
 
 
 async def _crawl_ignoring_the_outcome(crawler: DocCrawler, url: str) -> None:
-    try:
+    try:  # noqa: SIM105
         await asyncio.wait_for(crawler.crawl_single(url, use_cache=False), timeout=90)
     except Exception:  # noqa: BLE001 - the server log is the adjudicator
         pass
 
 
-async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_blocked_host() -> None:
+async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_blocked_host() -> (
+    None
+):
     """ORACLE: MED-3 / C6b — the init script must also reach an about:blank frame.
 
     About:blank cannot register a worker at all (measured: ``InvalidStateError``,
@@ -311,7 +306,7 @@ async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_bl
     crawler = DocCrawler(url_policy=policy)
     document = None
     try:
-        try:
+        try:  # noqa: SIM105
             document = await asyncio.wait_for(
                 crawler.crawl_single(f"http://127.0.0.1:{start_port}/", use_cache=False),
                 timeout=90,
@@ -324,8 +319,7 @@ async def test_c6b_service_worker_from_an_about_blank_iframe_cannot_reach_the_bl
             f"reported {getattr(document, 'title', None)!r}"
         )
         assert blocked_log == [], (
-            "a service worker in an about:blank frame contacted the blocked host: "
-            f"{blocked_log}"
+            f"a service worker in an about:blank frame contacted the blocked host: {blocked_log}"
         )
     finally:
         _stop(start_server, start_thread)
@@ -360,8 +354,7 @@ async def test_c7_popup_requests_are_routed() -> None:
         await _crawl_ignoring_the_outcome(crawler, f"http://127.0.0.1:{start_port}/")
         assert "/" in start_log, "the crawler never requested the start page"
         assert blocked_log == [], (
-            "a popup contacted the blocked host outside the policy: "
-            f"{blocked_log}"
+            f"a popup contacted the blocked host outside the policy: {blocked_log}"
         )
     finally:
         _stop(start_server, start_thread)
@@ -401,8 +394,7 @@ async def test_c8_dedicated_worker_requests_are_routed() -> None:
         await _crawl_ignoring_the_outcome(crawler, f"http://127.0.0.1:{start_port}/")
         assert "/" in start_log, "the crawler never requested the start page"
         assert blocked_log == [], (
-            "a dedicated worker contacted the blocked host outside the policy: "
-            f"{blocked_log}"
+            f"a dedicated worker contacted the blocked host outside the policy: {blocked_log}"
         )
     finally:
         _stop(start_server, start_thread)

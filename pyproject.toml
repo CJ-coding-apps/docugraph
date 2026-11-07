@@ -158,6 +158,11 @@ select = [
 ]
 ignore = ["E501", "B008", "B904"]
 
+[tool.ruff.lint.per-file-ignores]
+# Unused arguments in tests are fixtures and stub signatures by design: a
+# fixture is requested by name, and a fake must match the real call shape.
+"tests/**" = ["ARG001", "ARG002", "ARG005"]
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # get_event_loop() is wrong in both directions: it returns no loop at all once
 # anything in the process has called asyncio.run(), and inside a running loop it

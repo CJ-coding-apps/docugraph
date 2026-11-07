@@ -419,9 +419,7 @@ async def test_a3_dropped_page_is_reported_in_the_result_text(
     )
     _install_fake_crawler(monkeypatch, recorder, site_docs=[doc], on_site=_refuse)
 
-    result = await mcp_server._crawl_url(
-        {"url": "https://docs.example/", "max_pages": 2}
-    )
+    result = await mcp_server._crawl_url({"url": "https://docs.example/", "max_pages": 2})
 
     text = _result_text(result)
     assert "Dropped 1 page(s) by policy:" in text, text
@@ -429,17 +427,13 @@ async def test_a3_dropped_page_is_reported_in_the_result_text(
     assert "private_address" in text, text
 
 
-async def test_a6_max_pages_is_capped_at_50(
-    mcp_env, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_a6_max_pages_is_capped_at_50(mcp_env, monkeypatch: pytest.MonkeyPatch) -> None:
     """ORACLE: A-6 / D-5 — the shell-level clamp always runs."""
     _patch_mcp_effects(monkeypatch)
     recorder: dict = {}
     _install_fake_crawler(monkeypatch, recorder, site_docs=[])
 
-    result = await mcp_server._crawl_url(
-        {"url": "https://docs.example/", "max_pages": 500}
-    )
+    result = await mcp_server._crawl_url({"url": "https://docs.example/", "max_pages": 500})
 
     assert recorder.get("crawl_site") is True
     assert recorder.get("max_pages") == 50
@@ -462,9 +456,7 @@ async def test_a6_max_pages_below_one_or_not_an_int_is_refused(
     assert "crawl_site" not in recorder and "crawl_single" not in recorder
 
 
-async def test_a6_max_pages_one_uses_crawl_single(
-    mcp_env, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_a6_max_pages_one_uses_crawl_single(mcp_env, monkeypatch: pytest.MonkeyPatch) -> None:
     """ORACLE: A-6 — one page is the existing single-page path."""
     _patch_mcp_effects(monkeypatch)
     recorder: dict = {}
@@ -581,14 +573,11 @@ async def test_low3_policy_does_not_serve_a_cached_page(
 
     monkeypatch.setattr(crawler, "_get_cached", _record)
 
-    documents = await crawler.crawl_site(
-        "https://docs.example/", max_pages=1, use_cache=True
-    )
+    documents = await crawler.crawl_site("https://docs.example/", max_pages=1, use_cache=True)
 
     assert documents, "the fake browser returned a page"
     assert cache_reads == [], (
-        "a policy crawl must not serve a page whose final URL was never judged: "
-        f"{cache_reads!r}"
+        f"a policy crawl must not serve a page whose final URL was never judged: {cache_reads!r}"
     )
 
 
@@ -682,9 +671,7 @@ async def test_round4_both_crawl_paths_pin_crawl4ais_replay_off(
         return config
 
     monkeypatch.setattr(crawl4ai, "CrawlerRunConfig", _future_default_config)
-    _install_fake_browser(
-        monkeypatch, _FakeResult(redirected_url="https://docs.example/")
-    )
+    _install_fake_browser(monkeypatch, _FakeResult(redirected_url="https://docs.example/"))
 
     crawler = crawler_module.DocCrawler()  # no policy: the CLI path too
     await crawler.crawl_single("https://docs.example/", use_cache=False)
@@ -693,8 +680,7 @@ async def test_round4_both_crawl_paths_pin_crawl4ais_replay_off(
     assert len(seen) == 2, "both crawl paths must build a crawl4ai config"
     for config in seen:
         assert config.max_retries == 0, (
-            "the anti-bot retry was not pinned off: "
-            f"{getattr(config, 'max_retries', None)!r}"
+            f"the anti-bot retry was not pinned off: {getattr(config, 'max_retries', None)!r}"
         )
         assert config.fallback_fetch_function is None, (
             "crawl4ai's browser-less fallback fetch was not pinned off: "
@@ -769,9 +755,7 @@ async def test_s2_a_run_config_without_fallback_fetch_is_refused(
     """ORACLE: A-2 / S2 — the config must expose fallback_fetch_function."""
     import crawl4ai
 
-    fake = _install_self_check_browser(
-        monkeypatch, SimpleNamespace(set_hook=lambda *a, **k: None)
-    )
+    fake = _install_self_check_browser(monkeypatch, SimpleNamespace(set_hook=lambda *a, **k: None))
 
     def _config(*args, **kwargs):
         return SimpleNamespace(max_retries=0)
@@ -805,9 +789,7 @@ async def test_s4_a_hook_registration_error_is_a_refusal_not_a_crash(
     mcp_env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """ORACLE: A-2 / S4 — a set_hook ValueError becomes a typed refusal."""
-    strategy = SimpleNamespace(
-        hooks={"on_page_context_created": None}, set_hook=_hooks_raises
-    )
+    strategy = SimpleNamespace(hooks={"on_page_context_created": None}, set_hook=_hooks_raises)
     fake = _install_self_check_browser(monkeypatch, strategy)
     crawler = crawler_module.DocCrawler(url_policy=_backstop_policy())
 
@@ -855,9 +837,7 @@ async def test_r1_a_relative_link_resolves_against_the_final_url(
     monkeypatch.setattr(crawl4ai, "AsyncWebCrawler", _RelativeLinkFakeCrawler)
     crawler = crawler_module.DocCrawler()  # no policy: the CLI path
 
-    documents = await crawler.crawl_site(
-        "http://example.com/", max_pages=2, use_cache=False
-    )
+    documents = await crawler.crawl_site("http://example.com/", max_pages=2, use_cache=False)
 
     assert _RelativeLinkFakeCrawler.calls == [
         "http://example.com/",

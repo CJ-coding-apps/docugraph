@@ -105,13 +105,10 @@ async def test_c3_redirect_to_a_blocked_host_is_never_fetched() -> None:
     crawler = DocCrawler(url_policy=policy)
 
     try:
-        await _crawl_without_caring_about_the_error(
-            crawler, f"http://127.0.0.1:{start_port}/"
-        )
+        await _crawl_without_caring_about_the_error(crawler, f"http://127.0.0.1:{start_port}/")
         assert "/" in start_log, "the crawler never requested the start page"
         assert blocked_log == [], (
-            "the blocked host was contacted despite the policy refusal: "
-            f"{blocked_log}"
+            f"the blocked host was contacted despite the policy refusal: {blocked_log}"
         )
     finally:
         _stop(start_server, start_thread)
@@ -150,16 +147,13 @@ async def test_c5_second_hop_to_a_blocked_host_is_never_fetched() -> None:
     crawler = DocCrawler(url_policy=policy)
 
     try:
-        await _crawl_without_caring_about_the_error(
-            crawler, f"http://127.0.0.1:{start_port}/"
-        )
+        await _crawl_without_caring_about_the_error(crawler, f"http://127.0.0.1:{start_port}/")
         assert "/" in start_log, "the crawler never requested the start page"
         assert middle_log.count("/step2") == 1, (
-            "the allowed middle hop must be served exactly once: " f"{middle_log}"
+            f"the allowed middle hop must be served exactly once: {middle_log}"
         )
         assert blocked_log == [], (
-            "the blocked host was contacted through the second hop: "
-            f"{blocked_log}"
+            f"the blocked host was contacted through the second hop: {blocked_log}"
         )
     finally:
         _stop(start_server, start_thread)
@@ -195,13 +189,8 @@ async def test_p8_redirect_hop_to_a_metadata_host_is_aborted() -> None:
         # As in C3/C5, the adjudicator is the blocked server's log: an aborted
         # navigation surfaces either as a refusal or as a failed result, and the
         # claim is that the hop was never made.
-        await _crawl_without_caring_about_the_error(
-            crawler, f"http://127.0.0.1:{start_port}/start"
-        )
-        assert blocked_log == [], (
-            "the redirect hop to a metadata host was fetched: "
-            f"{blocked_log}"
-        )
+        await _crawl_without_caring_about_the_error(crawler, f"http://127.0.0.1:{start_port}/start")
+        assert blocked_log == [], f"the redirect hop to a metadata host was fetched: {blocked_log}"
     finally:
         _stop(start_server, start_thread)
         _stop(blocked_server, blocked_thread)
