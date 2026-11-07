@@ -11,6 +11,39 @@ public API.
 
 ## [Unreleased]
 
+### Security
+
+- **A private IPv4 is judged through every IPv6 spelling that can carry it.** 0.2.1 checked the IPv6
+  wrapper's `is_global` flag, which reports global for `64:ff9b::10.0.0.5` and `::10.0.0.5`; the
+  embedded IPv4 is now extracted — IPv4-mapped, IPv4-compatible, both NAT64 prefixes, 6to4 and
+  Teredo (server and client) — and refused when it is not global. This closes a default-policy gap
+  in 0.2.1; it was found in review and no advisory is reissued.
+- **Link-local and cloud-metadata addresses are refused whatever `allow_private_networks` says.**
+  169.254.0.0/16, fe80::/10, `fd00:ec2::254` and `100.100.100.200` are no longer reachable by turning
+  the intranet setting on.
+- **A crawl refuses to run unguarded.** If the installed crawl4ai is missing the hook, retry switch
+  or browser-less fallback the guards pin, the tool returns `Refused: unsupported_crawler` before
+  the browser starts; an error while registering the hook becomes the same refusal, not a crash.
+
+### Added
+
+- The browser security suites run in CI against a real Chromium, and a missing browser fails the job
+  rather than skipping the tests (`DOCUGRAPH_REQUIRE_BROWSER=1`).
+
+### Changed
+
+- **Breaking:** `crawler.allow_private_networks = true` no longer permits link-local or cloud-metadata
+  addresses. Ordinary private ranges (10.0.0.0/8, 192.168.0.0/16, loopback) are admitted as before.
+- `crawl4ai` is bounded to `>=0.9.3,<0.10` and `playwright` is declared at `>=1.48,<1.63` — the
+  versions whose hook table and routing API the guards are written against.
+- `tests/` is linted by ruff alongside `src/` and `scripts/`.
+
+### Fixed
+
+- A redirected page is recorded under its **final** URL and its relative links are resolved against
+  that URL, in both crawl paths. Previously a relative link on a redirected page was resolved
+  against the requested URL (LOW-5 from the 0.2.1 review).
+
 ## [0.2.1] - 2026-11-07
 
 ### Security
