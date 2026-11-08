@@ -53,7 +53,7 @@ Or work from a checkout — clone this repository, then from its root:
 
 ```bash
 # With uv (recommended; the extras match the Docker image)
-uv sync --extra dev --extra crawl --extra graph
+uv sync --all-extras
 
 # Or with pip
 python -m venv .venv && source .venv/bin/activate
@@ -96,9 +96,34 @@ installed the package. For an MCP client, an isolated tool install is the least
 fuss: it puts the script somewhere stable that does not move with a project
 directory.
 
+Install both feature extras. `crawl_url` and `docugraph crawl` need `crawl`;
+`graph_query`, `graph_add` and `docugraph graph` need `graph`. A core-only
+install still starts the server and advertises all nine tools, so the gap only
+appears when one of those features is used — hence both extras here:
+
 ```bash
-pipx install docugraph      # or: uv tool install docugraph
+# pipx
+pipx install 'docugraph[crawl,graph]'
+
+# or with uv:
+uv tool install 'docugraph[crawl,graph]'
 ```
+
+The `crawl` extra installs Playwright but not its browser, and the `playwright`
+command lives inside the isolated environment rather than on your `PATH`. Run
+it through the tool manager, naming the same extras so the browser revision
+matches the Playwright version the extra pins:
+
+```bash
+# pipx
+pipx run --spec 'docugraph[crawl,graph]' playwright install chromium
+
+# uv
+uv tool run --from 'docugraph[crawl,graph]' playwright install chromium
+```
+
+That is ~190 MB into the per-user Playwright cache, downloaded once. Skip it if
+you will only use `index local`, `index git`, `search`, `memory` and `stats`.
 
 Then ask your shell where it landed:
 
@@ -140,10 +165,10 @@ straight from a checkout, with no path to update when it moves:
 }
 ```
 
-From a checkout, clone this repository and run `uv sync` (`pip install -e '.[dev]'`
-works too). The script is then at `.venv/bin/docugraph-mcp`
-(`Scripts\docugraph-mcp.exe` on Windows), and that is the path to give the
-client.
+From a checkout, clone this repository and run `uv sync --all-extras`
+(`pip install -e '.[dev,crawl,graph]'` works too). The script is then at
+`.venv/bin/docugraph-mcp` (`Scripts\docugraph-mcp.exe` on Windows), and that is
+the path to give the client.
 
 The server speaks JSON-RPC over stdio and exposes nine tools:
 
