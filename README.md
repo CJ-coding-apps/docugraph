@@ -111,15 +111,16 @@ uv tool install 'docugraph[crawl,graph]'
 
 The `crawl` extra installs Playwright but not its browser, and the `playwright`
 command lives inside the isolated environment rather than on your `PATH`. Run
-it through the tool manager, naming the same extras so the browser revision
-matches the Playwright version the extra pins:
+it with that environment's own interpreter, so the browser revision matches the
+Playwright version the extra installed rather than whatever a fresh resolution
+picks today:
 
 ```bash
 # pipx
-pipx run --spec 'docugraph[crawl,graph]' playwright install chromium
+"$(pipx environment --value PIPX_LOCAL_VENVS)/docugraph/bin/python" -m playwright install chromium
 
 # uv
-uv tool run --from 'docugraph[crawl,graph]' playwright install chromium
+"$(uv tool dir)/docugraph/bin/python" -m playwright install chromium
 ```
 
 That is ~190 MB into the per-user Playwright cache, downloaded once. Skip it if
