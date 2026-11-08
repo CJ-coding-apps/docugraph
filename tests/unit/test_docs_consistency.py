@@ -23,14 +23,16 @@ DOCS_DIR = ROOT / "docs"
 # The pages a reader is expected to follow. `claude-integration/` is included
 # because it ships in the repository and its hooks run on a user's machine.
 PAGES = sorted(
-    [*DOCS_DIR.rglob("*.md"), ROOT / "README.md", *sorted((ROOT / "claude-integration").rglob("*.md"))]
+    [
+        *DOCS_DIR.rglob("*.md"),
+        ROOT / "README.md",
+        *sorted((ROOT / "claude-integration").rglob("*.md")),
+    ]
 )
 
 # Shell the repository ships and people run. A command here that does not
 # resolve is a hook that fails silently or noisily on every session.
-SHELL_SOURCES = sorted(
-    (ROOT / "claude-integration" / "hooks").glob("*.sh")
-)
+SHELL_SOURCES = sorted((ROOT / "claude-integration" / "hooks").glob("*.sh"))
 
 # Config files whose environment variables are part of the deployment surface.
 ENV_SOURCES = [
@@ -147,8 +149,7 @@ def test_every_documented_environment_variable_is_a_settings_field() -> None:
         section, key = body.split("__", 1)
         if section not in sections:
             problems.append(
-                f"{page}: `{name}` names no settings section "
-                f"(have: {', '.join(sorted(sections))})"
+                f"{page}: `{name}` names no settings section (have: {', '.join(sorted(sections))})"
             )
         elif key.lower() not in sections[section]:
             problems.append(
@@ -240,8 +241,26 @@ def test_every_advertised_tool_is_documented() -> None:
 # --------------------------------------------------------------------------
 
 # Shell keywords and prefixes that can precede the command in a line.
-LEADING = {"if", "then", "else", "fi", "for", "do", "done", "while", "export",
-           "set", "source", ".", "uv", "run", "python", "-m", "sudo", "env"}
+LEADING = {
+    "if",
+    "then",
+    "else",
+    "fi",
+    "for",
+    "do",
+    "done",
+    "while",
+    "export",
+    "set",
+    "source",
+    ".",
+    "uv",
+    "run",
+    "python",
+    "-m",
+    "sudo",
+    "env",
+}
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 QUOTED = re.compile(r"^[\"']?(.*?)[\"']?$")
 
@@ -272,7 +291,11 @@ def _cli_invocations() -> list[tuple[str, str, list[str]]]:
     found = []
     for source in [*PAGES, *SHELL_SOURCES]:
         relative = str(source.relative_to(ROOT))
-        blocks = _blocks(source, "bash", "sh", "shell", "console", "json") if source.suffix == ".md" else [source.read_text()]
+        blocks = (
+            _blocks(source, "bash", "sh", "shell", "console", "json")
+            if source.suffix == ".md"
+            else [source.read_text()]
+        )
         for text in blocks:
             for line in text.splitlines():
                 argv = _command_argv(line)
@@ -301,9 +324,7 @@ def test_every_documented_command_exists() -> None:
 
     from docugraph.interfaces.cli import main
 
-    scripts = set(
-        tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
-    )
+    scripts = set(tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"])
     problems: list[str] = []
     for source, line, argv in _cli_invocations():
         name = argv[0]
@@ -343,9 +364,7 @@ def test_every_documented_command_exists() -> None:
                 )
                 break
             # Otherwise it is a positional argument (a path, a URL, a query).
-    assert not problems, "\n  ".join(
-        ["Command lines in the repository must work:"] + problems
-    )
+    assert not problems, "\n  ".join(["Command lines in the repository must work:"] + problems)
 
 
 def test_every_command_is_documented() -> None:

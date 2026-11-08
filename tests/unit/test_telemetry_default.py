@@ -102,9 +102,7 @@ def test_t3_the_telemetry_default_is_called_before_graphiti_is_constructed() -> 
     calls = [node for node in ast.walk(function) if isinstance(node, ast.Call)]
 
     default_lines = [
-        node.lineno
-        for node in calls
-        if _called_name(node) in {"apply_telemetry_default"}
+        node.lineno for node in calls if _called_name(node) in {"apply_telemetry_default"}
     ]
     graphiti_lines = [node.lineno for node in calls if _called_name(node) == "Graphiti"]
 

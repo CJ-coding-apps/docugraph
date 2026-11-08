@@ -11,6 +11,7 @@ from urllib.parse import urljoin, urlparse, urlsplit
 from docugraph.core.config import CrawlerConfig, get_config
 from docugraph.core.models import ContentType, Document
 from docugraph.security.url_policy import (
+    RefusalReason,
     UrlPolicy,
     UrlRefusal,
     UrlRefusedError,
@@ -160,8 +161,47 @@ def make_page_route_hook(policy: UrlPolicy) -> Callable[[Any], Awaitable[None]]:
 
 
 async def _close_websocket(websocket: Any) -> None:
-    """Websocket routing is present only on newer Playwright; close anyway."""
+    """Close a routed websocket (Playwright >= 1.48, the declared floor)."""
     await websocket.close()
+
+
+def crawler_support_refusal(crawler: Any, run_config: Any) -> UrlRefusal | None:
+    """Refuse a crawler that cannot carry the browser guards (A-3).
+
+    The guards depend on three things: a strategy that accepts the
+    ``on_page_context_created`` hook, and a run config that lets docugraph pin
+    ``max_retries`` and ``fallback_fetch_function`` off. A presence check is
+    the only honest test here -- a renamed hook would otherwise be accepted by
+    ``set_hook`` at run time and leave every guard uninstalled. crawl4ai 0.9.3
+    rejects an unknown hook name itself (``async_crawler_strategy.py``: the
+    hook table at 101-111, ``set_hook`` at 164, the ``ValueError`` at 188), but
+    it does so too late: by then the browser exists and the crawl has started.
+
+    ``strategy.hooks`` is checked only when the strategy exposes a mapping.
+    A stand-in that offers nothing but a callable ``set_hook`` is accepted,
+    because crawl4ai's own table is what rejects a bad name.
+    """
+    missing: list[str] = []
+
+    strategy = getattr(crawler, "crawler_strategy", None)
+    set_hook = getattr(strategy, "set_hook", None)
+    hook_supported = callable(set_hook)
+    hooks = getattr(strategy, "hooks", None)
+    if hook_supported and isinstance(hooks, Mapping):
+        hook_supported = "on_page_context_created" in hooks
+    if not hook_supported:
+        missing.append("on_page_context_created")
+
+    for capability in ("max_retries", "fallback_fetch_function"):
+        if not hasattr(run_config, capability):
+            missing.append(capability)
+
+    if not missing:
+        return None
+    return UrlRefusal(
+        RefusalReason.UNSUPPORTED_CRAWLER,
+        f"crawl4ai is missing {', '.join(missing)}; refusing to crawl without the browser guards",
+    )
 
 
 def _install_page_guards(crawler: Any, policy: UrlPolicy) -> None:
@@ -180,14 +220,32 @@ def _install_page_guards(crawler: Any, policy: UrlPolicy) -> None:
         target = context if context is not None else page
         await target.route("**/*", route_hook)
 
-        route_web_socket = getattr(target, "route_web_socket", None)
-        if route_web_socket is not None:
-            await route_web_socket("**/*", _close_websocket)
+        await target.route_web_socket("**/*", _close_websocket)
 
         if context is not None:
             await context.add_init_script(_SERVICE_WORKER_REMOVAL_SCRIPT)
 
     crawler.crawler_strategy.set_hook("on_page_context_created", on_page_context_created)
+
+
+def _install_guards_or_refuse(crawler: Any, run_config: Any, policy: UrlPolicy) -> None:
+    """Self-check, then install the guards before the browser starts.
+
+    Any failure here is a refusal, never a crash (A-5): a crawl that cannot be
+    guarded is refused rather than run unguarded. The browser is constructed
+    but never entered, so nothing is fetched.
+    """
+    refusal = crawler_support_refusal(crawler, run_config)
+    if refusal is None:
+        try:
+            _install_page_guards(crawler, policy)
+        except Exception as exc:
+            refusal = UrlRefusal(
+                RefusalReason.UNSUPPORTED_CRAWLER,
+                f"could not install the browser guards: {type(exc).__name__}: {exc}",
+            )
+    if refusal is not None:
+        raise UrlRefusedError(refusal)
 
 
 def _pin_replay_guards(crawler_config: Any) -> None:
@@ -329,10 +387,11 @@ class DocCrawler:
         )
         _pin_replay_guards(crawler_config)
 
-        async with AsyncWebCrawler(config=browser_config) as crawler:
-            if self._url_policy is not None:
-                _install_page_guards(crawler, self._url_policy)
+        crawler = AsyncWebCrawler(config=browser_config)
+        if self._url_policy is not None:
+            _install_guards_or_refuse(crawler, crawler_config, self._url_policy)
 
+        async with crawler:
             result = await crawler.arun(url=url, config=crawler_config)
 
             if not result.success:
@@ -355,7 +414,7 @@ class DocCrawler:
                         break
 
             document = Document(
-                source_url=url,
+                source_url=final_url,
                 title=title,
                 content=result.markdown.fit_markdown
                 if hasattr(result.markdown, "fit_markdown")
@@ -422,10 +481,10 @@ class DocCrawler:
         )
         _pin_replay_guards(crawler_config)
 
-        # Parse base domain for filtering
-        parsed_start = urlparse(start_url)
-        base_domain = parsed_start.netloc
-        parsed_start.path.rsplit("/", 1)[0] if "/" in parsed_start.path else ""
+        # The same-host filter is seeded from the first page that yields a
+        # document, i.e. from where that page ended up (A-7/LOW-5), not from
+        # the URL that was requested.
+        base_netloc: str | None = None
 
         visited: set[str] = set()
         to_visit: list[str] = [start_url]
@@ -433,10 +492,11 @@ class DocCrawler:
 
         url_regex = re.compile(url_pattern) if url_pattern else None
 
-        async with AsyncWebCrawler(config=browser_config) as crawler:
-            if self._url_policy is not None:
-                _install_page_guards(crawler, self._url_policy)
+        crawler = AsyncWebCrawler(config=browser_config)
+        if self._url_policy is not None:
+            _install_guards_or_refuse(crawler, crawler_config, self._url_policy)
 
+        async with crawler:
             # The cap is on pages processed (fetched or served from cache), not
             # on pages that yielded a document: an unparseable page must not
             # let the crawl run past its limit.
@@ -472,6 +532,9 @@ class DocCrawler:
                             on_refused(final_url, refusal)
                         continue
 
+                    if base_netloc is None:
+                        base_netloc = urlparse(final_url).netloc
+
                     # Extract title
                     title = result.metadata.get("title") if result.metadata else None
                     if not title and result.markdown:
@@ -488,7 +551,7 @@ class DocCrawler:
                     )
 
                     document = Document(
-                        source_url=url,
+                        source_url=final_url,
                         title=title,
                         content=content,
                         content_type=ContentType.MARKDOWN,
@@ -508,8 +571,8 @@ class DocCrawler:
                         targets = await asyncio.to_thread(
                             enqueue_targets,
                             result.links["internal"],
-                            page_url=url,
-                            base_netloc=base_domain,
+                            page_url=final_url,
+                            base_netloc=base_netloc,
                             url_pattern=url_regex,
                             policy=self._url_policy,
                         )

@@ -63,12 +63,14 @@ jobs:
       # not part of the package but it is part of this repository, and code no gate
       # reads is code that rots. mypy gets both paths together so it resolves
       # `docugraph` to this source tree rather than to the installed copy, which it
-      # otherwise reports as an untyped library.
+      # otherwise reports as an untyped library. `tests/` is linted by ruff only:
+      # tests are not shipped, and their unused arguments are fixtures by design
+      # (see the per-file ignore in pyproject.toml).
       - name: Run Ruff linter
-        run: uv run ruff check src/ scripts/
+        run: uv run ruff check src/ scripts/ tests/
 
       - name: Run Ruff formatter check
-        run: uv run ruff format --check src/ scripts/
+        run: uv run ruff format --check src/ scripts/ tests/
 
       - name: Run mypy
         run: uv run mypy src/ scripts/
@@ -198,16 +200,52 @@ jobs:
           print(f"serverInfo: {infos[0]}")
           PY
 
+  # The browser rows need a real Chromium, which the matrix job does not
+  # install -- so they skipped everywhere and their guards were never
+  # exercised in CI. Here they run, and DOCUGRAPH_REQUIRE_BROWSER=1 makes a
+  # missing browser a failure instead of a skip: "nothing ran" must not look
+  # like "everything passed". The same switch is what turns a broken install
+  # into a red build rather than a green one with no coverage.
+  integration-browser:
+    name: Integration (browser)
+    runs-on: ubuntu-latest
+    needs: lint
+    env:
+      DOCUGRAPH_REQUIRE_BROWSER: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Install Chromium
+        run: uv run playwright install chromium --with-deps
+
+      - name: Run integration tests
+        run: uv run pytest tests/integration -v
+
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: test
+    # Both results are read, not just listed: a job in `needs` that is never
+    # checked still lets a red browser run print "All tests passed!".
+    needs: [test, integration-browser]
     if: always()
 
     steps:
       - name: Check test results
         run: |
-          if [ "${{ needs.test.result }}" == "success" ]; then
+          if [ "${{ needs.test.result }}" == "success" ] && [ "${{ needs['integration-browser'].result }}" == "success" ]; then
             echo "All tests passed!"
           else
             echo "Some tests failed"

@@ -23,9 +23,7 @@ import lancedb
 from docugraph.storage.vector_store import VectorStore
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-AUTO_INDEX_HOOK = (
-    REPO_ROOT / "claude-integration" / "hooks" / "docugraph-auto-index.sh"
-)
+AUTO_INDEX_HOOK = REPO_ROOT / "claude-integration" / "hooks" / "docugraph-auto-index.sh"
 
 # Comfortably over the chunker's 100-character `min_chunk_size`. That floor is
 # not a detail to wave away: a shorter file is read, reported as "1 files", and
@@ -104,9 +102,7 @@ class TestTheAutoIndexHook:
             # console script on PATH. The interpreter running this test is the
             # one the package was installed into; its bin directory is where
             # that script lives.
-            "PATH": os.pathsep.join(
-                [str(Path(sys.executable).parent), os.environ.get("PATH", "")]
-            ),
+            "PATH": os.pathsep.join([str(Path(sys.executable).parent), os.environ.get("PATH", "")]),
         }
 
         proc = subprocess.run(
@@ -134,6 +130,4 @@ class TestTheAutoIndexHook:
             f"it was pointed at holds {rows} rows.\n"
             f"stdout: {proc.stdout!r}\nstderr: {proc.stderr!r}"
         )
-        assert (data_dir / "vectors").is_dir(), (
-            "the store is not where the hook was told to put it"
-        )
+        assert (data_dir / "vectors").is_dir(), "the store is not where the hook was told to put it"

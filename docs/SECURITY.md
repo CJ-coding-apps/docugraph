@@ -46,6 +46,15 @@ untrusted and decide before any effect:
 
 - The scheme allowlist, a leading `-`, DNS resolution and the global-address rule are enforced before
   the cache, the browser, git or the vector store is touched.
+- **Link-local and cloud-metadata addresses are refused whatever `allow_private_networks` says.** The
+  setting means "this intranet", never "this machine's cloud credentials": 169.254.0.0/16 and
+  fe80::/10 (including the AWS instance metadata address), `fd00:ec2::254` and `100.100.100.200`
+  stay refused. Every IPv6 literal is also decomposed into the IPv4 addresses it can carry, and each
+  of those is judged by the same rule: IPv4-mapped (`::ffff:a.b.c.d`), IPv4-compatible
+  (`::a.b.c.d`), NAT64 (`64:ff9b::/96` and `64:ff9b:1::/48`), 6to4 (`2002::/16`) and Teredo
+  (`2001::/32`, both the server and the client). 0.2.1 judged only the IPv6 wrapper, so a private IPv4
+  spelled as `[64:ff9b::10.0.0.5]` was reported global and passed the default policy; the embedded
+  address is what is judged now.
 - Redirects are walked hop by hop. Each `Location` is judged before its request is made, because
   Chromium otherwise follows a redirect internally without re-entering the route handler. A page whose
   final URL is refused is dropped and reported, never indexed.
@@ -58,12 +67,22 @@ untrusted and decide before any effect:
   navigates through the same hooked context and is covered by these guards; its browser-less
   `fallback_fetch_function` would run outside every guard, so the retry and the fallback are pinned off
   in both crawl paths.
+- **The guards are checked before the browser starts.** If the installed crawl4ai lacks the hook, the
+  retry switch or the browser-less fallback they pin, the crawl is refused as `unsupported_crawler`
+  rather than run unguarded; an error while registering the hook — crawl4ai raises `Invalid hook
+  type` for a name it does not have — becomes the same refusal, never a crash. The guards are bound
+  to crawl4ai 0.9.x's hook table and to Playwright 1.48+ (the websocket routing API), and both are
+  capped below their next minor so a library release cannot silently reopen either.
 - Git runs with `--` before the URL and path, a closed ref grammar, `protocol.file.allow=never`,
   `protocol.ext.allow=never` and `http.followRedirects=false`. The clone destination is resolved and must
   stay inside the configured repos directory; a name that escapes it is refused, not renamed. When a
   clone directory already exists, its **origin** must equal the requested URL and pass the same policy,
   and the pull and fetch fallback run under the same `-c` lockdown — the requested URL is not what pull
   would contact.
+
+The browser suites in `tests/integration` run against a real Chromium in CI, and there a missing
+browser is a failure rather than a skip (`DOCUGRAPH_REQUIRE_BROWSER=1`): a guard that only ever skips
+is a guard nobody runs.
 
 Two limits are stated here rather than hidden. **DNS rebinding between the policy check and the
 browser's own resolution is narrowed, not closed:** the route-level re-check catches a request that

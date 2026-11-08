@@ -62,7 +62,13 @@ dependencies = [
     "kuzu==0.11.3",
 
     # Web Crawling
-    "crawl4ai>=0.7.8",
+    # The guards are bound to crawl4ai 0.9.x's hook table and to Playwright's
+    # routing API. crawl4ai is capped below the next minor because the hook and
+    # retry surfaces the guards pin are not a compatibility promise; Playwright's
+    # floor is route_web_socket (1.48, Playwright's own docs), and the cap is the
+    # next minor above the version CI installs.
+    "crawl4ai>=0.9.3,<0.10",
+    "playwright>=1.48,<1.63",
 
     # CLI
     "click>=8.1.0",
@@ -157,6 +163,11 @@ select = [
     "TID251", # flake8-tidy-imports: banned-api
 ]
 ignore = ["E501", "B008", "B904"]
+
+[tool.ruff.lint.per-file-ignores]
+# Unused arguments in tests are fixtures and stub signatures by design: a
+# fixture is requested by name, and a fake must match the real call shape.
+"tests/**" = ["ARG001", "ARG002", "ARG005"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # get_event_loop() is wrong in both directions: it returns no loop at all once
