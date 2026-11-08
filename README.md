@@ -22,25 +22,42 @@ Code and other MCP clients. The CLI is for out-of-band index bootstrapping
 
 ### Installation
 
+A core install indexes and searches local documentation, and serves MCP:
+
 ```bash
 pip install docugraph
 ```
 
-**Requires Python 3.11–3.13.** CI runs the suite on all three, on Linux. Python
-3.14 is excluded deliberately, for two independent reasons: `kuzu` 0.11.3 — the
-final release, and the version this package pins — publishes no 3.14 wheels for
-macOS or Windows, and fastembed's 3.14 requirement (`onnxruntime>=1.24.2`) cannot
-be satisfied alongside the `onnxruntime<1.24` cap this package carries.
+Crawling web pages and the documentation knowledge graph are extras, so a user
+who needs neither does not download a headless browser or an archived graph
+database:
+
+```bash
+pip install 'docugraph[crawl]'   # crawl_url, docugraph crawl (also needs a browser — below)
+pip install 'docugraph[graph]'   # graph_query, graph_add, docugraph graph (Kuzu via Graphiti)
+pip install 'docugraph[all]'     # crawl + graph + cloud + ollama
+```
+
+Using a feature whose extra is absent fails with one sentence naming it — for
+example `This feature needs the 'graph' extra: pip install 'docugraph[graph]'` —
+rather than an import traceback.
+
+**Requires Python 3.11–3.13.** CI runs the suite on all three, on Linux and on
+x86_64 macOS. Python 3.14 is excluded deliberately, for two independent reasons:
+`kuzu` 0.11.3 — the final release, and the version this package pins — publishes
+no 3.14 wheels for macOS or Windows, and fastembed's 3.14 requirement
+(`onnxruntime>=1.24.2`) cannot be satisfied alongside the `onnxruntime<1.24` cap
+this package carries.
 
 Or work from a checkout — clone this repository, then from its root:
 
 ```bash
-# With uv (recommended)
-uv sync --extra dev
+# With uv (recommended; the extras match the Docker image)
+uv sync --all-extras
 
 # Or with pip
 python -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'
+pip install -e '.[dev,crawl,graph]'
 ```
 
 First use downloads the default embedding model (`BAAI/bge-small-en-v1.5`,
@@ -49,9 +66,9 @@ keep the weights somewhere durable; unset, fastembed puts them in a
 `fastembed_cache` subdirectory of the system temp directory, which the OS is
 free to clear.
 
-**URL crawling needs a browser that the Python install does not include.**
-Crawl4AI drives Playwright's Chromium, so run this once before using
-`docugraph crawl` or the `crawl_url` tool:
+**URL crawling needs the `crawl` extra and a browser that neither extra
+includes.** Crawl4AI drives Playwright's Chromium, so install the extra and run
+this once before using `docugraph crawl` or the `crawl_url` tool:
 
 ```bash
 playwright install chromium
@@ -70,7 +87,7 @@ repository directory. Refusals are one line — `Refused: private_address — �
 and appear in the tool result with `isError`. A site crawl is capped at 50 pages
 per call. Set `crawler.allow_private_networks: true` to crawl an intranet, and
 `crawler.allowed_domains` to narrow what may be reached; see
-[docs/configuration.md](docs/configuration.md#url-policy).
+[docs/configuration.md](https://github.com/CJ-coding-apps/docugraph/blob/main/docs/configuration.md#url-policy).
 
 ### MCP integration with Claude Code (primary surface)
 
@@ -79,9 +96,35 @@ installed the package. For an MCP client, an isolated tool install is the least
 fuss: it puts the script somewhere stable that does not move with a project
 directory.
 
+Install both feature extras. `crawl_url` and `docugraph crawl` need `crawl`;
+`graph_query`, `graph_add` and `docugraph graph` need `graph`. A core-only
+install still starts the server and advertises all nine tools, so the gap only
+appears when one of those features is used — hence both extras here:
+
 ```bash
-pipx install docugraph      # or: uv tool install docugraph
+# pipx
+pipx install 'docugraph[crawl,graph]'
+
+# or with uv:
+uv tool install 'docugraph[crawl,graph]'
 ```
+
+The `crawl` extra installs Playwright but not its browser, and the `playwright`
+command lives inside the isolated environment rather than on your `PATH`. Run
+it with that environment's own interpreter, so the browser revision matches the
+Playwright version the extra installed rather than whatever a fresh resolution
+picks today:
+
+```bash
+# pipx
+"$(pipx environment --value PIPX_LOCAL_VENVS)/docugraph/bin/python" -m playwright install chromium
+
+# uv
+"$(uv tool dir)/docugraph/bin/python" -m playwright install chromium
+```
+
+That is ~190 MB into the per-user Playwright cache, downloaded once. Skip it if
+you will only use `index local`, `index git`, `search`, `memory` and `stats`.
 
 Then ask your shell where it landed:
 
@@ -123,10 +166,10 @@ straight from a checkout, with no path to update when it moves:
 }
 ```
 
-From a checkout, clone this repository and run `uv sync` (`pip install -e '.[dev]'`
-works too). The script is then at `.venv/bin/docugraph-mcp`
-(`Scripts\docugraph-mcp.exe` on Windows), and that is the path to give the
-client.
+From a checkout, clone this repository and run `uv sync --all-extras`
+(`pip install -e '.[dev,crawl,graph]'` works too). The script is then at
+`.venv/bin/docugraph-mcp` (`Scripts\docugraph-mcp.exe` on Windows), and that is
+the path to give the client.
 
 The server speaks JSON-RPC over stdio and exposes nine tools:
 
@@ -191,11 +234,14 @@ uv run docugraph mcp-server
 
 ### Python API
 
+`docugraph.__all__` is the supported surface. The models, `Config`, `UrlPolicy`
+and `MissingExtraError` are always importable; the heavier names are resolved on
+first access, so `import docugraph` stays cheap.
+
 ```python
 import asyncio
-from docugraph.ingestion.crawler import DocCrawler
-from docugraph.ingestion.chunker import Chunker
-from docugraph.storage.vector_store import VectorStore
+
+from docugraph import Chunker, DocCrawler, VectorStore
 
 
 async def main():
@@ -359,6 +405,31 @@ rather than pointing the new version at the old graph file.
 - **Web crawler**: Crawl4AI (JS rendering, clean Markdown)
 - **MCP**: Model Context Protocol for Claude Code integration
 - Optional cloud/local backends: OpenAI, Cohere, Ollama (extras)
+
+## Status and support
+
+DocuGraph is pre-1.0. It uses semantic versioning for what that can mean before
+1.0: a minor release may break an interface, and the CHANGELOG's breaking
+changes are listed first.
+
+**Supported interfaces** are the MCP tools in the table above, the CLI, the
+names in `docugraph.__all__`, and the settings documented in
+[docs/configuration.md](https://github.com/CJ-coding-apps/docugraph/blob/main/docs/configuration.md).
+Anything else under `docugraph.*` is internal and may move between minor
+releases.
+
+**Tested platforms**: Linux and macOS 15 on x86_64, with Python 3.11, 3.12 and
+3.13, in both the core-only and the all-extras install. Other platforms and
+architectures — Windows, Linux ARM, Apple silicon — are not tested here and are
+not claimed.
+
+**Kùzu** is archived upstream; this package pins the final release (0.11.3) and
+it is only installed by the `graph` extra. The pin is a migration boundary: see
+[KuzuDB version](#kuzudb-version).
+
+**Security reports** go to the process in
+[docs/SECURITY.md](https://github.com/CJ-coding-apps/docugraph/blob/main/docs/SECURITY.md),
+not to a public issue.
 
 ## Acknowledgements
 

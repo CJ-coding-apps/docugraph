@@ -6,10 +6,25 @@ versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 docugraph is pre-1.0: a minor release may change a tool's behaviour or a setting's meaning, and a
 patch release will not. Breaking changes are listed as breaking either way, because a reader of this
 file is entitled to know which of their own setup stops working. The supported interfaces are the MCP
-tools, the CLI commands and the configuration settings; the Python modules behind them are not a
-public API.
+tools, the CLI commands, the configuration settings and the names in `docugraph.__all__`; every other
+module under `docugraph.*` is internal.
 
 ## [Unreleased]
+
+### Breaking
+
+- **A core install no longer includes the crawler or the knowledge graph.** `crawl4ai`, `playwright`,
+  `graphiti-core[kuzu]` and `kuzu` moved out of `dependencies` and into two extras:
+  `docugraph[crawl]` and `docugraph[graph]`. `docugraph[all]` composes all four user-facing extras.
+  A core install still indexes local files, clones and indexes git repositories, searches, keeps
+  agent memory and serves MCP.
+- **A feature whose extra is absent fails with one sentence, not a traceback.**
+  `This feature needs the 'crawl' extra: pip install 'docugraph[crawl]', then: playwright install
+  chromium` (and the same form for `graph`). The MCP server returns it as a tool error with
+  `isError`; the CLI prints it to stderr and exits 1; `docugraph --help` and `import docugraph` work
+  with core only.
+- **`crawler.allow_private_networks = true` no longer permits link-local or cloud-metadata
+  addresses.** Ordinary private ranges (10.0.0.0/8, 192.168.0.0/16, loopback) are admitted as before.
 
 ### Security
 
@@ -29,13 +44,22 @@ public API.
 
 - The browser security suites run in CI against a real Chromium, and a missing browser fails the job
   rather than skipping the tests (`DOCUGRAPH_REQUIRE_BROWSER=1`).
+- **A declared Python surface.** `docugraph.__all__` lists the supported names; the heavier ones are
+  resolved on first access, so `import docugraph` does not import an extra. The package ships
+  `py.typed`, and the README states the supported interfaces, tested platforms and version policy.
+- `MissingExtraError` (an `ImportError` subclass) and `docugraph._optional.require`, the single place
+  that names an absent extra.
 
 ### Changed
 
-- **Breaking:** `crawler.allow_private_networks = true` no longer permits link-local or cloud-metadata
-  addresses. Ordinary private ranges (10.0.0.0/8, 192.168.0.0/16, loopback) are admitted as before.
 - `crawl4ai` is bounded to `>=0.9.3,<0.10` and `playwright` is declared at `>=1.48,<1.63` — the
   versions whose hook table and routing API the guards are written against.
+- `fastembed` is capped at `<0.9`, `pyarrow` at `<26` and `pandas` at `<4`, each with the reason and
+  the condition for lifting it recorded beside it. `onnxruntime<1.24` and `lancedb<0.26` stay.
+- `typer` was an unused dependency and is removed.
+- Package metadata is a PEP 639 license expression (`Apache-2.0`), with the redundant `License ::`
+  classifier removed, and classifiers and project URLs that name the supported platforms, the
+  changelog file and the security policy.
 - `tests/` is linted by ruff alongside `src/` and `scripts/`.
 
 ### Fixed
@@ -148,3 +172,6 @@ First public release, on PyPI.
 
 [Unreleased]: https://github.com/CJ-coding-apps/docugraph/compare/v0.2.1...HEAD
 [0.2.1]: https://github.com/CJ-coding-apps/docugraph/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/CJ-coding-apps/docugraph/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/CJ-coding-apps/docugraph/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/CJ-coding-apps/docugraph/releases/tag/v0.1.0

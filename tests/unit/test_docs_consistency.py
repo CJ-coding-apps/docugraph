@@ -458,3 +458,100 @@ def test_the_documented_fastembed_cache_default_is_the_real_one() -> None:
         "These call `~/.cache/fastembed` the default, and it is not -- the "
         f"default is {real}:\n  " + "\n  ".join(offenders)
     )
+
+
+# --------------------------------------------------------------------------
+# 5. The MCP server's install instructions
+# --------------------------------------------------------------------------
+
+# The section a reader follows to install the server for a client. Its install
+# commands are the ones that decide whether `crawl_url`, `graph_query` and
+# `graph_add` work: a core-only install leaves the server answering every one
+# of them with a missing-extra error.
+MCP_HEADING = re.compile(r"^###\s+MCP integration with Claude Code.*$", re.M)
+
+# The four ways this README installs the package. `pip install` is distinct
+# from `pipx install`; a bare `uv sync` is a checkout install.
+INSTALL_COMMAND = re.compile(
+    r"\b(pipx\s+install|uv\s+tool\s+install|pip\s+install|uv\s+sync)\b([^\n`]*)"
+)
+
+
+def _mcp_section() -> str:
+    """The README from the MCP heading to the next same-or-higher heading.
+
+    Headings are only headings outside a fenced block: a shell example whose
+    first line is a `# comment` starts with the same characters, and cutting
+    there would make this test scan a section that ends at its own first
+    command.
+    """
+    text = (ROOT / "README.md").read_text()
+    match = MCP_HEADING.search(text)
+    assert match, "README.md has no 'MCP integration with Claude Code' heading"
+
+    lines = text[match.end() :].splitlines(keepends=True)
+    in_fence = False
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence and re.match(r"^#{1,3} ", line):
+            return "".join(lines[:index])
+    return "".join(lines)
+
+
+def _install_commands() -> list[str]:
+    return [match.group(0).strip() for match in INSTALL_COMMAND.finditer(_mcp_section())]
+
+
+def _installs_the_package(command: str) -> bool:
+    """True for commands that put docugraph itself into an environment.
+
+    `-e '.[dev]'` names the project rather than the distribution, which is what
+    a checkout install looks like.
+    """
+    return (
+        command.startswith("uv sync")
+        or "docugraph" in command
+        or bool(re.search(r"-e\s+['\"]?\.", command))
+    )
+
+
+def _installs_both_extras(command: str) -> bool:
+    extras = {
+        name.strip()
+        for spec in re.findall(r"\[([^\]]*)\]", command)
+        for name in spec.split(",")
+        if name.strip()
+    }
+    if "all" in extras or {"crawl", "graph"} <= extras:
+        return True
+    if "--all-extras" in command:
+        return True
+    named = set(re.findall(r"--extra[= ]+([a-z]+)", command))
+    return {"crawl", "graph"} <= named
+
+
+def test_the_mcp_install_instructions_carry_both_extras() -> None:
+    """A client install that omits an extra breaks the tools that need it.
+
+    The server starts and advertises all nine tools in a core-only install; the
+    failure only appears when `crawl_url`, `graph_query` or `graph_add` is
+    called. A reader following the MCP section therefore has to install the
+    extras up front, and this pins that the page does.
+    """
+    commands = _install_commands()
+    assert len(commands) >= 2, (
+        "the MCP section scan found fewer than two install commands; the README "
+        f"or the heading moved (found: {commands!r})"
+    )
+    problems = [
+        command
+        for command in commands
+        if _installs_the_package(command) and not _installs_both_extras(command)
+    ]
+    assert not problems, (
+        "The MCP server section installs docugraph without both the crawl and "
+        "graph extras (or [all]); a client following it gets a missing-extra "
+        "error from crawl_url, graph_query and graph_add:\n  " + "\n  ".join(problems)
+    )

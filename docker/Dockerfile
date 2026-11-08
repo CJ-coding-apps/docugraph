@@ -56,8 +56,10 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
-# Install dependencies including dev extras (no torch anywhere in v1)
-RUN uv pip install --system -e ".[dev]"
+# Install dependencies including dev extras (no torch anywhere in v1). The
+# image serves crawling and graph tools, so both extras are named explicitly;
+# they are no longer part of a core install.
+RUN uv pip install --system -e ".[dev,crawl,graph]"
 
 # Install Playwright browsers for Crawl4AI
 RUN playwright install chromium --with-deps
@@ -84,8 +86,10 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
-# Install only production dependencies (no torch anywhere in v1)
-RUN uv pip install --system -e .
+# Install only production dependencies (no torch anywhere in v1). The image
+# serves crawling and graph tools, so both extras are named explicitly; they
+# are no longer part of a core install.
+RUN uv pip install --system -e ".[crawl,graph]"
 
 # Install Playwright browsers for Crawl4AI
 RUN playwright install chromium --with-deps

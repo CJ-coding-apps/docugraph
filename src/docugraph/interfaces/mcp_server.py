@@ -14,6 +14,7 @@ Provides tools for Claude Code and other MCP-compatible clients:
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,6 +27,7 @@ from mcp.types import (
     ToolAnnotations,
 )
 
+from docugraph._optional import MissingExtraError, require
 from docugraph._version import __version__
 from docugraph.core.config import get_config
 from docugraph.core.llm import LLMUnavailableError
@@ -42,9 +44,19 @@ from docugraph.security.url_policy import (
 )
 from docugraph.storage.vector_store import VectorStore
 
+_logger = logging.getLogger(__name__)
+
 # The MCP surface caps a site crawl regardless of what the caller asks for, so
 # a single agent call cannot turn into an unbounded crawl (A-6 / D-5).
 CRAWL_MAX_PAGES = 50
+
+
+def _missing_extra_result(exc: MissingExtraError) -> CallToolResult:
+    """The missing extra is a tool error whose text is exactly its sentence."""
+    return CallToolResult(
+        content=[TextContent(type="text", text=str(exc))],
+        isError=True,
+    )
 
 
 def _web_policy() -> UrlPolicy:
@@ -441,7 +453,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
 
     handler = handlers.get(name)
     if handler:
-        return await handler(arguments)
+        # Backstop: a handler that raises the missing-extra error without a
+        # clause of its own still returns the sentence as a tool error. It is
+        # logged without a traceback on purpose -- an MCP client may show this
+        # stream to the model.
+        try:
+            return await handler(arguments)
+        except MissingExtraError as exc:
+            _logger.warning("%s", exc)
+            return _missing_extra_result(exc)
 
     return CallToolResult(
         content=[TextContent(type="text", text=f"Unknown tool: {name}")],
@@ -679,6 +699,8 @@ async def _crawl_url(arguments: dict[str, Any]) -> CallToolResult:
             content=[TextContent(type="text", text=text)],
         )
 
+    except MissingExtraError as e:
+        return _missing_extra_result(e)
     except UrlRefusedError as e:
         return _refusal_result(e.refusal)
     except Exception as e:
@@ -932,6 +954,8 @@ async def _graph_query(arguments: dict[str, Any]) -> CallToolResult:
             content=[TextContent(type="text", text="\n".join(output_parts))],
         )
 
+    except MissingExtraError as e:
+        return _missing_extra_result(e)
     except RuntimeError as e:
         return _llm_error_result(e, "Graph search")
     except Exception as e:
@@ -952,6 +976,11 @@ async def _graph_add(arguments: dict[str, Any]) -> CallToolResult:
             content=[TextContent(type="text", text="Error: content is required")],
             isError=True,
         )
+
+    # Deliberately before the `try`: this handler has no clause of its own, so
+    # the error reaches the `call_tool` backstop, which is the single formatter
+    # for every handler without one (E2b).
+    require("graph", "graphiti_core.driver.kuzu_driver")
 
     try:
         from docugraph.storage.graph_store import GraphStore

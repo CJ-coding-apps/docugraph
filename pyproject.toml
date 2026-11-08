@@ -3,13 +3,15 @@ name = "docugraph"
 version = "0.2.1"
 description = "Documentation RAG for coding agents: vector search, knowledge graph, agent memory, and an MCP server — torch-free local embeddings via fastembed"
 readme = "README.md"
-# The ceiling is deliberate, and there are two independent reasons for it.
+# The ceiling is deliberate, and two different dependency groups supply the two
+# independent reasons for it.
 #
-# `kuzu==0.11.3` (pinned below) publishes cp314 wheels for Linux only -- its
-# macOS and Windows wheels stop at cp313. On those platforms 3.14 resolves to
-# the 19 MB sdist, and pip tries to compile Kuzu's C++ from source.
+# Reason 1, the `graph` extra: `kuzu==0.11.3` (pinned below) publishes cp314
+# wheels for Linux only -- its macOS and Windows wheels stop at cp313. On those
+# platforms 3.14 resolves to the 19 MB sdist, and pip tries to compile Kuzu's C++
+# from source.
 #
-# Independently, fastembed requires `onnxruntime>=1.24.2` on 3.14, while this
+# Reason 2, core: fastembed requires `onnxruntime>=1.24.2` on 3.14, while this
 # package caps onnxruntime below 1.24. Those two cannot both be satisfied, so on
 # 3.14 this package cannot be installed anywhere at all, Linux included.
 #
@@ -17,20 +19,29 @@ readme = "README.md"
 # is downloaded. It lifts only when the Kuzu pin and the onnxruntime cap are
 # revisited together; both are recorded in the project's open decisions.
 requires-python = ">=3.11,<3.14"
-license = { text = "Apache-2.0" }
+# PEP 639: an SPDX expression, and no `License ::` classifier restating it.
+license = "Apache-2.0"
 authors = [{ name = "Jim Cuttler", email = "jimcuttler@gmail.com" }]
 keywords = ["rag", "knowledge-graph", "vector-search", "coding-agent", "mcp", "documentation"]
 classifiers = [
     "Development Status :: 4 - Beta",
+    "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
     "Topic :: Software Development :: Documentation",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
+# A core install is the local index/search tool: embeddings, the vector store,
+# the MCP server and the CLI. The browser stack (`crawl`) and the graph database
+# (`graph`) are extras -- a user who never crawls a page or builds a knowledge
+# graph should not download a headless browser or an archived C++ database.
 dependencies = [
     # Core
     "pydantic>=2.6.0",
@@ -39,40 +50,25 @@ dependencies = [
     "rich>=13.7.0",
 
     # Embeddings + reranking (local, pure ONNX — no torch)
-    # (onnxruntime <1.24: newer releases dropped macOS x86_64 wheels)
-    "fastembed>=0.4.0",
+    # (<0.9: fastembed 0.9 moved to a model API this code does not use yet;
+    # lift only after the embedding tests pass against it on every supported
+    # platform.)
+    "fastembed>=0.4.0,<0.9",
+    # (onnxruntime <1.24: newer releases dropped macOS x86_64 wheels; lift only
+    # after a --no-build install succeeds on macOS 15 x86_64.)
     "onnxruntime<1.24",
 
     # Vector Database (<0.26: newer releases dropped macOS x86_64 wheels)
     "lancedb>=0.6.0,<0.26",
-    "pyarrow>=15.0.0",
-    "pandas>=2.0.0",
-
-    # Knowledge Graph
-    # Pinned exactly, to the version this code was tested against. graphiti-core
-    # moves quickly, and an open range let a future release change its Kùzu
-    # requirement -- or drop the kuzu driver -- and break the install against the
-    # exact `kuzu` pin below, with no change here to explain it. Do not widen
-    # without re-running the ingestion tests against the new version.
-    "graphiti-core[kuzu]==0.30.2",
-    # Pinned exactly: kuzu is archived upstream (0.11.3 is the final release) and
-    # its file format is not stable pre-1.0, so an unpinned upgrade can make an
-    # existing graph unreadable. graphiti-core[kuzu] requires kuzu>=0.11.3, so
-    # this pin is compatible. Do not widen it without a migration step.
-    "kuzu==0.11.3",
-
-    # Web Crawling
-    # The guards are bound to crawl4ai 0.9.x's hook table and to Playwright's
-    # routing API. crawl4ai is capped below the next minor because the hook and
-    # retry surfaces the guards pin are not a compatibility promise; Playwright's
-    # floor is route_web_socket (1.48, Playwright's own docs), and the cap is the
-    # next minor above the version CI installs.
-    "crawl4ai>=0.9.3,<0.10",
-    "playwright>=1.48,<1.63",
+    # (<26: pyarrow 26 is newer than anything LanceDB has been tested against
+    # here; lift together with the LanceDB cap, not alone.)
+    "pyarrow>=15.0.0,<26",
+    # (<4: pandas 3 changed copy-on-write and dtypes; nothing here needs the new
+    # behaviour, so the next major arrives deliberately.)
+    "pandas>=2.0.0,<4",
 
     # CLI
     "click>=8.1.0",
-    "typer>=0.9.0",
 
     # MCP Protocol (<2: the 2.x SDK removed the low-level Server
     # list_tools/call_tool decorators mcp_server.py is built on)
@@ -89,9 +85,37 @@ dependencies = [
 Homepage = "https://github.com/CJ-coding-apps/docugraph"
 Repository = "https://github.com/CJ-coding-apps/docugraph"
 Issues = "https://github.com/CJ-coding-apps/docugraph/issues"
-Changelog = "https://github.com/CJ-coding-apps/docugraph/releases"
+Changelog = "https://github.com/CJ-coding-apps/docugraph/blob/main/CHANGELOG.md"
+Security = "https://github.com/CJ-coding-apps/docugraph/security/policy"
 
 [project.optional-dependencies]
+# Web Crawling
+# The guards are bound to crawl4ai 0.9.x's hook table and to Playwright's
+# routing API. crawl4ai is capped below the next minor because the hook and
+# retry surfaces the guards pin are not a compatibility promise; Playwright's
+# floor is route_web_socket (1.48, Playwright's own docs), and the cap is the
+# next minor above the version CI installs. A browser job must be green on the
+# new version before either cap lifts.
+crawl = [
+    "crawl4ai>=0.9.3,<0.10",
+    "playwright>=1.48,<1.63",
+]
+
+# Knowledge Graph
+# Pinned exactly, to the version this code was tested against. graphiti-core
+# moves quickly, and an open range let a future release change its Kùzu
+# requirement -- or drop the kuzu driver -- and break the install against the
+# exact `kuzu` pin below, with no change here to explain it. Do not widen
+# without re-running the ingestion tests against the new version.
+graph = [
+    "graphiti-core[kuzu]==0.30.2",
+    # Pinned exactly: kuzu is archived upstream (0.11.3 is the final release) and
+    # its file format is not stable pre-1.0, so an unpinned upgrade can make an
+    # existing graph unreadable. graphiti-core[kuzu] requires kuzu>=0.11.3, so
+    # this pin is compatible. Do not widen it without a migration step.
+    "kuzu==0.11.3",
+]
+
 # Cloud LLM providers.
 #
 # Each is capped below the next major version -- the one above what CI installs
@@ -130,7 +154,7 @@ dev = [
 # --all-extras` covers every extra, `dev` included -- so nothing is tested less
 # for its absence here.
 all = [
-    "docugraph[cloud,ollama]",
+    "docugraph[crawl,graph,cloud,ollama]",
 ]
 
 [project.scripts]

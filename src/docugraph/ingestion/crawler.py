@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlsplit
 
+from docugraph._optional import require
 from docugraph.core.config import CrawlerConfig, get_config
 from docugraph.core.models import ContentType, Document
 from docugraph.security.url_policy import (
@@ -366,6 +367,10 @@ class DocCrawler:
             if cached:
                 return cached
 
+        # The policy and the cache ran first: a refused URL keeps its reason,
+        # and a cached document needs no browser. Only now is the extra needed.
+        require("crawl", "crawl4ai")
+
         from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
         from crawl4ai.content_filter_strategy import PruningContentFilter
         from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
@@ -459,6 +464,10 @@ class DocCrawler:
         refusal = await asyncio.to_thread(self._check_url, start_url)
         if refusal is not None:
             raise UrlRefusedError(refusal)
+
+        # Outside the per-page loop: an error raised inside it would be caught
+        # by the loop's `except Exception` and reported as a page failure.
+        require("crawl", "crawl4ai")
 
         from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
         from crawl4ai.content_filter_strategy import PruningContentFilter

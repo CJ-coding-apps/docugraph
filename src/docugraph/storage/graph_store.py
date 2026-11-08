@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from docugraph._optional import require
 from docugraph.core.config import EmbeddingProvider, get_config
 from docugraph.core.embeddings import (
     EmbeddingProviderBase,
@@ -52,8 +53,9 @@ def apply_telemetry_default(environ: MutableMapping[str, str]) -> None:
 
 # Graphiti 0.30 validates injected clients with pydantic is_instance_of, so
 # our adapters must actually subclass its base classes (duck-typing no longer
-# passes). graphiti-core is a hard dependency; the guard only keeps the module
-# importable if it is somehow absent, matching the lazy-degradation elsewhere.
+# passes). These are type bases, not a feature use: graphiti-core lives in the
+# `graph` extra, so a core-only install must still be able to import this
+# module (the MCP server does). The feature gate is `_ensure_initialized`.
 try:
     from graphiti_core.cross_encoder.client import CrossEncoderClient as _CrossEncoderBase
     from graphiti_core.embedder.client import EmbedderClient as _EmbedderBase
@@ -118,6 +120,8 @@ def _get_embedder() -> Any:
     Returns:
         Graphiti-compatible embedder
     """
+    require("graph", "graphiti_core")
+
     from graphiti_core.embedder.openai import (
         OpenAIEmbedder as _GraphitiOpenAIEmbedder,
     )
@@ -192,14 +196,13 @@ class GraphStore:
 
         apply_telemetry_default(os.environ)
 
-        try:
-            from graphiti_core import Graphiti
-            from graphiti_core.driver.kuzu_driver import KuzuDriver
-        except ImportError as e:
-            raise ImportError(
-                "graphiti-core[kuzu] is required for GraphStore. "
-                "Install with: pip install 'graphiti-core[kuzu]'"
-            ) from e
+        # Import the module that actually carries the feature: it is the one
+        # that imports `kuzu`, so a graphiti-core install missing its database
+        # driver fails here too rather than one frame later.
+        require("graph", "graphiti_core.driver.kuzu_driver")
+
+        from graphiti_core import Graphiti
+        from graphiti_core.driver.kuzu_driver import KuzuDriver
 
         # Resolve the LLM and embedder before opening the database.
         # get_llm_provider checks that a provider is actually reachable and has
@@ -325,6 +328,8 @@ class GraphStore:
         """
         graphiti = await self._ensure_initialized()
 
+        require("graph", "graphiti_core")
+
         from graphiti_core.nodes import EpisodeType
 
         episode_type = EpisodeType.json if source_type == "json" else EpisodeType.text
@@ -432,6 +437,8 @@ class GraphStore:
 
         # Apply entity type filter if specified
         if entity_types:
+            require("graph", "graphiti_core")
+
             from graphiti_core.search.search_filters import SearchFilters
 
             entity_labels = [et.value for et in entity_types]
