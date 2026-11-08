@@ -68,7 +68,9 @@ _METADATA_NETWORKS = (
 # global while denoting a private address.
 _IPV4_COMPATIBLE = ipaddress.ip_network("::/96")
 _NAT64_96 = ipaddress.ip_network("64:ff9b::/96")
-# RFC 6052 puts the IPv4 in bits 48-79 for a /48 prefix, not in the low 32.
+# RFC 6052 §2.2 splits a /48 prefix's IPv4 around a reserved u-octet: bits
+# 48-63 and 72-87 carry the address, bits 64-71 must be zero. It is neither the
+# low 32 bits nor one contiguous run.
 _NAT64_48 = ipaddress.ip_network("64:ff9b:1::/48")
 
 
@@ -175,7 +177,9 @@ def _embedded_ipv4s(address: ipaddress.IPv6Address) -> tuple[ipaddress.IPv4Addre
     if address in _IPV4_COMPATIBLE or address in _NAT64_96:
         candidates.append(ipaddress.IPv4Address(value & 0xFFFFFFFF))
     if address in _NAT64_48:
-        candidates.append(ipaddress.IPv4Address((value >> 48) & 0xFFFFFFFF))
+        # Bits 48-63 and 72-87; the u-octet between them is skipped, not read.
+        embedded = ((value >> 64) & 0xFFFF) << 16 | ((value >> 40) & 0xFFFF)
+        candidates.append(ipaddress.IPv4Address(embedded))
 
     sixtofour = address.sixtofour
     if sixtofour is not None:
