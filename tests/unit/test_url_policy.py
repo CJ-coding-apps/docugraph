@@ -508,14 +508,35 @@ def test_p10_nat64_metadata_and_private_are_refused() -> None:
 
 
 def test_p11_nat64_64_ff9b_1_metadata_is_refused_even_when_private_is_allowed() -> None:
-    """ORACLE: A-2 / P11 — RFC 6052 prefix 64:ff9b:1::/48 embeds IPv4 in bits 48-79."""
+    """ORACLE: A-2 / P11 — 64:ff9b:1::/48 embeds IPv4 in bits 48-63 and 72-87 (RFC 6052 §2.2)."""
     policy = _policy(
         allow_private=True,
-        resolver=_mapping({"64:ff9b:1:a9fe:a9fe::": ("64:ff9b:1:a9fe:a9fe::",)}),
+        resolver=_mapping({"64:ff9b:1:a9fe:a9:fe00::": ("64:ff9b:1:a9fe:a9:fe00::",)}),
     )
-    refusal = _refusal(policy, "http://[64:ff9b:1:a9fe:a9fe::]/")
+    refusal = _refusal(policy, "http://[64:ff9b:1:a9fe:a9:fe00::]/")
     assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
     assert "169.254.169.254" in refusal.detail
+
+
+def test_p11b_nat64_64_ff9b_1_alibaba_metadata_is_refused_even_when_private_is_allowed() -> None:
+    """ORACLE: A-2 / P11b — the u-octet is skipped, so 100.100.100.200 is read whole."""
+    policy = _policy(
+        allow_private=True,
+        resolver=_mapping({"64:ff9b:1:6464:64:c800::": ("64:ff9b:1:6464:64:c800::",)}),
+    )
+    refusal = _refusal(policy, "http://[64:ff9b:1:6464:64:c800::]/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "100.100.100.200" in refusal.detail
+
+
+def test_p11c_nat64_64_ff9b_1_private_address_is_refused_by_default() -> None:
+    """ORACLE: A-2 / P11c — a private IPv4 under the /48 prefix is not global."""
+    policy = _policy(
+        resolver=_mapping({"64:ff9b:1:a00:0:500::": ("64:ff9b:1:a00:0:500::",)}),
+    )
+    refusal = _refusal(policy, "http://[64:ff9b:1:a00:0:500::]/")
+    assert refusal.reason is RefusalReason.PRIVATE_ADDRESS
+    assert "10.0.0.5" in refusal.detail
 
 
 def test_p12_6to4_metadata_is_refused_even_when_private_is_allowed() -> None:
