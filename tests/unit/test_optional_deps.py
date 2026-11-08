@@ -248,7 +248,7 @@ def test_crawl_message_is_exact_and_names_only_the_crawl_extra():
         require("crawl", "docugraph_test_no_such_module")
     assert str(info.value) == CRAWL_MESSAGE
     assert isinstance(info.value, ImportError)
-    assert "graph" not in str(info.value)
+    assert "docugraph[graph]" not in str(info.value)
 
 
 def test_graph_message_is_exact_and_names_only_the_graph_extra():

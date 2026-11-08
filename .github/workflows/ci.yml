@@ -122,8 +122,12 @@ jobs:
       #
       # `ollama` is deliberately not included: no test imports it, and the three
       # ollama tests in tests/unit/test_llm_preflight.py monkeypatch the probe.
+      #
+      # `crawl` and `graph` are the extras that used to be core dependencies. A
+      # normal install now leaves them out, so the full-profile leg has to name
+      # them to keep running every test that needs them.
       - name: Sync dependencies
-        run: uv sync --extra dev --extra cloud
+        run: uv sync --extra dev --extra crawl --extra graph --extra cloud
 
       - name: Cache fastembed models
         uses: actions/cache@v4
@@ -133,6 +137,178 @@ jobs:
 
       - name: Run tests
         run: uv run pytest tests/unit/ tests/integration/ tests/e2e/ -v --tb=short
+
+  # The same full profile on x86_64 macOS. The wheels this package depends on
+  # (onnxruntime, lancedb, pyarrow, kuzu) each drop Intel-macOS builds at their
+  # own pace; a Linux-only matrix cannot see that, and the caps' comments say
+  # an install on this platform is the condition for lifting them.
+  test-macos:
+    name: Test (macOS py${{ matrix.python-version }})
+    runs-on: macos-15-intel
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+      FASTEMBED_CACHE_PATH: /Users/runner/.cache/fastembed
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Cache fastembed models
+        uses: actions/cache@v4
+        with:
+          path: /Users/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5-macos
+
+      - name: Run tests
+        run: uv run pytest tests/unit/ tests/integration/ tests/e2e/ -v --tb=short
+
+  # The minimal profile: what `pip install docugraph` actually installs. The
+  # same test files run here; tests that need an extra are marked by
+  # tests/conftest.py and deselected, while the blocked-child tests still run
+  # because they simulate the absent extras themselves.
+  test-minimal:
+    name: Test (minimal py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Cache fastembed models
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+
+      - name: Build the wheel
+        run: uv build
+
+      # A shipped package that cannot be typed or read is not ready. Both are
+      # read from the built artifact, not from pyproject: the build is what the
+      # user installs.
+      - name: Inspect the wheel
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys, zipfile
+
+          wheels = list(pathlib.Path("dist").glob("docugraph-*.whl"))
+          if len(wheels) != 1:
+              sys.exit(f"expected one wheel, found {wheels!r}")
+          with zipfile.ZipFile(wheels[0]) as wheel:
+              names = wheel.namelist()
+              if "docugraph/py.typed" not in names:
+                  sys.exit("docugraph/py.typed is missing from the wheel")
+              metadata = next(n for n in names if n.endswith(".dist-info/METADATA"))
+              text = wheel.read(metadata).decode("utf-8")
+
+          fields = [line for line in text.splitlines() if line.startswith(("License-Expression:", "License:"))]
+          if "License-Expression: Apache-2.0" not in fields:
+              sys.exit(f"wheel has no License-Expression: Apache-2.0; found {fields!r}")
+          if any(line.startswith("License:") for line in fields):
+              sys.exit("wheel carries a legacy License: field alongside the expression")
+          if any(line.startswith("Classifier: License ::") for line in text.splitlines()):
+              sys.exit("wheel still carries a License :: classifier")
+          print(f"wheel: {wheels[0].name}")
+          print("py.typed: present")
+          print(f"licence: {'; '.join(fields)}")
+          PY
+
+      # Every classifier must be a real Trove value. A typo here is invisible
+      # to pip and to the index -- it just never matches a filter.
+      - name: Validate classifier names
+        run: |
+          uv run --no-project --with trove-classifiers python - <<'PY'
+          import pathlib, sys, tomllib
+          import trove_classifiers
+
+          project = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]
+          unknown = [c for c in project["classifiers"] if c not in trove_classifiers.classifiers]
+          if unknown:
+              sys.exit(f"unknown Trove classifiers: {unknown!r}")
+          print(f"classifiers: {len(project['classifiers'])} known")
+          PY
+
+      - name: Run tests
+        run: uv run pytest tests/ -m "not requires_extras" -v
+
+      # A4/A3t: the built wheel, installed into a throwaway environment, must
+      # import and report a version -- with every extra requested, so the
+      # extras are exercised rather than merely declared.
+      - name: Install the wheel with every extra
+        if: matrix.python-version == '3.11'
+        run: |
+          WHEEL=$(ls dist/docugraph-*.whl)
+          uv run --no-project --with "${WHEEL}[all]" python -c "import docugraph; print(docugraph.__version__)"
+
+  test-minimal-macos:
+    name: Test (minimal macOS py${{ matrix.python-version }})
+    runs-on: macos-15-intel
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+      FASTEMBED_CACHE_PATH: /Users/runner/.cache/fastembed
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Cache fastembed models
+        uses: actions/cache@v4
+        with:
+          path: /Users/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5-macos
+
+      - name: Run tests
+        run: uv run pytest tests/ -m "not requires_extras" -v
 
   docker:
     # Builds the image but never publishes it: docker-publish.yml owns pushing,
@@ -234,18 +410,73 @@ jobs:
       - name: Run integration tests
         run: uv run pytest tests/integration -v
 
+  # The browser guards are bound to Playwright's routing API, which is the same
+  # on macOS but installed differently (`--with-deps` is Debian/Ubuntu-only).
+  # Without this leg the crawl extra's supported platform is asserted, not run.
+  integration-browser-macos:
+    name: Integration (browser, macOS)
+    runs-on: macos-15-intel
+    needs: lint
+    env:
+      DOCUGRAPH_REQUIRE_BROWSER: "1"
+      FASTEMBED_CACHE_PATH: /Users/runner/.cache/fastembed
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Cache fastembed models
+        uses: actions/cache@v4
+        with:
+          path: /Users/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5-macos
+
+      - name: Install Chromium
+        run: uv run playwright install chromium
+
+      - name: Run integration tests
+        run: uv run pytest tests/integration -v
+
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    # Both results are read, not just listed: a job in `needs` that is never
-    # checked still lets a red browser run print "All tests passed!".
-    needs: [test, integration-browser]
+    # Every result is read, not just listed: a job in `needs` that is never
+    # checked still lets a red leg print "All tests passed!".
+    needs:
+      - test
+      - test-macos
+      - test-minimal
+      - test-minimal-macos
+      - integration-browser
+      - integration-browser-macos
     if: always()
 
     steps:
       - name: Check test results
         run: |
-          if [ "${{ needs.test.result }}" == "success" ] && [ "${{ needs['integration-browser'].result }}" == "success" ]; then
+          failed=0
+          check() {
+            echo "$1: $2"
+            [ "$2" = "success" ] || failed=1
+          }
+          check test "${{ needs.test.result }}"
+          check test-macos "${{ needs['test-macos'].result }}"
+          check test-minimal "${{ needs['test-minimal'].result }}"
+          check test-minimal-macos "${{ needs['test-minimal-macos'].result }}"
+          check integration-browser "${{ needs['integration-browser'].result }}"
+          check integration-browser-macos "${{ needs['integration-browser-macos'].result }}"
+          if [ "$failed" -eq 0 ]; then
             echo "All tests passed!"
           else
             echo "Some tests failed"

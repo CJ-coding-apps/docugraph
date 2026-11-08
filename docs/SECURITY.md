@@ -38,6 +38,11 @@ Worth stating plainly, because it decides what is and is not a vulnerability her
   `GRAPHITI_TELEMETRY_ENABLED` at construction time and treats an absent variable as enabled; DocuGraph
   sets it to `false` when it is absent, so a fresh install sends no telemetry. An explicit value is left
   alone. Set it to `true` to opt in.
+- **A missing extra is an error, not a fallback.** The `crawl` and `graph` extras add capability; without
+  one, the feature says which extra to install and stops. No path substitutes a weaker implementation when
+  an extra is absent, and a feature never silently degrades to a different transport. `hybrid_search`
+  reports `graph_available: false` with that same sentence as the reason, which is a reported omission,
+  not a silent one.
 
 ## URL and repository guards
 

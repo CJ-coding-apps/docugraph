@@ -2,12 +2,14 @@
 
 import asyncio
 from pathlib import Path
+from typing import NoReturn
 
 import click
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from docugraph._optional import MissingExtraError
 from docugraph._version import __version__
 
 console = Console()
@@ -16,6 +18,16 @@ console = Console()
 # Distinct from 1 so a script can tell "not set up yet" from "failed", and
 # from 0 so a wrapped call cannot mistake it for success.
 EXIT_LLM_UNAVAILABLE = 3
+
+
+def _exit_missing_extra(exc: MissingExtraError) -> NoReturn:
+    """Print the extra's one sentence and exit 1, with no traceback.
+
+    ``click.echo``, not Rich: the sentence contains ``docugraph[crawl]``, which
+    Rich's markup parser would read as a style tag and drop.
+    """
+    click.echo(str(exc), err=True)
+    raise SystemExit(1)
 
 
 @click.group()
@@ -107,7 +119,10 @@ def crawl(url: str, max_pages: int, pattern: str | None, no_cache: bool) -> None
         )
         console.print(f"[dim]Total chunks in store: {vector_store.count()}[/dim]")
 
-    asyncio.run(_crawl())
+    try:
+        asyncio.run(_crawl())
+    except MissingExtraError as exc:
+        _exit_missing_extra(exc)
 
 
 @main.command()
@@ -543,7 +558,12 @@ def graph_add(content: str, name: str | None, group: str, source_type: str) -> N
         finally:
             await store.close()
 
-    if not asyncio.run(_add()):
+    try:
+        added = asyncio.run(_add())
+    except MissingExtraError as exc:
+        _exit_missing_extra(exc)
+
+    if not added:
         raise SystemExit(EXIT_LLM_UNAVAILABLE)
 
 
@@ -588,7 +608,12 @@ def graph_search(query: str, limit: int, group: str | None) -> None:
         finally:
             await store.close()
 
-    if not asyncio.run(_search()):
+    try:
+        searched = asyncio.run(_search())
+    except MissingExtraError as exc:
+        _exit_missing_extra(exc)
+
+    if not searched:
         raise SystemExit(EXIT_LLM_UNAVAILABLE)
 
 
@@ -603,7 +628,10 @@ def graph_clear() -> None:
         await store.clear()
         console.print("[green]Knowledge graph has been cleared.[/green]")
 
-    asyncio.run(_clear())
+    try:
+        asyncio.run(_clear())
+    except MissingExtraError as exc:
+        _exit_missing_extra(exc)
 
 
 # =============================================================================

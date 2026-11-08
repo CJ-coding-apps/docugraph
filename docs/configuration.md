@@ -124,17 +124,36 @@ llm:
 crawler:
   max_concurrent: 5
   rate_limit: 2.0            # requests per second
-  user_agent: DocuGraph-AI/0.1.1
+  user_agent: DocuGraph-AI/<version>   # defaults to the installed version
   respect_robots: true
   cache_ttl: 86400          # 24 hours
   timeout: 30               # seconds
-  allow_private_networks: false   # false: only globally routable addresses
+  allow_private_networks: false   # opt in to an intranet; metadata stays refused
   allowed_domains: []             # empty: no host restriction
 ```
 
 > There is no `server:` or `mcp:` section. The MCP server speaks stdio and is
 > launched by the MCP client (or `docugraph-mcp` / `docugraph mcp-server`);
 > there is no HTTP transport and no REST API.
+
+## Extras
+
+A core install contains the local index and search stack, the MCP server and the
+CLI. Two features are installed as extras:
+
+- `crawl` installs `crawl4ai` and `playwright`. It is needed by `crawl_url` and
+  `docugraph crawl`, plus the browser itself (`playwright install chromium`).
+- `graph` installs `graphiti-core[kuzu]` and `kuzu`. It is needed by
+  `graph_query`, `graph_add` and `docugraph graph …`, plus an LLM (below).
+- `all` installs `crawl`, `graph`, `cloud` and `ollama` — everything a user
+  might want. (`dev` is intentionally not included; see `pyproject.toml`.)
+
+`cloud` and `ollama` are unchanged: the LLM/provider SDKs. Using a feature whose
+extra is absent is a clean error, never a fallback path — the message names the
+extra (`This feature needs the 'graph' extra: pip install 'docugraph[graph]'`),
+the MCP server returns it as a tool error, and the CLI prints it to stderr and
+exits 1. Nothing else in the package changes behaviour based on which extras are
+installed.
 
 ## URL policy
 
@@ -149,7 +168,8 @@ index. A refusal is returned as an error whose text is exactly
 - `option_like` — the value begins with `-` and would be read as an option by git
 - `domain_not_allowed` — the host is outside `allowed_domains`
 - `unresolvable` — DNS failed or returned no usable address
-- `private_address` — loopback, link-local, private or otherwise non-global
+- `private_address` — loopback, private or otherwise non-global, and always
+  link-local and the cloud-metadata addresses
 - `path_escape` — a repository name (given or derived from the URL) would leave
   the repos directory
 
@@ -157,7 +177,8 @@ index. A refusal is returned as an error whose text is exactly
 a table whose first cell is a backticked name as a table of MCP tool names.)
 
 `allow_private_networks: true` is the opt-in for an intranet or a local docs
-server; it does not disable the scheme or path rules. `allowed_domains` is a
+server; it does not admit link-local or cloud-metadata addresses, and it does not
+disable the scheme or path rules. `allowed_domains` is a
 host allowlist: an entry matches itself and its subdomains, while an IP literal
 matches exactly (so `127.0.0.1` does not admit `127.0.0.10`). A crawl follows
 redirects hop by hop and refuses a `Location` before requesting it; a page whose

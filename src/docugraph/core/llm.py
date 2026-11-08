@@ -23,6 +23,7 @@ from typing import Any, cast
 
 import httpx
 
+from docugraph._optional import require
 from docugraph.core.config import LLMProvider, get_config
 
 # One literal each, because the preflight check and the client it builds have
@@ -105,6 +106,8 @@ def _make_resilient_graphiti_client(llm_config: Any) -> Any:
     field the target ``response_model`` declares, so local-LLM graph
     extraction works without requiring a strict-schema cloud model.
     """
+    require("graph", "graphiti_core")
+
     from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
 
     if not llm_config.model:
@@ -322,6 +325,8 @@ class OllamaLLM(LLMProviderBase):
 
     def get_graphiti_client(self) -> Any:
         """Get Graphiti-compatible Ollama client."""
+        require("graph", "graphiti_core")
+
         from graphiti_core.llm_client.config import LLMConfig
 
         llm_config = LLMConfig(
@@ -410,6 +415,8 @@ class OpenAILLM(LLMProviderBase):
 
     def get_graphiti_client(self) -> Any:
         """Get Graphiti-compatible OpenAI client."""
+        require("graph", "graphiti_core")
+
         from graphiti_core.llm_client.config import LLMConfig
         from graphiti_core.llm_client.openai_client import OpenAIClient
 
@@ -510,6 +517,8 @@ class AnthropicLLM(LLMProviderBase):
 
     def get_graphiti_client(self) -> Any:
         """Get Graphiti-compatible Anthropic client."""
+        require("graph", "graphiti_core")
+
         from graphiti_core.llm_client.anthropic_client import AnthropicClient
         from graphiti_core.llm_client.config import LLMConfig
 
