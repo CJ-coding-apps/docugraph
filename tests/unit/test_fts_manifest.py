@@ -17,7 +17,6 @@ from backend_oracle import (
     FTS_INSTALL_NEEDS_FLAG,
     FTS_INSTALL_NEEDS_YES,
     FTS_NO_FILE,
-    FTS_NO_PIN,
     LINUX_AMD64_SHA256,
     LINUX_AMD64_SIZE,
     OSX_AMD64_SHA256,
@@ -25,6 +24,8 @@ from backend_oracle import (
     OSX_ARM64_SHA256,
     OSX_ARM64_SIZE,
     artifact_url,
+    fts_no_pin,
+    no_pin_reason,
 )
 
 # `fetch_fts` confirms a downloaded artifact by loading it in a scratch Ladybug
@@ -43,6 +44,22 @@ def _pins():
     from docugraph.storage import fts_pins
 
     return fts_pins
+
+
+def _platform_label() -> str:
+    """The platform key, or the same description the message falls back to."""
+    import platform
+
+    from docugraph.storage import fts
+
+    return fts.platform_key() or f"{platform.system()}_{platform.machine()}".lower()
+
+
+def _no_pin() -> str:
+    """S1's no-pin variant, built from this machine's installed version and key."""
+    from docugraph.storage import fts
+
+    return fts_no_pin(fts.package_version(), _platform_label())
 
 
 def test_platform_keys_are_the_names_ladybug_uses():
@@ -92,7 +109,7 @@ def test_no_verified_file_names_the_reason_and_three_ways_forward(tmp_path):
         fts.resolve_verified_artifact(tmp_path)
 
     pin = _pins().PINS.get((fts.compat_version(), fts.platform_key()))
-    expected = FTS_NO_FILE if pin is not None else FTS_NO_PIN
+    expected = FTS_NO_FILE if pin is not None else _no_pin()
     assert str(excinfo.value) == expected
 
 
@@ -146,7 +163,7 @@ def test_f4_an_approved_digest_is_used_only_while_the_bytes_are_unchanged(tmp_pa
     path.write_bytes(b"changed after approval")
     with pytest.raises(fts.FtsUnavailableError) as excinfo:
         fts.resolve_verified_artifact(tmp_path)
-    assert str(excinfo.value) == FTS_NO_PIN
+    assert str(excinfo.value) == _no_pin()
 
 
 def test_f3_install_without_yes_refuses_a_non_terminal():
@@ -184,17 +201,27 @@ def test_med2_the_unavailable_sentence_matches_the_approved_text():
     fts = _fts()
 
     assert fts.FTS_NO_FILE == FTS_NO_FILE
-    assert fts.FTS_NO_PIN == FTS_NO_PIN
+    assert fts.no_pin_sentence() == _no_pin()
     assert fts.FTS_CACHED_MISMATCH == FTS_CACHED_MISMATCH
+
+
+def test_med2_the_no_pin_reason_names_the_installed_version_and_platform():
+    """§10.8 S1: the no-pin reason says which machine is not covered."""
+    fts = _fts()
+    sentence = fts.no_pin_sentence()
+    reason = no_pin_reason(fts.package_version(), _platform_label())
+
+    assert f"({reason})" in sentence
 
 
 def test_med2_the_no_pin_variant_does_not_offer_fetch_fts():
     """A platform with no pin cannot verify a download, so fetch-fts is absent."""
     fts = _fts()
+    sentence = fts.no_pin_sentence()
 
-    assert "'docugraph graph fetch-fts'" not in fts.FTS_NO_PIN
-    assert "'docugraph graph install-fts --unverified'" in fts.FTS_NO_PIN
-    assert "graph_db back to 'kuzu'" in fts.FTS_NO_PIN
+    assert "docugraph graph fetch-fts" not in sentence
+    assert "docugraph graph install-fts --unverified" in sentence
+    assert "graph_db back to kuzu" in sentence
 
 
 # ------------------------------------- F6 / MED-1 (a pin outranks an approval)

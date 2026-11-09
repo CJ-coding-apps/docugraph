@@ -21,8 +21,8 @@ import pytest
 from backend_oracle import (
     FTS_INIT_FAILED,
     FTS_NO_FILE,
-    FTS_NO_PIN,
     GRAPH_NEEDS_MIGRATION_MESSAGE,
+    fts_no_pin,
 )
 from docugraph.core.config import reset_config
 
@@ -108,10 +108,15 @@ def _seed_verified_fts(data_dir: Path, artifact: Path) -> Path:
 
 
 def _no_artifact_message() -> str:
+    import platform
+
     from docugraph.storage import fts, fts_pins
 
     pin = fts_pins.PINS.get((fts.compat_version(), fts.platform_key()))
-    return FTS_NO_FILE if pin is not None else FTS_NO_PIN
+    if pin is not None:
+        return FTS_NO_FILE
+    label = fts.platform_key() or f"{platform.system()}_{platform.machine()}".lower()
+    return fts_no_pin(fts.package_version(), label)
 
 
 # --------------------------------------------------------------------- L3

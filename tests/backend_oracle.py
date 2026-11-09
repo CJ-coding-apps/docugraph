@@ -16,15 +16,16 @@ GRAPH_NEEDS_MIGRATION_MESSAGE = (
 )
 
 
-_FTS_OPTIONS_PINNED = (
-    "Run 'docugraph graph fetch-fts' to download and verify it; "
-    "or run 'docugraph graph install-fts --unverified' to install it without verification; "
-    "or set graph_db back to 'kuzu'."
+# §10.8 S1, verbatim.
+_S1_OPTIONS_PINNED = (
+    "Run: docugraph graph fetch-fts — or approve an unverified install: "
+    "docugraph graph install-fts --unverified — or set graph_db back to kuzu."
 )
-# No pin means `fetch-fts` cannot verify anything, so it is not offered.
-_FTS_OPTIONS_UNPINNED = (
-    "Run 'docugraph graph install-fts --unverified' to install it without verification; "
-    "or set graph_db back to 'kuzu'."
+# No pin means `fetch-fts` cannot verify anything, so the approved wording drops
+# that clause and rephrases the remaining two options.
+_S1_OPTIONS_UNPINNED = (
+    "Run: docugraph graph install-fts --unverified to approve an unverified install "
+    "— or set graph_db back to kuzu."
 )
 
 
@@ -34,17 +35,29 @@ def fts_unavailable(reason: str, *, pinned: bool = True) -> str:
     ``pinned=False`` is the no-checksum variant: the fetch clause is omitted
     because ``fetch-fts`` has nothing to compare a download against.
     """
-    options = _FTS_OPTIONS_PINNED if pinned else _FTS_OPTIONS_UNPINNED
-    return f"Full-text search is unavailable: {reason}. {options}"
+    options = _S1_OPTIONS_PINNED if pinned else _S1_OPTIONS_UNPINNED
+    return (
+        "The Ladybug backend needs its full-text search extension, "
+        f"and no verified copy is available ({reason}). {options}"
+    )
 
 
-NO_FILE_REASON = "no verified extension file is present for this Ladybug version and platform"
-NO_PIN_REASON = "no checksum is pinned for this Ladybug version and platform"
-CACHED_MISMATCH_REASON = "the cached extension does not match its pinned checksum"
+NO_FILE_REASON = "not downloaded yet"
+CACHED_MISMATCH_REASON = "the cached file does not match its pinned checksum"
+
+
+def no_pin_reason(version: str, platform: str) -> str:
+    """The no-pin reason names the installed package version and platform key."""
+    return f"no pinned checksum for ladybug {version} on {platform}"
+
 
 FTS_NO_FILE = fts_unavailable(NO_FILE_REASON)
-FTS_NO_PIN = fts_unavailable(NO_PIN_REASON, pinned=False)
 FTS_CACHED_MISMATCH = fts_unavailable(CACHED_MISMATCH_REASON)
+
+
+def fts_no_pin(version: str, platform: str) -> str:
+    return fts_unavailable(no_pin_reason(version, platform), pinned=False)
+
 
 # §10.3 (b): the prompt must state this, not merely say "unverified".
 FTS_INSTALL_WARNING = (
@@ -63,13 +76,13 @@ FTS_INSTALL_NEEDS_FLAG = (
     "pass --unverified to acknowledge that, or use 'graph fetch-fts'."
 )
 
-# §10.2 D-9: a failed load or create is an initialization error that says the
-# graph was not opened and names the fix, including the Kùzu fallback.
+# §10.8 S2, verbatim: a failed load or create is an initialization error that
+# says the graph was not opened and names the fix, including the Kùzu fallback.
 FTS_INIT_FAILED = (
-    "Full-text search could not be initialized on the Ladybug backend: {error}. "
-    "The graph was not opened. "
-    "Run 'docugraph graph fetch-fts' to provide a verified extension; "
-    "or set graph_db back to 'kuzu'."
+    "The Ladybug backend could not set up full-text search ({error}); "
+    "the graph was not opened. "
+    "Run docugraph graph fetch-fts to re-verify the extension, "
+    "or set graph_db back to kuzu."
 )
 
 # §10.4 P0-4, measured on 2026-11-08 (macOS 15 x86_64 and python:3.11-slim).
