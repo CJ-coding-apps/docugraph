@@ -52,6 +52,7 @@ _REQUIRED_EXTRA = {
     "test_graph_store_init.py": "graph",
     "test_mcp_server.py": "graph",
     "test_graph_embedder_adapter.py": "graph",
+    "test_engine_isolation.py": "graph",
     "test_ladybug_driver.py": "ladybug",
     "test_graph_ladybug.py": "ladybug",
     "test_graph_migration.py": "ladybug",

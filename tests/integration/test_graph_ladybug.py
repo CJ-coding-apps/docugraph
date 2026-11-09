@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from backend_oracle import (
+    FTS_INIT_FAILED,
     FTS_NO_FILE,
     FTS_NO_PIN,
     GRAPH_NEEDS_MIGRATION_MESSAGE,
@@ -398,7 +399,9 @@ async def test_l9_a_failed_create_is_an_initialization_error(
         await store._ensure_initialized()
     await store.close()
 
-    assert "fetch-fts" in str(excinfo.value)
+    # MED-2: the approved sentence, character for character. It states that
+    # the graph was not opened and names the Kùzu fallback.
+    assert str(excinfo.value) == FTS_INIT_FAILED.format(error="index creation refused by test")
 
 
 async def test_l10_every_pooled_connection_can_query_fts(tmp_path, fts_artifact):

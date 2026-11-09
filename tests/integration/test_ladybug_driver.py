@@ -138,3 +138,47 @@ async def test_session_reuses_the_driver(tmp_path):
         await session.run("RETURN 1;")
     finally:
         await driver.close()
+
+
+# ----------------------------------- LOW-1 (a quote or backslash in the path)
+
+
+def test_low1_the_load_statement_escapes_a_quote_and_a_backslash():
+    """A data directory may be called "O'Brien"; the statement must still parse.
+
+    Ladybug's Cypher string literal honours backslash escapes, measured on
+    0.22.3: an unescaped quote is a parser exception, ``\\'`` and ``\\\\`` load
+    the same file. Refusing the path would leave such a user with no way to
+    run the backend at all.
+    """
+    from docugraph.storage.ladybug_driver import load_extension_statement
+
+    assert load_extension_statement("/tmp/o'brien/libfts.lbug_extension") == (
+        "LOAD EXTENSION '/tmp/o\\'brien/libfts.lbug_extension'"
+    )
+    assert load_extension_statement("/tmp/a\\b/libfts.lbug_extension") == (
+        "LOAD EXTENSION '/tmp/a\\\\b/libfts.lbug_extension'"
+    )
+    assert load_extension_statement("/tmp/plain/libfts.lbug_extension") == (
+        "LOAD EXTENSION '/tmp/plain/libfts.lbug_extension'"
+    )
+
+
+async def test_low1_an_artifact_under_a_quote_directory_actually_loads(tmp_path, fts_artifact):
+    """The escaped statement is not just well-shaped: the extension loads."""
+    import shutil
+
+    from docugraph.storage.fts import FTS_FILENAME
+    from docugraph.storage.ladybug_driver import LadybugDriver
+
+    target = tmp_path / "o'brien" / FTS_FILENAME
+    target.parent.mkdir()
+    shutil.copyfile(fts_artifact, target)
+
+    driver = LadybugDriver(db=str(tmp_path / "quote.lbdb"), fts_extension=str(target))
+    try:
+        records, _, _ = await driver.execute_query("RETURN 1 AS one;")
+    finally:
+        await driver.close()
+
+    assert records == [{"one": 1}]

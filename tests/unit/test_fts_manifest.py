@@ -168,3 +168,168 @@ def test_the_unverified_prompt_states_the_installer_risk():
 
     assert "download and execute an installer in-process" in FTS_INSTALL_WARNING
     assert "INSTALL" in FTS_INSTALL_WARNING
+
+
+# ------------------------------------------------ MED-2 (approved sentences)
+
+
+def test_med2_the_unavailable_sentence_matches_the_approved_text():
+    """The three reason variants, character for character — no paraphrase."""
+    fts = _fts()
+
+    assert fts.FTS_NO_FILE == FTS_NO_FILE
+    assert fts.FTS_NO_PIN == FTS_NO_PIN
+    assert fts.FTS_CACHED_MISMATCH == FTS_CACHED_MISMATCH
+
+
+def test_med2_the_no_pin_variant_does_not_offer_fetch_fts():
+    """A platform with no pin cannot verify a download, so fetch-fts is absent."""
+    fts = _fts()
+
+    assert "'docugraph graph fetch-fts'" not in fts.FTS_NO_PIN
+    assert "'docugraph graph install-fts --unverified'" in fts.FTS_NO_PIN
+    assert "graph_db back to 'kuzu'" in fts.FTS_NO_PIN
+
+
+# ------------------------------------- F6 / MED-1 (a pin outranks an approval)
+
+
+def test_f6_a_pinned_platform_refuses_bytes_an_approval_record_names(tmp_path):
+    """MED-1: an approval may not override a pin.
+
+    The approval record names the altered bytes exactly, so the old ordering
+    would load them. The pin exists for this key and does not match, so the
+    file is refused.
+    """
+    fts = _fts()
+    if (fts.compat_version(), fts.platform_key()) not in _pins().PINS:
+        pytest.skip("this platform has no pin by design")
+
+    path = fts.cache_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"altered after the pin was measured")
+    fts.record_approval(tmp_path, path)
+
+    with pytest.raises(fts.FtsUnavailableError) as excinfo:
+        fts.resolve_verified_artifact(tmp_path)
+    assert str(excinfo.value) == FTS_CACHED_MISMATCH
+
+
+class _FakeLadybugModule:
+    """Stands in for the package so ``install_unverified`` never runs INSTALL."""
+
+    class Database:  # noqa: D106 - a stand-in, nothing to document
+        def __init__(self, *args: object) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    class Connection:  # noqa: D106 - a stand-in, nothing to document
+        def __init__(self, *args: object) -> None:
+            pass
+
+        def execute(self, *args: object) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+
+def _fake_install(monkeypatch: pytest.MonkeyPatch, installed: object):
+    import sys
+    import types
+
+    fts = _fts()
+    fake = types.SimpleNamespace(
+        Database=_FakeLadybugModule.Database, Connection=_FakeLadybugModule.Connection
+    )
+    monkeypatch.setitem(sys.modules, "ladybug", fake)
+    monkeypatch.setattr(fts, "_installed_extension_path", lambda: installed)
+    return fts
+
+
+def test_f6b_an_unverified_install_matching_the_pin_is_verified_without_a_record(
+    tmp_path, fts_artifact, monkeypatch
+):
+    """MED-1: on a pinned platform a matching install is verified, not recorded."""
+    fts = _fts()
+    if (fts.compat_version(), fts.platform_key()) not in _pins().PINS:
+        pytest.skip("this platform has no pin by design")
+
+    installed = tmp_path / "installed" / "libfts.lbug_extension"
+    installed.parent.mkdir()
+    installed.write_bytes(fts_artifact.read_bytes())
+    _fake_install(monkeypatch, installed)
+
+    target = fts.install_unverified(tmp_path / "data")
+
+    assert target == fts.cache_path(tmp_path / "data")
+    assert fts.sha256_file(target) == fts_artifact_sha(fts_artifact.read_bytes())
+    assert not fts.approval_record_path(tmp_path / "data").exists()
+    assert fts.resolve_verified_artifact(tmp_path / "data") == target
+
+
+def test_f6c_an_unverified_install_mismatching_the_pin_is_deleted_and_refused(
+    tmp_path, monkeypatch
+):
+    """MED-1: a pin mismatch deletes the copy, records nothing, names both digests."""
+    fts = _fts()
+    pin = _pins().PINS.get((fts.compat_version(), fts.platform_key()))
+    if pin is None:
+        pytest.skip("this platform has no pin by design")
+
+    installed = tmp_path / "installed" / "libfts.lbug_extension"
+    installed.parent.mkdir()
+    installed.write_bytes(b"altered install")
+
+    _fake_install(monkeypatch, installed)
+
+    with pytest.raises(fts.FtsDigestMismatch) as excinfo:
+        fts.install_unverified(tmp_path / "data")
+
+    message = str(excinfo.value)
+    assert pin["sha256"] in message
+    assert hashlib.sha256(b"altered install").hexdigest() in message
+    assert not installed.exists()
+    assert not fts.cache_path(tmp_path / "data").exists()
+    assert not fts.approval_record_path(tmp_path / "data").exists()
+
+
+# ------------------------------------------------- LOW-2 (atomic replacement)
+
+
+def test_low2_a_failed_replace_leaves_no_file_and_no_debris(tmp_path, fts_artifact, monkeypatch):
+    """LOW-2: the target appears only when the whole file has been written."""
+    fts = _fts()
+    if (fts.compat_version(), fts.platform_key()) not in _pins().PINS:
+        pytest.skip("this platform has no pin by design")
+
+    def power_loss(src: object, dst: object) -> None:
+        raise OSError("simulated power loss during replace")
+
+    monkeypatch.setattr(fts.os, "replace", power_loss)
+
+    with pytest.raises(OSError):
+        fts.fetch_fts(tmp_path, downloader=lambda url: fts_artifact.read_bytes())
+
+    target = fts.cache_path(tmp_path)
+    assert not target.exists()
+    leftovers = sorted(p.name for p in target.parent.iterdir())
+    assert leftovers == []
+
+
+def test_low1_fetch_works_when_the_data_directory_contains_a_quote(tmp_path, fts_artifact):
+    """LOW-1: the load probe runs from the cache directory, quote and all."""
+    fts = _fts()
+    if (fts.compat_version(), fts.platform_key()) not in _pins().PINS:
+        pytest.skip("this platform has no pin by design")
+
+    data = tmp_path / "o'brien"
+    payload = fts_artifact.read_bytes()
+
+    path = fts.fetch_fts(data, downloader=lambda url: payload)
+
+    assert path == fts.cache_path(data)
+    assert "'" in str(path)
+    assert fts.resolve_verified_artifact(data) == path
