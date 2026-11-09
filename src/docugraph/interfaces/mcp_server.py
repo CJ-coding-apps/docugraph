@@ -27,7 +27,7 @@ from mcp.types import (
     ToolAnnotations,
 )
 
-from docugraph._optional import MissingExtraError, require
+from docugraph._optional import MissingExtraError
 from docugraph._version import __version__
 from docugraph.core.config import get_config
 from docugraph.core.llm import LLMUnavailableError
@@ -55,6 +55,19 @@ def _missing_extra_result(exc: MissingExtraError) -> CallToolResult:
     """The missing extra is a tool error whose text is exactly its sentence."""
     return CallToolResult(
         content=[TextContent(type="text", text=str(exc))],
+        isError=True,
+    )
+
+
+def _config_error_result() -> CallToolResult:
+    """One sentence for an invalid ``graph_db``, not pydantic's frame dump."""
+    return CallToolResult(
+        content=[
+            TextContent(
+                type="text",
+                text="Invalid graph_db setting: expected 'kuzu' or 'ladybug'.",
+            )
+        ],
         isError=True,
     )
 
@@ -926,8 +939,11 @@ async def _graph_query(arguments: dict[str, Any]) -> CallToolResult:
             isError=True,
         )
 
+    from pydantic import ValidationError
+
     try:
-        from docugraph.storage.graph_store import GraphStore
+        from docugraph.storage.fts import FtsError
+        from docugraph.storage.graph_store import GraphBackendError, GraphStore
 
         store = GraphStore()
         group_ids = [group_id] if group_id else None
@@ -956,6 +972,14 @@ async def _graph_query(arguments: dict[str, Any]) -> CallToolResult:
 
     except MissingExtraError as e:
         return _missing_extra_result(e)
+    except (GraphBackendError, FtsError) as e:
+        # D-3 and the FTS refusals are complete sentences; add nothing.
+        return CallToolResult(
+            content=[TextContent(type="text", text=str(e))],
+            isError=True,
+        )
+    except ValidationError:
+        return _config_error_result()
     except RuntimeError as e:
         return _llm_error_result(e, "Graph search")
     except Exception as e:
@@ -977,13 +1001,22 @@ async def _graph_add(arguments: dict[str, Any]) -> CallToolResult:
             isError=True,
         )
 
-    # Deliberately before the `try`: this handler has no clause of its own, so
-    # the error reaches the `call_tool` backstop, which is the single formatter
-    # for every handler without one (E2b).
-    require("graph", "graphiti_core.driver.kuzu_driver")
+    # Deliberately before the `try`: this handler has no MissingExtraError
+    # clause of its own, so the error reaches the `call_tool` backstop, which is
+    # the single formatter for every handler without one (0.3.0 E2b). The gate
+    # is backend-aware: 'ladybug' or 'graph', whichever is configured.
+    from pydantic import ValidationError
+
+    from docugraph.storage.graph_store import require_graph_backend
 
     try:
-        from docugraph.storage.graph_store import GraphStore
+        require_graph_backend()
+    except ValidationError:
+        return _config_error_result()
+
+    try:
+        from docugraph.storage.fts import FtsError
+        from docugraph.storage.graph_store import GraphBackendError, GraphStore
 
         store = GraphStore()
 
@@ -1015,6 +1048,13 @@ async def _graph_add(arguments: dict[str, Any]) -> CallToolResult:
             content=[TextContent(type="text", text="\n".join(output_parts))],
         )
 
+    except (GraphBackendError, FtsError) as e:
+        return CallToolResult(
+            content=[TextContent(type="text", text=str(e))],
+            isError=True,
+        )
+    except ValidationError:
+        return _config_error_result()
     except RuntimeError as e:
         return _llm_error_result(e, "Graph add")
     except Exception as e:

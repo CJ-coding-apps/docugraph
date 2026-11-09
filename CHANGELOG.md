@@ -11,6 +11,19 @@ module under `docugraph.*` is internal.
 
 ## [Unreleased]
 
+### Added
+
+- **LadybugDB as an opt-in graph backend.** `storage.graph_db` now accepts `kuzu` (default, unchanged)
+  or `ladybug`, installed with `pip install 'docugraph[graph,ladybug]'`. On Ladybug, full-text search
+  needs its FTS extension: `docugraph graph fetch-fts` downloads it and verifies it against a checksum
+  pinned in this package for your Ladybug version and platform. If no verified file is available the
+  backend refuses to start with one sentence naming the fix, rather than running with degraded search.
+- **`docugraph graph migrate-to-ladybug`.** Copies an existing Kùzu graph into a Ladybug database file,
+  verifies per-table row counts, and leaves the Kùzu graph and the configured backend untouched.
+- **`docugraph graph install-fts --unverified`.** The explicit, interactive fallback for a version or
+  platform with no pinned checksum. It states what it does and what Ladybug's `INSTALL` may execute
+  before it runs. The MCP tools never perform either download.
+
 ## [0.3.0] - 2026-11-08
 
 ### Breaking

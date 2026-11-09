@@ -121,8 +121,16 @@ def _fts_episode_uuids(engine: str, db_path: Path, term: str, fts: Path | None =
         lines.append(f"conn.execute(\"LOAD EXTENSION '{fts}';\")")
         # D-8: the migration strips the definitions; the next initialization
         # recreates them. This child does what `_ensure_fts_indexes` does.
+        # Create only if absent: every call after the first reopens the same
+        # file, where the index already exists (the same rule _ensure_fts_indexes
+        # follows).
         lines.append(
-            "conn.execute(\"CALL CREATE_FTS_INDEX('Episodic','episode_content',"
+            "existing = {r['index_name'] for r in "
+            'conn.execute("CALL SHOW_INDEXES() RETURN *;").rows_as_dict()}'
+        )
+        lines.append(
+            "if 'episode_content' not in existing:\n"
+            "    conn.execute(\"CALL CREATE_FTS_INDEX('Episodic','episode_content',"
             "['content','source','source_description']);\")"
         )
     lines.append(

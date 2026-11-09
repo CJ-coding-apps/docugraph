@@ -27,6 +27,11 @@ from backend_oracle import (
     artifact_url,
 )
 
+# `fetch_fts` confirms a downloaded artifact by loading it in a scratch Ladybug
+# database, which registers the engine's types for the rest of the process and
+# makes Kùzu's extension unimportable. tests/conftest.py runs this module last.
+pytestmark = pytest.mark.ladybug_engine
+
 
 def _fts():
     from docugraph.storage import fts

@@ -44,6 +44,32 @@ Worth stating plainly, because it decides what is and is not a vulnerability her
   reports `graph_available: false` with that same sentence as the reason, which is a reported omission,
   not a silent one.
 
+## The Ladybug backend and its full-text-search extension
+
+The opt-in `ladybug` backend is the one place where docugraph loads a native extension, so the rules are
+stated plainly.
+
+- **DocuGraph never runs Ladybug's `INSTALL`** as part of opening a graph. The backend loads exactly one
+  file, with `LOAD EXTENSION '<path>'`, from docugraph's own cache.
+- **That file is verified first.** `docugraph graph fetch-fts` downloads it from the extension repository
+  and checks its SHA-256 against a value pinned in this package for the installed Ladybug version and
+  platform. It loads the file once to confirm it works, then keeps it. A download that does not match is
+  deleted, never loaded.
+- **A pin is tamper-evident, not a signature.** It records the bytes this release was tested with; it
+  does not authenticate the server, and it cannot detect a compromise that happened before the pin was
+  measured. CI re-downloads the artifact on every run and fails if the bytes change, which is the only
+  independent check behind the pinned values.
+- **The unverified path is explicit and interactive.** `docugraph graph install-fts --unverified` runs
+  Ladybug's own `INSTALL FTS`. It states, before doing so, that the download is unverified and that
+  Ladybug's `INSTALL` can, in some versions, download and execute an installer in-process. It refuses
+  without a terminal confirmation unless `--yes` is passed. Afterwards docugraph records the digest of
+  exactly what was installed, and later loads accept only those bytes.
+- **FTS is required, not optional, on this backend.** If the extension is missing, unloadable, or its
+  index cannot be created, the Ladybug backend refuses to start with one sentence naming the fix. It
+  does not run with degraded graph search.
+- **MCP tools never approve a download.** Both `fetch-fts` and `install-fts` are CLI commands; an MCP tool
+  call that finds no usable extension returns the refusal instead.
+
 ## URL and repository guards
 
 The MCP tools accept values chosen by a model, so both `crawl_url` and `index_git` treat their input as

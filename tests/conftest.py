@@ -9,10 +9,16 @@ Two jobs:
 * provide the ``run_blocked`` fixture: a child process that simulates a
   core-only install by refusing the optional dependency roots. These tests
   therefore prove the minimal install's behaviour in *both* profiles.
+* keep the two graph engines apart. Kùzu and Ladybug bind the same C++ type
+  names, and once one is imported the other's extension cannot load, so a
+  process can run only one of them. Modules that drive Ladybug carry the
+  ``ladybug_engine`` marker; a mixed collection deselects them and says so, and
+  ``--ladybug-only`` runs just them (the CI job ``Graph (Ladybug)``).
 
-The marker is applied in ``pytest_collection_modifyitems``. Conftest plugins
-are registered after third-party plugins, so for this non-wrapper hook they run
-first — before the mark plugin applies ``-m`` deselection.
+The ``requires_extras`` marker is applied in ``pytest_collection_modifyitems``.
+Conftest plugins are registered after third-party plugins, so for this
+non-wrapper hook they run first — before the mark plugin applies ``-m``
+deselection.
 """
 
 from __future__ import annotations
@@ -54,6 +60,18 @@ _REQUIRED_EXTRA = {
 
 _EXTRA_PROBE = {"crawl": "crawl4ai", "graph": "graphiti_core", "ladybug": "ladybug"}
 
+# Kùzu and Ladybug bind the same C++ type names. Constructing a database with
+# one makes the other's extension unimportable for the rest of the process
+# (`ImportError: generic_type: type "Database" is already registered!`), and
+# nothing can undo that. Tests that construct Ladybug databases therefore carry
+# this marker and are run last: every module that needs Kùzu has then already
+# imported and used it. The migration command lives behind the same constraint
+# and does its work in child processes, one engine each.
+#
+# The marker is applied with `pytestmark` in the affected modules; the hook
+# below is what enforces the ordering, for any selection of tests.
+_ENGINE_MARKER = "ladybug_engine"
+
 _BLOCKER_TEMPLATE = '''\
 import sys
 
@@ -82,9 +100,25 @@ def pytest_configure(config: pytest.Config) -> None:
         "requires_extras: needs an optional dependency group; deselected in "
         'the minimal profile with -m "not requires_extras"',
     )
+    config.addinivalue_line(
+        "markers",
+        f"{_ENGINE_MARKER}: constructs a Ladybug database in this process; "
+        "ordered after every Kùzu test (the two engines cannot share a process)",
+    )
 
 
-def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--ladybug-only",
+        action="store_true",
+        help=(
+            "run only the LadybugDB engine tests (the default run deselects "
+            "them, because the two engines cannot share a process)"
+        ),
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     for item in items:
         module = item.nodeid.split("::", 1)[0].rsplit("/", 1)[-1]
         extra = _REQUIRED_EXTRA.get(module)
@@ -92,6 +126,54 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             continue
         if importlib.util.find_spec(_EXTRA_PROBE[extra]) is None:
             item.add_marker(pytest.mark.requires_extras)
+
+    ladybug = [item for item in items if item.get_closest_marker(_ENGINE_MARKER)]
+    kuzu = [item for item in items if item.get_closest_marker(_ENGINE_MARKER) is None]
+
+    # A mixed collection is impossible to run: importing either engine makes
+    # the other's extension unimportable, so whichever ran first would make
+    # every later test fail. Deselect the Ladybug group when both are present,
+    # and say so at the end of the run -- the CI job `Graph (Ladybug)` is a
+    # separate invocation that runs exactly this group.
+    if ladybug and kuzu and not config.getoption("--ladybug-only"):
+        items[:] = kuzu
+        config.hook.pytest_deselected(items=ladybug)
+        config._docugraph_ladybug_deselected = len(ladybug)  # type: ignore[attr-defined]
+    elif config.getoption("--ladybug-only"):
+        items[:] = ladybug
+        config.hook.pytest_deselected(items=kuzu)
+
+
+def pytest_terminal_summary(
+    terminalreporter: pytest.TerminalReporter, exitstatus: int, config: pytest.Config
+) -> None:
+    deselected = getattr(config, "_docugraph_ladybug_deselected", 0)
+    if not deselected:
+        return
+    terminalreporter.write_sep("-", "LadybugDB tests not run in this invocation")
+    terminalreporter.write_line(
+        f"{deselected} test(s) drive LadybugDB. Kùzu and Ladybug bind the same C++ "
+        "type names, so one process can import only one of them; run the other "
+        "group in a second invocation:"
+    )
+    terminalreporter.write_line(
+        "  pytest --ladybug-only tests/integration/test_ladybug_driver.py "
+        "tests/integration/test_graph_ladybug.py tests/unit/test_fts_manifest.py"
+    )
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Catch a module that activates Ladybug without the engine marker."""
+    if item.get_closest_marker(_ENGINE_MARKER) is not None:
+        return
+    if "ladybug._lbug" in sys.modules:
+        pytest.fail(
+            f"{item.nodeid} runs in a process where LadybugDB has already been "
+            "activated, so it cannot import Kùzu. If this module drives a "
+            f"Ladybug database, mark it with pytest.mark.{_ENGINE_MARKER}; the "
+            "two engines cannot share a process.",
+            pytrace=False,
+        )
 
 
 @pytest.fixture(scope="session")
@@ -146,7 +228,9 @@ def run_blocked(tmp_path: Path):
         timeout: int = 600,
     ) -> tuple[subprocess.CompletedProcess[str], dict | None]:
         script = tmp_path / "blocked_child.py"
-        script.write_text(_BLOCKER_TEMPLATE.format(roots=list(roots)) + "\nimport json\n\n" + body)
+        script.write_text(
+            _BLOCKER_TEMPLATE.format(roots=list(roots)) + "\nimport json\nimport os\n\n" + body
+        )
         env = os.environ.copy()
         env["DOCUGRAPH_STORAGE__DATA_DIR"] = str(tmp_path / "data")
         env.update(env_extra or {})

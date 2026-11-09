@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import pytest
 
+# Constructing a Ladybug database makes Kùzu's extension unimportable for the
+# rest of the process; tests/conftest.py runs this module last for that reason.
+pytestmark = pytest.mark.ladybug_engine
+
 
 def test_provider_is_kuzu_so_graphiti_takes_its_kuzu_paths():
     from graphiti_core.driver.driver import GraphProvider

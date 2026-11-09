@@ -25,6 +25,10 @@ from backend_oracle import (
 )
 from docugraph.core.config import reset_config
 
+# Some of these tests construct a Ladybug database in-process, which makes
+# Kùzu's extension unimportable here; tests/conftest.py runs this module last.
+pytestmark = pytest.mark.ladybug_engine
+
 
 class FakeEmbedder:
     """A fixed vector, so graph ingestion needs no ONNX model download."""
@@ -329,8 +333,15 @@ async def test_l7_no_network_and_only_a_verified_load(
     installs = [q for q in statement_log if re.match(r"(?i)^\s*INSTALL\b", q)]
     loads = [q for q in statement_log if re.match(r"(?i)^\s*LOAD\b", q)]
 
+    # The store loads the verified copy it resolved from its own data dir; the
+    # fixture seeded exactly those bytes at that path. (The blind suite compared
+    # against the fixture's source path, which the store never sees.)
+    from docugraph.storage import fts
+
+    loaded_path = fts.cache_path(ladybug_data)
+
     assert installs == []
-    assert loads == [f"LOAD EXTENSION '{fts_artifact}'"]
+    assert loads == [f"LOAD EXTENSION '{loaded_path}'"]
 
 
 # --------------------------------------------------------------------- L8

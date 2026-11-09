@@ -116,6 +116,16 @@ graph = [
     "kuzu==0.11.3",
 ]
 
+# LadybugDB backend (opt-in; Kùzu remains the default).
+# The floor is the version whose binding rule and FTS artifact were measured
+# (WP-0.4.0 Phase 0, 2026-11-08). The cap is the next minor: the FTS artifact
+# URL embeds the extension compatibility version, and the checksums pinned in
+# src/docugraph/storage/fts_pins.py belong to 0.22.x. A newer minor needs a new
+# pin and a green `Graph (Ladybug)` CI run before this range moves.
+ladybug = [
+    "ladybug>=0.22.3,<0.23",
+]
+
 # Cloud LLM providers.
 #
 # Each is capped below the next major version -- the one above what CI installs

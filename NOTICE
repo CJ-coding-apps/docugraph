@@ -8,3 +8,14 @@ as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai).
 Crawl4AI is used unmodified as the web-crawling library behind `docugraph crawl`
 and the `crawl_url` tool. Its license (Apache-2.0 with an attribution clause) is
 at https://github.com/unclecode/crawl4ai/blob/main/LICENSE.
+
+This product includes software derived from Graphiti
+(https://github.com/getzep/graphiti), Copyright 2024 Zep Software, Inc.,
+licensed under the Apache License, Version 2.0.
+`src/docugraph/storage/ladybug_driver.py` is derived from graphiti-core 0.30.2's
+`graphiti_core/driver/kuzu_driver.py`: it keeps that file's `SCHEMA_QUERIES` and
+driver/session structure, and changes three things — it imports `ladybug`
+instead of `kuzu`; its `execute_query` passes caller-supplied `None` values
+through to the query, where the Kùzu driver drops them; and it loads a verified
+full-text-search extension once per database, before the async connection pool
+is built.
