@@ -112,6 +112,24 @@ def test_requires_python_is_unchanged():
     assert _project()["requires-python"] == ">=3.11,<3.14"
 
 
+def test_p1_ladybug_is_an_opt_in_extra_and_all_excludes_it():
+    """ORACLE P1: [graph] unchanged, [ladybug] capped, [all] still Kùzu-only."""
+    project = _project()
+    extras = project["optional-dependencies"]
+
+    assert extras["ladybug"] == ["ladybug>=0.22.3,<0.23"]
+    assert _specs(extras["graph"]) == {
+        "graphiti-core": "graphiti-core[kuzu]==0.30.2",
+        "kuzu": "kuzu==0.11.3",
+    }
+    assert extras["all"] == ["docugraph[crawl,graph,cloud,ollama]"]
+    assert "ladybug" not in extras["all"][0]
+
+    # The backend is opt-in; this PR does not bump the version.
+    assert project["version"] == "0.3.0"
+    assert project["requires-python"] == ">=3.11,<3.14"
+
+
 def test_urls_point_at_the_changelog_and_security_policy():
     urls = _project()["urls"]
     assert urls["Changelog"].endswith("/blob/main/CHANGELOG.md")

@@ -35,6 +35,7 @@ database:
 ```bash
 pip install 'docugraph[crawl]'   # crawl_url, docugraph crawl (also needs a browser — below)
 pip install 'docugraph[graph]'   # graph_query, graph_add, docugraph graph (Kuzu via Graphiti)
+pip install 'docugraph[graph,ladybug]'  # the same, on the opt-in LadybugDB backend (experimental)
 pip install 'docugraph[all]'     # crawl + graph + cloud + ollama
 ```
 
@@ -313,6 +314,11 @@ DocuGraph runs locally, but these connections are possible — each only in the 
   `cohere`) sends the text being embedded there, and the graph tools send prompts to the configured
   LLM — OpenAI, Anthropic, or Ollama.
 - **Ollama**, when configured — to your Ollama server, localhost by default.
+- **The Ladybug FTS extension**, only from the two Ladybug commands. `docugraph graph fetch-fts`
+  downloads one file from `extension.ladybugdb.com` and checks it against a pinned sha256;
+  `docugraph graph install-fts --unverified` runs Ladybug's own `INSTALL`, which may also download —
+  and, in some Ladybug versions, execute an installer in-process. Neither runs from an MCP tool, and
+  opening a graph never installs or downloads anything.
 - **Graphiti telemetry**, to PostHog, **off unless you opt in** with
   `GRAPHITI_TELEMETRY_ENABLED=true`.
 
@@ -328,6 +334,60 @@ required**. However, Graphiti performs entity extraction with an **LLM**, so
 `graph add` / `graph_query` need an LLM configured (Ollama locally, or an
 OpenAI/Anthropic key). Without one, the graph tools degrade gracefully with a
 clear message; vector and keyword search are unaffected.
+
+### Optional: LadybugDB backend (experimental)
+
+The graph runs on Kùzu 0.11.3 through
+[Graphiti](https://github.com/getzep/graphiti). Kùzu is archived upstream, so
+0.4.0 adds LadybugDB as a second backend that has to be enabled explicitly.
+**Kùzu remains the default**, a new install uses it, and nothing changes for
+anyone who does not set `graph_db`.
+
+```bash
+pip install 'docugraph[graph,ladybug]'
+docugraph graph fetch-fts            # verified FTS extension for this version and platform
+export DOCUGRAPH_STORAGE__GRAPH_DB=ladybug   # or graph_db: ladybug in the config file
+```
+
+Ladybug stores the graph in a single file, `graphiti.lbdb`, beside Kùzu's
+`graphiti.kuzu` directory. A graph built with Kùzu cannot be opened by Ladybug;
+copy it explicitly first — the command verifies per-table counts and does not
+change your setting:
+
+```bash
+docugraph graph migrate-to-ladybug
+```
+
+With `graph_db: ladybug` and an old Kùzu graph still present, every graph
+operation refuses with one sentence naming the migrate command instead of
+starting an empty graph beside it. To go back, set `graph_db: kuzu` — the Kùzu
+graph was never touched.
+
+**One engine per process.** The two engines register the same native type
+names, so once either one has been loaded the other cannot be imported in the
+same Python process (`generic_type: type "Database" is already registered!`),
+whichever is imported first. DocuGraph imports only the driver of the configured
+backend, so ordinary use never meets this; it matters if your own code imports
+`kuzu` next to a Ladybug-backed graph, or if a long-running process tries to
+switch `graph_db` at runtime — use a new process for the other engine. The
+migration command runs each engine in its own child process for this reason.
+
+**Full-text search is an extension on Ladybug.** DocuGraph downloads the file
+itself and loads it by path: `graph fetch-fts` checks it against a SHA-256 pinned
+in this package for your Ladybug version and platform, and confirms it loads
+before keeping it. That pin makes tampering detectable; it is not an upstream
+signature. If no verified file is available (nothing fetched, no pin, or a
+mismatch), the backend refuses to start and states the options — including
+`docugraph graph install-fts --unverified` for a platform with no pin, an
+interactive command that says plainly what Ladybug's `INSTALL` does. MCP tools
+never download anything.
+
+**Promotion criteria.** Ladybug becomes the default in a later release only
+when all of these hold: (1) graphiti 0.30.2's 25 Kùzu-passing tests pass under
+this package's Ladybug driver in CI; (2) the Ladybug graph job is green on every
+leg; (3) the migration job passes; (4) CJ has used the backend for real work for
+a period he chooses, with no unresolved defects; and (5) no extension dependency
+remains unaddressed, or a safe install mechanism exists for each one.
 
 ## Retrieval benchmark
 

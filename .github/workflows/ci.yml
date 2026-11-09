@@ -448,6 +448,252 @@ jobs:
       - name: Run integration tests
         run: uv run pytest tests/integration -v
 
+  # ---------------------------------------------------------------------------
+  # LadybugDB (opt-in backend, WP-docugraph-0.4.0 §3.5)
+  #
+  # Three jobs, and only these three, are added for the Ladybug backend. Every
+  # job above still tests the Kùzu default unchanged.
+  #
+  # `graph_db` is set through `DOCUGRAPH_STORAGE__GRAPH_DB` in the tests that
+  # need the backend (their fixtures set it), not once for the whole job: each
+  # of those tests also needs its own data directory and FTS cache, and a
+  # global value would leak into Kùzu-specific tests. The setting itself —
+  # parsing, the default, and the refusal of an unknown value — is covered by
+  # tests/unit/test_graph_backend_config.py in this job.
+  #
+  # The full-text-search extension is a separate download. The step below
+  # resolves the pinned URL and digest for this runner's platform, re-verifies
+  # a digest-keyed cache, and downloads the file when the cache is cold. A
+  # platform with no pin is a hard failure: the backend cannot start without
+  # the extension, so a leg that cannot obtain it proves nothing.
+  graph-ladybug:
+    name: Graph (Ladybug, ${{ matrix.os }} py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every platform this release claims. `macos-15` is arm64; the
+        # `osx_arm64` pin in fts_pins.py stands or falls with this leg. No
+        # Linux arm64 leg is claimed: there is no runner here to exercise it,
+        # so that platform stays unpinned and unsupported.
+        os: [ubuntu-latest, macos-15-intel, macos-15]
+        python-version: ['3.11', '3.13']
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --extra dev --extra graph --extra ladybug
+
+      - name: Resolve the pinned FTS artifact
+        id: fts-pin
+        run: |
+          uv run python - <<'PY' >> "$GITHUB_OUTPUT"
+          from docugraph.storage import fts, fts_pins
+
+          compat = fts.compat_version()
+          plat = fts.platform_key()
+          pin = fts_pins.PINS.get((compat, plat))
+          if pin is None:
+              raise SystemExit(
+                  f"no FTS pin for ladybug {fts.package_version()} on {plat!r}; "
+                  "this platform cannot be claimed"
+              )
+          print(f"platform={plat}")
+          print(f"sha256={pin['sha256']}")
+          PY
+
+      - name: Cache the verified FTS extension
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/docugraph-data/extensions/fts
+          key: fts-${{ steps.fts-pin.outputs.platform }}-${{ steps.fts-pin.outputs.sha256 }}
+
+      # A cache hit still has its bytes checked against the pin: the key names
+      # the expected digest, but the cache is not trusted to have preserved it.
+      # A miss, or a mismatch, downloads the pinned URL and verifies that.
+      - name: Fetch and verify the FTS extension
+        env:
+          DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
+        run: |
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from docugraph.storage import fts, fts_pins
+
+          data_dir = Path(os.environ["DOCUGRAPH_STORAGE__DATA_DIR"])
+          pin = fts_pins.PINS[(fts.compat_version(), fts.platform_key())]
+          target = fts.cache_path(data_dir)
+          if target.exists() and fts.sha256_file(target) == pin["sha256"]:
+              path = target
+              print(f"FTS artifact: cache hit, digest verified ({path})")
+          else:
+              path = fts.fetch_fts(data_dir)
+              print(f"FTS artifact: downloaded and verified ({path})")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+              fh.write(f"DOCUGRAPH_TEST_FTS_ARTIFACT={path}\n")
+          PY
+
+      # Only tests that drive Ladybug. A Kùzu database in this process would
+      # make the Ladybug extension unimportable (the two bindings register the
+      # same C++ type names, and neither can be undone), so the migration tests
+      # live in their own job and the Kùzu graph tests in the Kùzu jobs.
+      - name: Run the graph tests on Ladybug
+        env:
+          DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed
+        run: |
+          uv run pytest --ladybug-only \
+            tests/integration/test_ladybug_driver.py \
+            tests/integration/test_graph_ladybug.py \
+            tests/unit/test_fts_manifest.py \
+            -v
+
+  # graphiti's own parameterized tests, run against docugraph's driver. This is
+  # the check that Ladybug behaves like Kùzu where graphiti can tell: the same
+  # 25 tests that pass on Kùzu v0.30.2 must pass unchanged through
+  # LadybugDriver. The stand-in is installed at import time by a pytest plugin;
+  # no graphiti file is edited, and `kuzu` is never imported.
+  graphiti-conformance-ladybug:
+    name: Graphiti conformance (Ladybug)
+    runs-on: ubuntu-latest
+    needs: lint
+    env:
+      PYTHONPATH: ${{ github.workspace }}/tests/conformance
+      DOCUGRAPH_LADYBUG_CONFORMANCE: "1"
+      # graphiti's conftest imports every driver's test helpers, and
+      # `helpers_test.py` imports FalkorDriver (needs `falkordb`) and Neo4j
+      # unless told otherwise. This job runs only the Kùzu provider family, so
+      # turn the others off; without these the baseline step fails at
+      # collection with "falkordb is required for FalkorDriver".
+      DISABLE_FALKORDB: "1"
+      DISABLE_NEO4J: "1"
+      ENABLE_KUZU: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --extra dev --extra graph --extra ladybug
+
+      - name: Check out graphiti v0.30.2
+        run: |
+          git clone --depth 1 --branch v0.30.2 \
+            https://github.com/getzep/graphiti.git "$RUNNER_TEMP/graphiti"
+
+      # Step 3 of §3.5: the run must go through docugraph's driver. A pass that
+      # came from graphiti's own Kùzu driver would prove nothing.
+      - name: Assert the run uses docugraph's driver
+        run: uv run pytest tests/conformance/test_routing.py -p ladybug_plugin -v
+
+      # Only the baseline IDs are run, so there is no "expected failure" to
+      # ignore: every collected test must pass. The same set is then checked
+      # from the JUnit XML, which also catches a test that silently failed to
+      # collect (a collected-out test is absent from the XML).
+      - name: Run the Kùzu-pass baseline under LadybugDriver
+        working-directory: ${{ runner.temp }}/graphiti
+        run: |
+          tr '\n' '\0' < "$GITHUB_WORKSPACE/tests/conformance/kuzu_pass_ids.txt" \
+            | xargs -0 "$GITHUB_WORKSPACE/.venv/bin/python" -m pytest \
+                -p ladybug_plugin --junitxml="$RUNNER_TEMP/graphiti-ladybug.xml" -q
+          "$GITHUB_WORKSPACE/.venv/bin/python" \
+            "$GITHUB_WORKSPACE/tests/conformance/check_results.py" \
+            "$RUNNER_TEMP/graphiti-ladybug.xml"
+
+  # §3.5 step 4 of the worked example: an existing Kùzu graph, migrated, then
+  # read through the Ladybug backend. Counts per table and three fixed searches
+  # have to survive the copy.
+  migration-ladybug:
+    name: Migration (Kùzu → Ladybug)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --extra dev --extra graph --extra ladybug
+
+      - name: Resolve the pinned FTS artifact
+        id: fts-pin
+        run: |
+          uv run python - <<'PY' >> "$GITHUB_OUTPUT"
+          from docugraph.storage import fts, fts_pins
+
+          pin = fts_pins.PINS.get((fts.compat_version(), fts.platform_key()))
+          if pin is None:
+              raise SystemExit("no FTS pin for this platform; cannot run")
+          print(f"platform={fts.platform_key()}")
+          print(f"sha256={pin['sha256']}")
+          PY
+
+      - name: Cache the verified FTS extension
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/docugraph-data/extensions/fts
+          key: fts-${{ steps.fts-pin.outputs.platform }}-${{ steps.fts-pin.outputs.sha256 }}
+
+      - name: Fetch and verify the FTS extension
+        env:
+          DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
+        run: |
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from docugraph.storage import fts, fts_pins
+
+          data_dir = Path(os.environ["DOCUGRAPH_STORAGE__DATA_DIR"])
+          pin = fts_pins.PINS[(fts.compat_version(), fts.platform_key())]
+          target = fts.cache_path(data_dir)
+          if target.exists() and fts.sha256_file(target) == pin["sha256"]:
+              path = target
+              print(f"FTS artifact: cache hit, digest verified ({path})")
+          else:
+              path = fts.fetch_fts(data_dir)
+              print(f"FTS artifact: downloaded and verified ({path})")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+              fh.write(f"DOCUGRAPH_TEST_FTS_ARTIFACT={path}\n")
+          PY
+
+      - name: Run the migration tests
+        env:
+          DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
+        run: uv run pytest tests/integration/test_graph_migration.py -v
+
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
@@ -460,6 +706,9 @@ jobs:
       - test-minimal-macos
       - integration-browser
       - integration-browser-macos
+      - graph-ladybug
+      - graphiti-conformance-ladybug
+      - migration-ladybug
     if: always()
 
     steps:
@@ -476,6 +725,9 @@ jobs:
           check test-minimal-macos "${{ needs['test-minimal-macos'].result }}"
           check integration-browser "${{ needs['integration-browser'].result }}"
           check integration-browser-macos "${{ needs['integration-browser-macos'].result }}"
+          check graph-ladybug "${{ needs['graph-ladybug'].result }}"
+          check graphiti-conformance-ladybug "${{ needs['graphiti-conformance-ladybug'].result }}"
+          check migration-ladybug "${{ needs['migration-ladybug'].result }}"
           if [ "$failed" -eq 0 ]; then
             echo "All tests passed!"
           else

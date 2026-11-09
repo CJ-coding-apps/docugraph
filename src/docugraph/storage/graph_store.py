@@ -1,4 +1,4 @@
-"""Graph store backed by Graphiti + Kuzu for knowledge graph operations.
+"""Graph store backed by Graphiti + Kùzu or LadybugDB for knowledge graph operations.
 
 Supports LLM-agnostic configuration with local-first priority:
 - Ollama (local, default if available)
@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from docugraph._optional import require
-from docugraph.core.config import EmbeddingProvider, get_config
+from docugraph.core.config import EmbeddingProvider, GraphBackend, get_config
 from docugraph.core.embeddings import (
     EmbeddingProviderBase,
     OllamaEmbedder,
@@ -39,6 +39,39 @@ from docugraph.core.embeddings import (
 )
 from docugraph.core.llm import get_graphiti_llm_client
 from docugraph.core.models import Entity, EntityType, RelationshipType
+from docugraph.storage import fts
+
+GRAPH_NEEDS_MIGRATION_MESSAGE = (
+    "This graph was created with the Kùzu backend. To use Ladybug, migrate it first: "
+    "docugraph graph migrate-to-ladybug (or set graph_db back to kuzu)."
+)
+
+
+class GraphBackendError(Exception):
+    """The configured graph backend cannot be opened."""
+
+
+class GraphNeedsMigrationError(GraphBackendError):
+    """A Kùzu graph is present while the Ladybug backend is configured."""
+
+
+def _fts_init_error(error: Exception) -> fts.FtsInitializationError:
+    return fts.FtsInitializationError(fts.FTS_INIT_FAILED.format(error=error))
+
+
+def require_graph_backend() -> None:
+    """Gate the module that carries the configured backend.
+
+    The Ladybug backend needs the ``ladybug`` extra; Kùzu needs the ``graph``
+    extra and, with it, graphiti's Kùzu driver (the module that imports
+    ``kuzu``). Surfaces call this before touching a store so a core-only
+    install gets one sentence instead of a traceback.
+    """
+    if get_config().storage.graph_db == GraphBackend.LADYBUG:
+        require("ladybug", "ladybug")
+    else:
+        require("graph", "graphiti_core.driver.kuzu_driver")
+
 
 # graphiti-core reads this variable at construction time and treats *absent* as
 # enabled, so an offline-first tool that never mentions telemetry would still
@@ -176,18 +209,27 @@ class GraphStore:
         """Initialize the graph store.
 
         Args:
-            db_path: Path to the Kuzu database directory. If None, uses config default.
+            db_path: Path to the graph directory. The database file or
+                directory inside it is chosen by the configured backend. If
+                None, uses the config default.
         """
+        config = get_config()
         if db_path is None:
-            config = get_config()
             db_path = config.storage.data_dir / "graph"
 
+        self._backend = GraphBackend(config.storage.graph_db)
+        self._data_dir = config.storage.data_dir
         self._db_path = Path(db_path)
         self._db_path.mkdir(parents=True, exist_ok=True)
 
         self._graphiti: Any | None = None
         self._driver: Any | None = None
         self._initialized = False
+
+    @property
+    def backend(self) -> GraphBackend:
+        """The backend this store was constructed for."""
+        return self._backend
 
     async def _ensure_initialized(self) -> Any:
         """Lazily initialize Graphiti; returns the ready Graphiti instance."""
@@ -196,35 +238,44 @@ class GraphStore:
 
         apply_telemetry_default(os.environ)
 
-        # Import the module that actually carries the feature: it is the one
-        # that imports `kuzu`, so a graphiti-core install missing its database
-        # driver fails here too rather than one frame later.
-        require("graph", "graphiti_core.driver.kuzu_driver")
-
-        from graphiti_core import Graphiti
-        from graphiti_core.driver.kuzu_driver import KuzuDriver
-
         # Resolve the LLM and embedder before opening the database.
         # get_llm_provider checks that a provider is actually reachable and has
-        # the model, so a failure here costs nothing on disk: no Kùzu database
-        # file, no indices, no driver handle left open. (The `graph/` directory
-        # itself is created by __init__, before this runs.)
-        llm_client = get_graphiti_llm_client()
-        embedder = _get_embedder()
+        # the model, so a failure here costs nothing on disk: no database file,
+        # no indices, no driver handle left open. (The `graph/` directory itself
+        # is created by __init__, before this runs.) On Ladybug the FTS artifact
+        # is resolved first of all: a missing extension is a refusal that must
+        # not be reported as "no LLM is configured".
+        if self._backend == GraphBackend.LADYBUG:
+            artifact = self._resolve_ladybug_fts()
+            llm_client = get_graphiti_llm_client()
+            embedder = _get_embedder()
+            self._driver = self._open_ladybug_driver(artifact)
+        else:
+            # Import the module that actually carries the feature: it is the
+            # one that imports `kuzu`, so a graphiti-core install missing its
+            # database driver fails here too rather than one frame later.
+            require("graph", "graphiti_core.driver.kuzu_driver")
 
-        # Create Kuzu driver
-        kuzu_db_path = str(self._db_path / "graphiti.kuzu")
-        self._driver = KuzuDriver(db=kuzu_db_path)
-        # graphiti-core 0.30's deprecated Kuzu backend never sets `_database`,
+            from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+            llm_client = get_graphiti_llm_client()
+            embedder = _get_embedder()
+            self._driver = KuzuDriver(db=str(self._db_path / "graphiti.kuzu"))
+
+        # graphiti-core 0.30's deprecated Kùzu backend never sets `_database`,
         # but Graphiti._resolve_request_scope reads it for any non-default
-        # group_id (AttributeError otherwise). Kuzu's clone() is a no-op, so
-        # seeding it with the Kuzu default group id is a safe workaround.
+        # group_id (AttributeError otherwise). clone() is a no-op on both
+        # backends, so seeding it with the default group id is a safe workaround.
         if not hasattr(self._driver, "_database"):
             self._driver._database = ""
 
         # Initialize Graphiti with custom clients. cross_encoder is set to a
         # no-op so ingestion doesn't require an OpenAI key (Graphiti's default
-        # reranker) or sentence-transformers/torch (its BGE reranker).
+        # reranker) or sentence-transformers/torch (its BGE reranker). This is
+        # the only place Graphiti is constructed, so the telemetry default set
+        # above always runs before it.
+        from graphiti_core import Graphiti
+
         self._graphiti = Graphiti(
             graph_driver=self._driver,
             llm_client=llm_client,
@@ -240,7 +291,7 @@ class GraphStore:
 
             logging.debug(f"Could not build indices (may already exist): {e}")
 
-        # graphiti-core 0.30's deprecated Kuzu backend does not actually create
+        # graphiti-core 0.30's deprecated Kùzu backend does not actually create
         # the full-text search indexes (build_indices_and_constraints returns
         # without error but SHOW_INDEXES is empty), so the edge-dedup search
         # during add_episode fails with "Table RelatesToNode_ doesn't have an
@@ -249,6 +300,40 @@ class GraphStore:
 
         self._initialized = True
         return self._graphiti
+
+    def _resolve_ladybug_fts(self) -> Path:
+        """Check D-3 and resolve the verified FTS artifact, before anything opens.
+
+        1. D-3 is checked first and before anything opens, so a Kùzu graph is
+           never shadowed by a new, empty Ladybug database.
+        2. The artifact is resolved before the LLM and before the database: a
+           missing extension is a refusal that costs nothing on disk.
+        """
+        kuzu_graph = self._db_path / "graphiti.kuzu"
+        ladybug_graph = self._db_path / "graphiti.lbdb"
+        if kuzu_graph.exists() and not ladybug_graph.exists():
+            raise GraphNeedsMigrationError(GRAPH_NEEDS_MIGRATION_MESSAGE)
+
+        require("ladybug", "ladybug")
+        return fts.resolve_verified_artifact(self._data_dir)
+
+    def _open_ladybug_driver(self, artifact: Path) -> Any:
+        """Open the Ladybug driver, loading the verified FTS extension once.
+
+        The extension is database-scoped, so the driver loads it on a setup
+        connection before its async connection pool is built.
+        """
+        from docugraph.storage.ladybug_driver import LadybugDriver
+
+        try:
+            return LadybugDriver(
+                db=str(self._db_path / "graphiti.lbdb"),
+                fts_extension=str(artifact),
+            )
+        except Exception as e:
+            # A verified file that will not load is an initialization error, not
+            # a reason to fall back: the same D-9 rule as a failed index create.
+            raise _fts_init_error(e) from e
 
     # Kuzu FTS indexes Graphiti's search path expects (table, index, columns).
     _KUZU_FTS_INDEXES = (
@@ -259,16 +344,21 @@ class GraphStore:
     )
 
     async def _ensure_fts_indexes(self) -> None:
-        """Create any missing Kuzu full-text indexes.
+        """Create any missing Kùzu/Ladybug full-text indexes.
 
         Checks SHOW_INDEXES first and only creates the ones that are absent, so
         re-initializing an existing graph produces no error-log noise from
         Graphiti's driver (which logs before raising on "already exists").
+
+        D-9: on Ladybug, FTS is a hard requirement, so a failure to enumerate
+        or create is an initialization error that names the fix. On Kùzu it
+        stays non-fatal (search degrades, ingestion still works).
         """
         import logging
 
         driver = self._driver
         assert driver is not None  # noqa: S101 -- set by _ensure_initialized before this runs
+        ladybug = self._backend == GraphBackend.LADYBUG
 
         existing: set[str] = set()
         try:
@@ -278,6 +368,8 @@ class GraphStore:
                 if name:
                     existing.add(str(name))
         except Exception as e:
+            if ladybug:
+                raise _fts_init_error(e) from e
             logging.debug(f"Could not enumerate existing indexes: {e}")
 
         for table, index_name, columns in self._KUZU_FTS_INDEXES:
@@ -289,9 +381,12 @@ class GraphStore:
                 await driver.execute_query(query)
             except Exception as e:
                 # "already exists" is a benign race; anything else is non-fatal
-                # (search degrades, ingestion still works).
-                if "already exists" not in str(e).lower():
-                    logging.debug(f"Could not create FTS index {index_name}: {e}")
+                # on Kùzu (search degrades, ingestion still works).
+                if "already exists" in str(e).lower():
+                    continue
+                if ladybug:
+                    raise _fts_init_error(e) from e
+                logging.debug(f"Could not create FTS index {index_name}: {e}")
 
     async def close(self) -> None:
         """Close the graph store and release resources."""
@@ -566,13 +661,33 @@ class GraphStore:
         )
 
     async def clear(self) -> None:
-        """Clear all data from the graph store."""
+        """Clear all data from the graph store.
+
+        Removes only the active backend's store: ``graphiti.kuzu`` is a
+        directory, ``graphiti.lbdb`` is a single file. The other backend's
+        graph, if any, is left untouched (migration and rollback both depend
+        on it) -- and when Ladybug is configured and only a Kùzu graph exists,
+        clearing raises the D-3 sentence rather than starting a new empty graph
+        beside it.
+        """
+        if (
+            self._backend == GraphBackend.LADYBUG
+            and (self._db_path / "graphiti.kuzu").exists()
+            and not (self._db_path / "graphiti.lbdb").exists()
+        ):
+            raise GraphNeedsMigrationError(GRAPH_NEEDS_MIGRATION_MESSAGE)
+
         await self.close()
 
         import shutil
 
-        if self._db_path.exists():
-            shutil.rmtree(self._db_path)
+        target = self._db_path / (
+            "graphiti.lbdb" if self._backend == GraphBackend.LADYBUG else "graphiti.kuzu"
+        )
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
         self._db_path.mkdir(parents=True, exist_ok=True)
 
     async def count(self) -> dict[str, int]:

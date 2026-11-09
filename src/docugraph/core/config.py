@@ -33,12 +33,27 @@ class LLMProvider(StrEnum):
     ANTHROPIC = "anthropic"
 
 
+class GraphBackend(StrEnum):
+    """Graph database backends this package can drive.
+
+    ``kuzu`` is the default and the only backend an existing graph can be read
+    from without a migration. ``ladybug`` is opt-in, needs the ``[ladybug]``
+    extra, and shares Kùzu's API surface but not its storage format.
+    """
+
+    KUZU = "kuzu"
+    LADYBUG = "ladybug"
+
+
 class StorageConfig(BaseModel):
     """Storage configuration."""
 
     data_dir: Path = Field(default=Path.home() / ".docugraph" / "data")
     vector_db: str = "lancedb"
-    graph_db: str = "kuzu"
+    # Validated, not a bare string: a typo here used to fall through to Kùzu
+    # silently, which is harmless only while there is one backend. With two,
+    # an unrecognized value is rejected with both names in the message.
+    graph_db: GraphBackend = GraphBackend.KUZU
 
     def model_post_init(self, __context: Any) -> None:
         """Ensure data directory exists."""

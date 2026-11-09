@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import NoReturn
 
 import click
+from pydantic import ValidationError
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
@@ -27,6 +28,20 @@ def _exit_missing_extra(exc: MissingExtraError) -> NoReturn:
     Rich's markup parser would read as a style tag and drop.
     """
     click.echo(str(exc), err=True)
+    raise SystemExit(1)
+
+
+def _exit_graph_error(exc: Exception) -> NoReturn:
+    """Print a backend/configuration refusal and exit 1, with no traceback.
+
+    ``ValidationError`` is pydantic's multi-line frame dump; the user needs the
+    one sentence it is standing for (WP-0.4.0 §10.5 ruling 6.5). Every other
+    error this handles already carries its own complete sentence.
+    """
+    if isinstance(exc, ValidationError):
+        click.echo("Invalid graph_db setting: expected 'kuzu' or 'ladybug'.", err=True)
+    else:
+        click.echo(str(exc), err=True)
     raise SystemExit(1)
 
 
@@ -524,7 +539,8 @@ def graph_add(content: str, name: str | None, group: str, source_type: str) -> N
         docugraph graph add "FastAPI is a Python web framework. It uses Starlette for routing."
         docugraph graph add '{"name": "Alice", "role": "Developer"}' --type json
     """
-    from docugraph.storage.graph_store import GraphStore
+    from docugraph.storage.fts import FtsError
+    from docugraph.storage.graph_store import GraphBackendError, GraphStore
 
     async def _add() -> bool:
         store = GraphStore()
@@ -562,6 +578,8 @@ def graph_add(content: str, name: str | None, group: str, source_type: str) -> N
         added = asyncio.run(_add())
     except MissingExtraError as exc:
         _exit_missing_extra(exc)
+    except (GraphBackendError, FtsError, ValidationError) as exc:
+        _exit_graph_error(exc)
 
     if not added:
         raise SystemExit(EXIT_LLM_UNAVAILABLE)
@@ -581,7 +599,8 @@ def graph_search(query: str, limit: int, group: str | None) -> None:
         docugraph graph search "Python web frameworks"
         docugraph graph search "authentication" --group security
     """
-    from docugraph.storage.graph_store import GraphStore
+    from docugraph.storage.fts import FtsError
+    from docugraph.storage.graph_store import GraphBackendError, GraphStore
 
     async def _search() -> bool:
         store = GraphStore()
@@ -612,6 +631,8 @@ def graph_search(query: str, limit: int, group: str | None) -> None:
         searched = asyncio.run(_search())
     except MissingExtraError as exc:
         _exit_missing_extra(exc)
+    except (GraphBackendError, FtsError, ValidationError) as exc:
+        _exit_graph_error(exc)
 
     if not searched:
         raise SystemExit(EXIT_LLM_UNAVAILABLE)
@@ -621,7 +642,8 @@ def graph_search(query: str, limit: int, group: str | None) -> None:
 @click.confirmation_option(prompt="Are you sure you want to clear the knowledge graph?")
 def graph_clear() -> None:
     """Clear all data from the knowledge graph."""
-    from docugraph.storage.graph_store import GraphStore
+    from docugraph.storage.fts import FtsError
+    from docugraph.storage.graph_store import GraphBackendError, GraphStore
 
     async def _clear() -> None:
         store = GraphStore()
@@ -632,6 +654,100 @@ def graph_clear() -> None:
         asyncio.run(_clear())
     except MissingExtraError as exc:
         _exit_missing_extra(exc)
+    except (GraphBackendError, FtsError, ValidationError) as exc:
+        _exit_graph_error(exc)
+
+
+@graph.command("fetch-fts")
+def graph_fetch_fts() -> None:
+    """Download and verify Ladybug's full-text-search extension.
+
+    The download is checked against the sha256 pinned in this release for your
+    Ladybug version and platform, and the file is loaded once to confirm it
+    works before it is kept. Needs the 'ladybug' extra.
+    """
+    from docugraph.core.config import get_config
+    from docugraph.storage import fts
+
+    try:
+        path = fts.fetch_fts(get_config().storage.data_dir)
+        digest = fts.sha256_file(path)
+    except (fts.FtsError, ValidationError) as exc:
+        _exit_graph_error(exc)
+
+    console.print(f"[green]Fetched and verified the FTS extension:[/green] {path}")
+    console.print(f"[dim]sha256: {digest}[/dim]")
+
+
+@graph.command("install-fts")
+@click.option(
+    "--unverified",
+    is_flag=True,
+    help="Acknowledge installing without a pinned checksum to verify it against",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Proceed without the interactive confirmation (for non-terminal use)",
+)
+def graph_install_fts(unverified: bool, yes: bool) -> None:
+    """Install Ladybug's FTS extension without verification.
+
+    This is the escape hatch for a platform or version with no pinned
+    checksum. Prefer 'graph fetch-fts': it downloads the file this release
+    was tested with and checks it byte for byte.
+    """
+    import sys
+
+    from docugraph.core.config import get_config
+    from docugraph.storage import fts
+
+    if not unverified:
+        click.echo(fts.FTS_INSTALL_NEEDS_FLAG, err=True)
+        raise SystemExit(1)
+
+    if yes:
+        click.echo(fts.FTS_INSTALL_WARNING, err=True)
+    else:
+        if not sys.stdin.isatty():
+            click.echo(fts.FTS_INSTALL_NEEDS_YES, err=True)
+            raise SystemExit(1)
+        click.echo(fts.FTS_INSTALL_WARNING, err=True)
+        if not click.confirm("Continue?"):
+            raise SystemExit(1)
+
+    try:
+        path = fts.install_unverified(get_config().storage.data_dir)
+        digest = fts.sha256_file(path)
+    except (fts.FtsError, ValidationError) as exc:
+        _exit_graph_error(exc)
+
+    console.print(f"[green]Installed the FTS extension:[/green] {path}")
+    # "digest", not "approved digest": on a pinned platform a matching install
+    # is verified against the pin and no approval is recorded.
+    console.print(f"[dim]digest: {digest}[/dim]")
+
+
+@graph.command("migrate-to-ladybug")
+def graph_migrate_to_ladybug() -> None:
+    """Migrate the existing Kùzu graph to a Ladybug database file.
+
+    Copies the graph; the Kùzu directory is left in place and the configured
+    backend is not changed. Set DOCUGRAPH_STORAGE__GRAPH_DB=ladybug (or
+    graph_db: ladybug in the config file) once the counts look right.
+    """
+    from docugraph.core.config import get_config
+    from docugraph.storage.graph_migration import MigrationError, migrate_graph
+
+    try:
+        counts = migrate_graph(get_config().storage.data_dir)
+    except (MigrationError, ValidationError) as exc:
+        _exit_graph_error(exc)
+
+    total = sum(counts.values())
+    console.print(f"[green]Migrated the graph to Ladybug:[/green] {total} rows verified")
+    for table, value in counts.items():
+        console.print(f"  [dim]{table}: {value}[/dim]")
 
 
 # =============================================================================

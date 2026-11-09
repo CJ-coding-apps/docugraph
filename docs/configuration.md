@@ -28,8 +28,13 @@ storage:
   # Vector database backend
   vector_db: lancedb  # Currently only lancedb supported
 
-  # Graph database backend (via Graphiti)
-  graph_db: kuzu      # Currently only kuzu supported
+  # Graph database backend (via Graphiti). Options:
+  #   kuzu    - the default; the format every existing graph is in
+  #   ladybug - opt-in; needs BOTH the graph and ladybug extras, and an
+  #             existing Kùzu graph must be migrated first with
+  #             `docugraph graph migrate-to-ladybug`. An unknown value is a
+  #             configuration error naming both.
+  graph_db: kuzu
 
 # =============================================================================
 # Embeddings Configuration (local-first, torch-free by default)
@@ -139,14 +144,17 @@ crawler:
 ## Extras
 
 A core install contains the local index and search stack, the MCP server and the
-CLI. Two features are installed as extras:
+CLI. The features installed as extras:
 
 - `crawl` installs `crawl4ai` and `playwright`. It is needed by `crawl_url` and
   `docugraph crawl`, plus the browser itself (`playwright install chromium`).
 - `graph` installs `graphiti-core[kuzu]` and `kuzu`. It is needed by
   `graph_query`, `graph_add` and `docugraph graph …`, plus an LLM (below).
+- `ladybug` installs `ladybug`. It does not replace `graph`: opting in means
+  `pip install 'docugraph[graph,ladybug]'` and `graph_db: ladybug`.
 - `all` installs `crawl`, `graph`, `cloud` and `ollama` — everything a user
-  might want. (`dev` is intentionally not included; see `pyproject.toml`.)
+  might want. It deliberately does not include `ladybug` while that backend is
+  experimental. (`dev` is intentionally not included; see `pyproject.toml`.)
 
 `cloud` and `ollama` are unchanged: the LLM/provider SDKs. Using a feature whose
 extra is absent is a clean error, never a fallback path — the message names the
