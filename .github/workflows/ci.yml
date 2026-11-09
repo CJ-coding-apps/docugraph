@@ -481,8 +481,6 @@ jobs:
         python-version: ['3.11', '3.13']
     env:
       UV_PYTHON: ${{ matrix.python-version }}
-      FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed
-      DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
 
     steps:
       - name: Checkout repository
@@ -527,6 +525,8 @@ jobs:
       # the expected digest, but the cache is not trusted to have preserved it.
       # A miss, or a mismatch, downloads the pinned URL and verifies that.
       - name: Fetch and verify the FTS extension
+        env:
+          DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
         run: |
           uv run python - <<'PY'
           import os
@@ -553,6 +553,9 @@ jobs:
       # same C++ type names, and neither can be undone), so the migration tests
       # live in their own job and the Kùzu graph tests in the Kùzu jobs.
       - name: Run the graph tests on Ladybug
+        env:
+          DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed
         run: |
           uv run pytest --ladybug-only \
             tests/integration/test_ladybug_driver.py \
@@ -627,8 +630,6 @@ jobs:
     name: Migration (Kùzu → Ladybug)
     runs-on: ubuntu-latest
     needs: lint
-    env:
-      DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
 
     steps:
       - name: Checkout repository
@@ -665,6 +666,8 @@ jobs:
           key: fts-${{ steps.fts-pin.outputs.platform }}-${{ steps.fts-pin.outputs.sha256 }}
 
       - name: Fetch and verify the FTS extension
+        env:
+          DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
         run: |
           uv run python - <<'PY'
           import os
@@ -687,6 +690,8 @@ jobs:
           PY
 
       - name: Run the migration tests
+        env:
+          DOCUGRAPH_STORAGE__DATA_DIR: ${{ runner.temp }}/docugraph-data
         run: uv run pytest tests/integration/test_graph_migration.py -v
 
   test-summary:
