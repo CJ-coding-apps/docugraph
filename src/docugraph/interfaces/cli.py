@@ -723,7 +723,9 @@ def graph_install_fts(unverified: bool, yes: bool) -> None:
         _exit_graph_error(exc)
 
     console.print(f"[green]Installed the FTS extension:[/green] {path}")
-    console.print(f"[dim]Approved digest: {digest}[/dim]")
+    # "digest", not "approved digest": on a pinned platform a matching install
+    # is verified against the pin and no approval is recorded.
+    console.print(f"[dim]digest: {digest}[/dim]")
 
 
 @graph.command("migrate-to-ladybug")

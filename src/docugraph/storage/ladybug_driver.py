@@ -60,6 +60,8 @@ from graphiti_core.driver.operations.next_episode_edge_ops import NextEpisodeEdg
 from graphiti_core.driver.operations.saga_node_ops import SagaNodeOperations
 from graphiti_core.driver.operations.search_ops import SearchOperations
 
+from docugraph.storage.fts import load_extension_statement as _load_extension_statement
+
 logger = logging.getLogger(__name__)
 
 # Ladybug requires an explicit schema.
@@ -149,14 +151,14 @@ SCHEMA_QUERIES = """
 
 
 def load_extension_statement(path: str) -> str:
-    """The one ``LOAD`` statement, built in one place.
+    """The one ``LOAD`` statement; built in :mod:`docugraph.storage.fts`.
 
-    A path containing a single quote cannot be escaped in a Cypher string
-    literal, so it is refused rather than producing a broken statement.
+    Kept as a name here because the driver is where callers expect it. The
+    implementation lives with the rest of the extension handling, which has no
+    graphiti dependency, so the CLI's ``fetch-fts`` can use it with the
+    ``[ladybug]`` extra alone.
     """
-    if "'" in path:
-        raise ValueError(f"the extension path contains a single quote: {path!r}")
-    return f"LOAD EXTENSION '{path}'"
+    return _load_extension_statement(path)
 
 
 class LadybugDriver(GraphDriver):

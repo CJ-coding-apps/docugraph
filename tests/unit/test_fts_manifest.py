@@ -126,9 +126,15 @@ def fts_artifact_sha(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def test_f4_an_approved_digest_is_used_only_while_the_bytes_are_unchanged(tmp_path):
-    """F4: an unverified install is pinned to the exact bytes a human approved."""
+def test_f4_an_approved_digest_is_used_only_while_the_bytes_are_unchanged(tmp_path, monkeypatch):
+    """F4: with no pin, the approval pins the exact bytes a human accepted.
+
+    The approval path only exists where no pin does (MED-1), so this test takes
+    the pin away for the running platform instead of relying on one.
+    """
     fts = _fts()
+    monkeypatch.setattr(_pins(), "PINS", {})
+
     path = fts.cache_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"unverified-but-approved")
@@ -140,7 +146,7 @@ def test_f4_an_approved_digest_is_used_only_while_the_bytes_are_unchanged(tmp_pa
     path.write_bytes(b"changed after approval")
     with pytest.raises(fts.FtsUnavailableError) as excinfo:
         fts.resolve_verified_artifact(tmp_path)
-    assert str(excinfo.value) == FTS_CACHED_MISMATCH
+    assert str(excinfo.value) == FTS_NO_PIN
 
 
 def test_f3_install_without_yes_refuses_a_non_terminal():
