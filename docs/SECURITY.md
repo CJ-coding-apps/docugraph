@@ -59,6 +59,15 @@ stated plainly.
   does not authenticate the server, and it cannot detect a compromise that happened before the pin was
   measured. CI re-downloads the artifact on every run and fails if the bytes change, which is the only
   independent check behind the pinned values.
+- **The checksum protects the download, not the cache directory.** DocuGraph verifies the bytes it
+  fetched, and re-checks the cached file on every start; but the cache lives in the data directory, and
+  anyone who can write there can change the file between that check and the load (or edit the approval
+  record). The pin detects a corrupted or substituted download, not an attacker who already has write
+  access to your data directory. Protect that directory with filesystem permissions like any other
+  local state.
+- **A pin outranks an approval.** On a platform with a pinned checksum, an approval record cannot make
+  different bytes load: a matching install counts as verified, and a mismatch is deleted and refused.
+  Approval records are consulted only where no pin exists.
 - **The unverified path is explicit and interactive.** `docugraph graph install-fts --unverified` runs
   Ladybug's own `INSTALL FTS`. It states, before doing so, that the download is unverified and that
   Ladybug's `INSTALL` can, in some versions, download and execute an installer in-process. It refuses
