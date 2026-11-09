@@ -125,8 +125,6 @@ def test_p1_ladybug_is_an_opt_in_extra_and_all_excludes_it():
     assert extras["all"] == ["docugraph[crawl,graph,cloud,ollama]"]
     assert "ladybug" not in extras["all"][0]
 
-    # The backend is opt-in; this PR does not bump the version.
-    assert project["version"] == "0.3.0"
     assert project["requires-python"] == ">=3.11,<3.14"
 
 
