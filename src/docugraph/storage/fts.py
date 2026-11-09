@@ -71,30 +71,44 @@ class FtsInitializationError(FtsError):
 
 
 _OPTIONS_PINNED = (
-    "Run 'docugraph graph fetch-fts' to download and verify it; "
-    "or run 'docugraph graph install-fts --unverified' to install it without verification; "
-    "or set graph_db back to 'kuzu'."
+    "Run: docugraph graph fetch-fts — or approve an unverified install: "
+    "docugraph graph install-fts --unverified — or set graph_db back to kuzu."
 )
 # With no pin there is nothing for `fetch-fts` to verify a download against,
-# so that option is not offered: it would be advice that cannot work.
+# so the approved wording drops that clause and rephrases the remaining two
+# options rather than leaving a sentence with a hole in it.
 _OPTIONS_UNPINNED = (
-    "Run 'docugraph graph install-fts --unverified' to install it without verification; "
-    "or set graph_db back to 'kuzu'."
+    "Run: docugraph graph install-fts --unverified to approve an unverified install "
+    "— or set graph_db back to kuzu."
 )
 
 
 def _unavailable(reason: str, *, pinned: bool = True) -> str:
     options = _OPTIONS_PINNED if pinned else _OPTIONS_UNPINNED
-    return f"Full-text search is unavailable: {reason}. {options}"
+    return (
+        "The Ladybug backend needs its full-text search extension, "
+        f"and no verified copy is available ({reason}). {options}"
+    )
 
 
-FTS_NO_FILE = _unavailable(
-    "no verified extension file is present for this Ladybug version and platform"
-)
-FTS_NO_PIN = _unavailable(
-    "no checksum is pinned for this Ladybug version and platform", pinned=False
-)
-FTS_CACHED_MISMATCH = _unavailable("the cached extension does not match its pinned checksum")
+FTS_NO_FILE = _unavailable("not downloaded yet")
+FTS_CACHED_MISMATCH = _unavailable("the cached file does not match its pinned checksum")
+
+
+def no_pin_sentence() -> str:
+    """The no-checksum sentence, naming the installed package and platform.
+
+    Built on demand because the version comes from the installed distribution,
+    and this module must stay importable when ``ladybug`` is not installed.
+
+    A platform this release does not claim has no key; the sentence then names
+    the pair ``platform.system()``/``platform.machine()`` reports, which is what
+    a reader would compare against the keys in :mod:`fts_pins`.
+    """
+    key = platform_key() or f"{platform.system()}_{platform.machine()}".lower()
+    reason = f"no pinned checksum for ladybug {package_version()} on {key}"
+    return _unavailable(reason, pinned=False)
+
 
 # §10.9 note 2: saying "unverified" is not enough. In some Ladybug versions the
 # INSTALL path can run an installer it downloads, so the prompt says so.
@@ -115,10 +129,10 @@ FTS_INSTALL_NEEDS_FLAG = (
 )
 
 FTS_INIT_FAILED = (
-    "Full-text search could not be initialized on the Ladybug backend: {error}. "
-    "The graph was not opened. "
-    "Run 'docugraph graph fetch-fts' to provide a verified extension; "
-    "or set graph_db back to 'kuzu'."
+    "The Ladybug backend could not set up full-text search ({error}); "
+    "the graph was not opened. "
+    "Run docugraph graph fetch-fts to re-verify the extension, "
+    "or set graph_db back to kuzu."
 )
 
 
@@ -158,7 +172,7 @@ def cache_path(data_dir: Path) -> Path:
     compat = compat_version()
     plat = platform_key()
     if compat is None or plat is None:
-        raise FtsUnavailableError(FTS_NO_PIN)
+        raise FtsUnavailableError(no_pin_sentence())
     return Path(data_dir) / "extensions" / "fts" / compat / plat / FTS_FILENAME
 
 
@@ -213,7 +227,7 @@ def resolve_verified_artifact(data_dir: Path) -> Path:
     pin = fts_pins.PINS.get((compat, plat)) if compat is not None and plat is not None else None
 
     if not path.is_file():
-        raise FtsUnavailableError(FTS_NO_PIN if pin is None else FTS_NO_FILE)
+        raise FtsUnavailableError(no_pin_sentence() if pin is None else FTS_NO_FILE)
 
     digest = sha256_file(path)
     if pin is not None:
@@ -224,7 +238,7 @@ def resolve_verified_artifact(data_dir: Path) -> Path:
     approval = _read_approval(data_dir)
     if approval is not None and approval.get("sha256") == digest:
         return path
-    raise FtsUnavailableError(FTS_NO_PIN)
+    raise FtsUnavailableError(no_pin_sentence())
 
 
 def _download_bytes(url: str) -> bytes:
@@ -274,10 +288,10 @@ def fetch_fts(data_dir: Path, downloader: Callable[[str], bytes] | None = None) 
     compat = compat_version()
     plat = platform_key()
     if compat is None or plat is None:
-        raise FtsUnavailableError(FTS_NO_PIN)
+        raise FtsUnavailableError(no_pin_sentence())
     pin = fts_pins.PINS.get((compat, plat))
     if pin is None:
-        raise FtsUnavailableError(FTS_NO_PIN)
+        raise FtsUnavailableError(no_pin_sentence())
 
     payload = (downloader or _download_bytes)(pin["url"])
     digest = hashlib.sha256(payload).hexdigest()
@@ -310,7 +324,7 @@ def _installed_extension_path() -> Path:
     compat = compat_version()
     plat = platform_key()
     if compat is None or plat is None:
-        raise FtsUnavailableError(FTS_NO_PIN)
+        raise FtsUnavailableError(no_pin_sentence())
     root = Path.home() / ".lbdb" / "extension" / compat / plat
     candidates = sorted(root.rglob(FTS_FILENAME), key=lambda p: p.stat().st_mtime)
     if not candidates:
