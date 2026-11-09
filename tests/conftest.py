@@ -28,7 +28,7 @@ import pytest
 
 # The roots an extra installs. Blocking a root makes every submodule import
 # fail exactly as it would in an install without that extra.
-BLOCKED_ROOTS = ("crawl4ai", "graphiti_core", "kuzu", "playwright")
+BLOCKED_ROOTS = ("crawl4ai", "graphiti_core", "kuzu", "ladybug", "playwright")
 
 # Tests that cannot run without an extra, by module basename. Any module not
 # listed here runs in both profiles.
@@ -46,9 +46,13 @@ _REQUIRED_EXTRA = {
     "test_graph_store_init.py": "graph",
     "test_mcp_server.py": "graph",
     "test_graph_embedder_adapter.py": "graph",
+    "test_ladybug_driver.py": "ladybug",
+    "test_graph_ladybug.py": "ladybug",
+    "test_graph_migration.py": "ladybug",
+    "test_fts_manifest.py": "ladybug",
 }
 
-_EXTRA_PROBE = {"crawl": "crawl4ai", "graph": "graphiti_core"}
+_EXTRA_PROBE = {"crawl": "crawl4ai", "graph": "graphiti_core", "ladybug": "ladybug"}
 
 _BLOCKER_TEMPLATE = '''\
 import sys
@@ -88,6 +92,41 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             continue
         if importlib.util.find_spec(_EXTRA_PROBE[extra]) is None:
             item.add_marker(pytest.mark.requires_extras)
+
+
+@pytest.fixture(scope="session")
+def fts_artifact() -> Path:
+    """A verified FTS artifact for the running platform, or a skip.
+
+    ``DOCUGRAPH_TEST_FTS_ARTIFACT`` points at a file already downloaded (the
+    Phase 0 measurements live in /tmp, not in the repo). Otherwise the cache is
+    consulted, and only ``DOCUGRAPH_TEST_FETCH_FTS=1`` allows a download. CI's
+    Ladybug job fetches once into the cache before the test run.
+    """
+    override = os.environ.get("DOCUGRAPH_TEST_FTS_ARTIFACT")
+    if override:
+        return Path(override)
+
+    import tempfile
+
+    from docugraph.storage import fts
+
+    with tempfile.TemporaryDirectory() as scratch:
+        try:
+            return fts.resolve_verified_artifact(Path(scratch))
+        except Exception:  # noqa: BLE001 - any absence means "not provisioned"
+            pass
+
+    if os.environ.get("DOCUGRAPH_TEST_FETCH_FTS") == "1":
+        from docugraph.core.config import get_config
+        from docugraph.storage import fts
+
+        return fts.fetch_fts(get_config().storage.data_dir)
+
+    pytest.skip(
+        "no verified FTS artifact: set DOCUGRAPH_TEST_FTS_ARTIFACT=<file>, "
+        "or DOCUGRAPH_TEST_FETCH_FTS=1 to download it"
+    )
 
 
 @pytest.fixture
