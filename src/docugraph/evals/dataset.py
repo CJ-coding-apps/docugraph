@@ -7,9 +7,13 @@ The dataset is three committed files under ``benchmarks/retrieval/``:
   bypassed so that relevance judgments are pinned to stable ids and cannot
   rot when chunking changes. Chunking quality is a different benchmark.
 - ``queries.jsonl`` -- one query per line: ``{id, text, category, qrels,
-  design_note}``. ``qrels`` maps corpus ids to grades (1 partial, 2 answers
-  the query); everything absent is grade 0. ``design_note`` records the trap
-  the query sets, so a future editor knows what a change would un-measure.
+  design_note}``, plus ``required`` for multi-hop and aggregation queries.
+  ``qrels`` maps corpus ids to grades (1 partial, 2 answers the query);
+  everything absent is grade 0. ``required`` is the support set a complete
+  answer needs (every document that must be joined or aggregated), which is
+  what the set metrics score; it is the same set recorded in
+  ``gold_subgraph.json``. ``design_note`` records the trap the query sets, so
+  a future editor knows what a change would un-measure.
 - ``MANIFEST.json`` -- sha256 of both files, counts, and a dataset version.
   Metrics are only comparable against the same judgments, so editing the
   dataset is a deliberate act: it must update the manifest, and it
@@ -36,7 +40,16 @@ CATEGORIES = (
     "version-pinning",
     "acronym-synonym",
     "negation-constraint",
+    # Support-set categories: the answer is not one document. The graph bench
+    # scores them with set recall / full support over an explicit required set.
+    "multi-hop",
+    "aggregation",
 )
+
+# Categories whose answer needs more than one document, and therefore must
+# declare ``required``. A query in one of these that leaves the support set
+# implicit cannot be scored by the set metrics, only silently skipped.
+SUPPORT_SET_CATEGORIES = ("multi-hop", "aggregation")
 
 ROLES = ("target", "distractor", "background")
 
@@ -66,6 +79,9 @@ class BenchQuery:
     category: str
     qrels: dict[str, int] = field(default_factory=dict)
     design_note: str = ""
+    # None means the field is absent; an empty tuple means it was present but
+    # empty, which is a dataset bug the validator reports rather than erasing.
+    required: tuple[str, ...] | None = None
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -113,6 +129,7 @@ def load_queries(dataset_dir: Path) -> list[BenchQuery]:
             category=r["category"],
             qrels={k: int(v) for k, v in r["qrels"].items()},
             design_note=r.get("design_note", ""),
+            required=(None if "required" not in r else tuple(r["required"])),
         )
         for r in rows
     ]
@@ -137,10 +154,16 @@ def validate(dataset_dir: Path) -> list[str]:
     queries = load_queries(dataset_dir)
     manifest = load_manifest(dataset_dir)
 
-    # Integrity: the files are what the manifest says they are.
-    for name in ("corpus.jsonl", "queries.jsonl"):
-        actual = sha256_file(dataset_dir / name)
-        expected = manifest["sha256"][name]
+    # Integrity: every file the manifest names is what the manifest says it
+    # is. Files are added to the map as they are committed (gold_subgraph.json,
+    # and later the staged graph fixture), so the loop follows the manifest
+    # rather than a hardcoded list.
+    for name, expected in manifest["sha256"].items():
+        path = dataset_dir / name
+        if not path.exists():
+            problems.append(f"{name}: named by the manifest but missing")
+            continue
+        actual = sha256_file(path)
         if actual != expected:
             problems.append(
                 f"{name}: sha256 {actual} != manifest {expected} -- the dataset "
@@ -180,6 +203,32 @@ def validate(dataset_dir: Path) -> list[str]:
             problems.append(f"{q.id}: unknown category '{q.category}'")
         if not q.design_note:
             problems.append(f"{q.id}: missing design_note -- the trap must be recorded")
+
+        # The support set: explicit, resolvable, judged relevant, and big
+        # enough to be a set. A required document at grade 0 would mean the
+        # set metrics demand something the judgments call irrelevant.
+        if q.required is not None:
+            if not q.required:
+                problems.append(
+                    f"{q.id}: required is present but empty -- omit the field "
+                    "or list the support set"
+                )
+            for doc_id in q.required:
+                if doc_id not in id_set:
+                    problems.append(f"{q.id}: required '{doc_id}' names no corpus doc")
+                elif q.qrels.get(doc_id, 0) < 1:
+                    problems.append(
+                        f"{q.id}: required '{doc_id}' is not in qrels at grade >= 1"
+                    )
+        if q.category in SUPPORT_SET_CATEGORIES:
+            if q.required is None:
+                problems.append(
+                    f"{q.id}: {q.category} query has no required support set"
+                )
+            elif len(set(q.required)) < 2:
+                problems.append(
+                    f"{q.id}: {q.category} query needs at least two required documents"
+                )
 
     for d in corpus:
         if d.role not in ROLES:

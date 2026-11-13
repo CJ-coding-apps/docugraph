@@ -1,0 +1,527 @@
+{
+  "kind": "gold-subgraph",
+  "version": "1",
+  "description": "Hand-verified support subgraph for the multi-hop and aggregation queries. For each query: the required documents, the joining or aggregated entities, and the facts a complete answer needs. fidelity_row() reads this file; it diagnoses extraction coverage and never decides the gate.",
+  "queries": {
+    "q-agg-1": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-runner-fleet",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EmbeddedScheduler",
+        "RunnerLease",
+        "EphemeralMode"
+      ],
+      "facts": [
+        "The embedded runner checkpoint interval is 30 seconds",
+        "The fleet runner checkpoint interval is 10 seconds"
+      ]
+    },
+    "q-agg-10": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-auth-workload",
+        "qrv-auth-oidc"
+      ],
+      "entities": [
+        "CertificateAuthority",
+        "WorkloadIdentity",
+        "OidcBroker"
+      ],
+      "facts": [
+        "Workload identity tokens rotate on every restart",
+        "Client certificates rotate every 24 hours"
+      ]
+    },
+    "q-agg-11": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-auth-workload",
+        "qrv-auth-oidc"
+      ],
+      "entities": [
+        "CertificateAuthority",
+        "WorkloadIdentity",
+        "OidcBroker"
+      ],
+      "facts": [
+        "Audit records store the peer_serial of the client certificate",
+        "Audit records store the spiffe_id of the workload"
+      ]
+    },
+    "q-agg-12": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-auth-workload",
+        "qrv-auth-oidc"
+      ],
+      "entities": [
+        "CertificateAuthority",
+        "WorkloadIdentity",
+        "OidcBroker"
+      ],
+      "facts": [
+        "OIDC authentication is for clients with an identity provider",
+        "Workload identity authenticates a service without a shared secret"
+      ]
+    },
+    "q-agg-13": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-sink-kinesis",
+        "qrv-sink-pubsub"
+      ],
+      "entities": [
+        "KafkaPublisher",
+        "Kinesis",
+        "Pub/Sub"
+      ],
+      "facts": [
+        "The Kafka sink delivery is at-least-once",
+        "The Pub/Sub sink delivery is at-least-once by default"
+      ]
+    },
+    "q-agg-14": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-sink-kinesis",
+        "qrv-sink-pubsub"
+      ],
+      "entities": [
+        "KafkaPublisher",
+        "Kinesis",
+        "Pub/Sub"
+      ],
+      "facts": [
+        "The Kafka maximum message size is 1 MiB",
+        "The Pub/Sub maximum message size is 10 MiB"
+      ]
+    },
+    "q-agg-15": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-sink-kinesis",
+        "qrv-sink-pubsub"
+      ],
+      "entities": [
+        "KafkaPublisher",
+        "Kinesis",
+        "Pub/Sub"
+      ],
+      "facts": [
+        "Kafka ordering is preserved per partition",
+        "Kinesis ordering is preserved per shard"
+      ]
+    },
+    "q-agg-16": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-sink-kinesis",
+        "qrv-sink-pubsub"
+      ],
+      "entities": [
+        "KafkaPublisher",
+        "Kinesis",
+        "Pub/Sub"
+      ],
+      "facts": [
+        "Kinesis default retention is 24 hours",
+        "Pub/Sub default retention is 7 days"
+      ]
+    },
+    "q-agg-2": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-runner-fleet",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EmbeddedScheduler",
+        "RunnerLease",
+        "EphemeralMode"
+      ],
+      "facts": [
+        "The fleet runner is at-least-once",
+        "The embedded runner is exactly-once for transactional sinks"
+      ]
+    },
+    "q-agg-3": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-runner-fleet",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EmbeddedScheduler",
+        "RunnerLease",
+        "EphemeralMode"
+      ],
+      "facts": [
+        "The ephemeral runner in-flight batch cap is 4",
+        "Each fleet worker may hold 64 in-flight batches"
+      ]
+    },
+    "q-agg-4": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-runner-fleet",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EmbeddedScheduler",
+        "RunnerLease",
+        "EphemeralMode"
+      ],
+      "facts": [
+        "The embedded runner memory ceiling is 512 MiB",
+        "The fleet runner memory ceiling is 2 GiB per worker"
+      ]
+    },
+    "q-agg-5": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-region-us",
+        "qrv-region-ap",
+        "qrv-region-jp"
+      ],
+      "entities": [
+        "quorva-edge-eu",
+        "quorva-edge-us",
+        "quorva-edge-ap",
+        "quorva-edge-jp"
+      ],
+      "facts": [
+        "The eu-west-1 latency SLA is p95 120 ms",
+        "The ap-southeast-2 latency SLA is p95 180 ms"
+      ]
+    },
+    "q-agg-6": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-region-us",
+        "qrv-region-ap",
+        "qrv-region-jp"
+      ],
+      "entities": [
+        "quorva-edge-eu",
+        "quorva-edge-us",
+        "quorva-edge-ap",
+        "quorva-edge-jp"
+      ],
+      "facts": [
+        "The eu-west-1 retention is 30 days",
+        "The ap-southeast-2 retention is 45 days"
+      ]
+    },
+    "q-agg-7": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-region-us",
+        "qrv-region-ap",
+        "qrv-region-jp"
+      ],
+      "entities": [
+        "quorva-edge-eu",
+        "quorva-edge-us",
+        "quorva-edge-ap",
+        "quorva-edge-jp"
+      ],
+      "facts": [
+        "The us-east-1 data residency is the United States",
+        "The ap-northeast-1 data residency is Japan"
+      ]
+    },
+    "q-agg-8": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-region-us",
+        "qrv-region-ap",
+        "qrv-region-jp"
+      ],
+      "entities": [
+        "quorva-edge-eu",
+        "quorva-edge-us",
+        "quorva-edge-ap",
+        "quorva-edge-jp"
+      ],
+      "facts": [
+        "The regional edge endpoint is quorva-edge-eu",
+        "The regional edge endpoint is quorva-edge-jp"
+      ]
+    },
+    "q-agg-9": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-auth-workload",
+        "qrv-auth-oidc"
+      ],
+      "entities": [
+        "CertificateAuthority",
+        "WorkloadIdentity",
+        "OidcBroker"
+      ],
+      "facts": [
+        "mTLS access tokens are valid for 15 minutes",
+        "The OIDC access token lifetime is 10 minutes"
+      ]
+    },
+    "q-mh-1": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-fleet",
+        "qrv-incident-2026-02-lease"
+      ],
+      "entities": [
+        "RunnerLease"
+      ],
+      "joining_entity": "RunnerLease",
+      "facts": [
+        "Fleet runner coordinates workers through RunnerLease",
+        "RunnerLease renewal raced with checkpoint writes"
+      ]
+    },
+    "q-mh-10": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-ephemeral",
+        "qrv-cli-replay"
+      ],
+      "entities": [
+        "EphemeralMode"
+      ],
+      "joining_entity": "EphemeralMode",
+      "facts": [
+        "EphemeralMode has a 256 MiB memory ceiling",
+        "Replay in EphemeralMode starts from the beginning of the range"
+      ]
+    },
+    "q-mh-11": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-region-ap",
+        "qrv-incident-2026-09-ap"
+      ],
+      "entities": [
+        "quorva-edge-ap"
+      ],
+      "joining_entity": "quorva-edge-ap",
+      "facts": [
+        "quorva-edge-ap serves the ap-southeast-2 region",
+        "quorva-edge-ap breached the p95 latency SLA during zone failover"
+      ]
+    },
+    "q-mh-12": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-region-ap",
+        "qrv-incident-2026-09-ap"
+      ],
+      "entities": [
+        "quorva-edge-ap"
+      ],
+      "joining_entity": "quorva-edge-ap",
+      "facts": [
+        "The ap-southeast-2 latency SLA is p95 180 ms",
+        "quorva-edge-ap p95 rose to 310 ms during failover"
+      ]
+    },
+    "q-mh-13": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-auth-oidc",
+        "qrv-incident-2026-10-oidc"
+      ],
+      "entities": [
+        "OidcBroker"
+      ],
+      "joining_entity": "OidcBroker",
+      "facts": [
+        "OidcBroker exchanges authorization codes for tokens",
+        "OidcBroker rejected refresh requests after clock skew"
+      ]
+    },
+    "q-mh-14": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-auth-oidc",
+        "qrv-incident-2026-10-oidc"
+      ],
+      "entities": [
+        "OidcBroker"
+      ],
+      "joining_entity": "OidcBroker",
+      "facts": [
+        "OidcBroker issues access tokens valid for 10 minutes",
+        "Clock skew caused OidcBroker refresh failures"
+      ]
+    },
+    "q-mh-15": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-tuning-scheduler"
+      ],
+      "entities": [
+        "EmbeddedScheduler"
+      ],
+      "joining_entity": "EmbeddedScheduler",
+      "facts": [
+        "EmbeddedScheduler assigns batches oldest first",
+        "EmbeddedScheduler does not preempt an in-flight batch"
+      ]
+    },
+    "q-mh-16": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-tuning-scheduler"
+      ],
+      "entities": [
+        "EmbeddedScheduler"
+      ],
+      "joining_entity": "EmbeddedScheduler",
+      "facts": [
+        "The embedded runner checkpoints every 30 seconds",
+        "EmbeddedScheduler pauses assignment while a checkpoint is written"
+      ]
+    },
+    "q-mh-2": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-fleet",
+        "qrv-incident-2026-02-lease"
+      ],
+      "entities": [
+        "RunnerLease"
+      ],
+      "joining_entity": "RunnerLease",
+      "facts": [
+        "Fleet runner coordinates workers through RunnerLease",
+        "The coordinator compares renewals against the lease table"
+      ]
+    },
+    "q-mh-3": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-incident-2026-05-eu"
+      ],
+      "entities": [
+        "quorva-edge-eu"
+      ],
+      "joining_entity": "quorva-edge-eu",
+      "facts": [
+        "quorva-edge-eu terminates TLS for the EU region",
+        "The quorva-edge-eu TLS certificate expired"
+      ]
+    },
+    "q-mh-4": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-incident-2026-05-eu"
+      ],
+      "entities": [
+        "quorva-edge-eu"
+      ],
+      "joining_entity": "quorva-edge-eu",
+      "facts": [
+        "The eu-west-1 latency SLA is p95 120 ms",
+        "quorva-edge-eu refused TLS connections after certificate expiry"
+      ]
+    },
+    "q-mh-5": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-security-advisory-ca"
+      ],
+      "entities": [
+        "CertificateAuthority"
+      ],
+      "joining_entity": "CertificateAuthority",
+      "facts": [
+        "Client certificates are issued by CertificateAuthority",
+        "The CertificateAuthority intermediate rotates on 1 December 2026"
+      ]
+    },
+    "q-mh-6": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-security-advisory-ca"
+      ],
+      "entities": [
+        "CertificateAuthority"
+      ],
+      "joining_entity": "CertificateAuthority",
+      "facts": [
+        "Client certificates rotate every 24 hours",
+        "The new CertificateAuthority intermediate is published in the trust bundle"
+      ]
+    },
+    "q-mh-7": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-incident-2026-07-kafka"
+      ],
+      "entities": [
+        "KafkaPublisher"
+      ],
+      "joining_entity": "KafkaPublisher",
+      "facts": [
+        "KafkaPublisher retries failed publishes",
+        "KafkaPublisher replayed a batch after a consumer group rebalance"
+      ]
+    },
+    "q-mh-8": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-incident-2026-07-kafka"
+      ],
+      "entities": [
+        "KafkaPublisher"
+      ],
+      "joining_entity": "KafkaPublisher",
+      "facts": [
+        "The Kafka sink publishes through KafkaPublisher",
+        "Kafka sink delivery is at-least-once"
+      ]
+    },
+    "q-mh-9": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-ephemeral",
+        "qrv-cli-replay"
+      ],
+      "entities": [
+        "EphemeralMode"
+      ],
+      "joining_entity": "EphemeralMode",
+      "facts": [
+        "EphemeralMode writes no checkpoints",
+        "Replay runs in EphemeralMode"
+      ]
+    }
+  }
+}

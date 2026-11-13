@@ -399,11 +399,16 @@ keyword-stuffed distractor pages, near-sibling semantic distractors, version-
 pinned questions, acronym/synonym gaps, and "X without Y" constraint queries.
 Each query records the trap it sets in a `design_note`, and a manifest pins the
 dataset by hash — editing it is a deliberate act that invalidates baselines.
-The corpus holds 70 documents and 56 queries, eight per failure mode; the
-keyword-trap distractors are built to cover many *distinct* query terms rather
-than repeat one (BM25 saturates a repeated term, so a one-token trap does not
-bind), and the semantic-distractor queries share few exact tokens with their
-target so that only meaning — not lexical overlap — can recover them.
+The corpus holds 91 documents and 88 queries: 56 eight-per-failure-mode
+queries, plus 16 multi-hop and 16 aggregation queries added for the graph
+benchmark. Support-set queries declare a `required` set — every document a
+complete answer needs — which `set_recall@k` and `full_support@k` score; the
+same set is recorded in `gold_subgraph.json` together with the joining entity
+and required facts. The keyword-trap distractors are built to cover many
+*distinct* query terms rather than repeat one (BM25 saturates a repeated term,
+so a one-token trap does not bind), and the semantic-distractor queries share
+few exact tokens with their target so that only meaning — not lexical overlap —
+can recover them.
 
 ```bash
 # Score every arm (vector-only, BM25-only, LanceDB-native hybrid, RRF, weighted)

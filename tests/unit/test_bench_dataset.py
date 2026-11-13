@@ -13,6 +13,7 @@ import pytest
 
 from docugraph.evals.dataset import (
     CATEGORIES,
+    SUPPORT_SET_CATEGORIES,
     default_dataset_dir,
     load_corpus,
     load_queries,
@@ -41,6 +42,46 @@ class TestCommittedDataset:
             for q in in_category:
                 assert any(g == 2 for g in q.qrels.values())
 
+    def test_support_set_queries_declare_a_judged_support_set(self):
+        """Multi-hop and aggregation answers are sets; the set must be explicit."""
+        for q in load_queries(DATASET):
+            if q.category not in SUPPORT_SET_CATEGORIES:
+                continue
+            assert q.required is not None, f"{q.id} has no required set"
+            assert len(set(q.required)) >= 2, f"{q.id} needs a real support set"
+            for doc_id in q.required:
+                assert q.qrels.get(doc_id, 0) >= 1, (
+                    f"{q.id}: required {doc_id} is not judged relevant"
+                )
+
+    def test_gold_subgraph_covers_exactly_the_support_set_queries(self):
+        """The gold subgraph and the queries must name the same queries/docs.
+
+        The fidelity row reads the gold file directly, so a drift between the
+        two would make extraction coverage describe a different benchmark.
+        """
+        gold_path = DATASET / "gold_subgraph.json"
+        assert gold_path.exists(), "gold_subgraph.json is missing"
+        gold = json.loads(gold_path.read_text(encoding="utf-8"))["queries"]
+        support = {
+            q.id: q for q in load_queries(DATASET)
+            if q.category in SUPPORT_SET_CATEGORIES
+        }
+        assert set(gold) == set(support)
+        for query_id, record in gold.items():
+            q = support[query_id]
+            assert record["category"] == q.category
+            assert set(record["documents"]) == set(q.required or ())
+            if q.category == "multi-hop":
+                assert record.get("joining_entity"), (
+                    f"{query_id}: multi-hop gold record needs a joining_entity"
+                )
+            else:
+                assert record.get("entities"), (
+                    f"{query_id}: aggregation gold record needs aggregated entities"
+                )
+            assert record.get("facts"), f"{query_id}: gold record needs required facts"
+
     def test_distractors_are_never_graded_relevant(self):
         """A distractor graded relevant for its own category is a broken trap."""
         corpus = {d.id: d for d in load_corpus(DATASET)}
@@ -55,6 +96,19 @@ class TestCommittedDataset:
                     assert grade == 1, (
                         f"{q.id}: distractor {doc_id} graded {grade} in its own category"
                     )
+
+
+class TestRequiredField:
+    def test_absent_and_present_are_distinguishable(self, tmp_path):
+        corpus = [GOOD_DOC, {**GOOD_DOC, "id": "d2"}]
+        queries = [
+            GOOD_QUERY,
+            {**GOOD_QUERY, "id": "q2", "qrels": {"d1": 2, "d2": 2}, "required": ["d1", "d2"]},
+        ]
+        d = _write_dataset(tmp_path, corpus, queries)
+        loaded = {q.id: q for q in load_queries(d)}
+        assert loaded["q1"].required is None
+        assert loaded["q2"].required == ("d1", "d2")
 
 
 def _write_dataset(tmp_path: Path, corpus: list[dict], queries: list[dict]) -> Path:
@@ -89,7 +143,7 @@ class TestValidatorCatches:
     def test_minimal_sound_dataset_passes_everything_but_coverage(self, tmp_path):
         d = _write_dataset(tmp_path, [GOOD_DOC], [GOOD_QUERY])
         problems = validate(d)
-        # One query can't cover seven categories; nothing else may be wrong.
+        # One query can't cover every category; nothing else may be wrong.
         assert len(problems) == 1
         assert "categories with no queries" in problems[0]
 
@@ -124,6 +178,40 @@ class TestValidatorCatches:
         d = _write_dataset(tmp_path, [GOOD_DOC], [bad_query])
         problems = validate(d)
         assert any("grade 3" in p for p in problems)
+
+    def test_required_document_must_resolve_and_be_judged(self, tmp_path):
+        dangling = {**GOOD_QUERY, "required": ["d1", "nope"]}
+        d = _write_dataset(tmp_path, [GOOD_DOC], [dangling])
+        assert any("required 'nope' names no corpus doc" in p for p in validate(d))
+
+        unjudged_doc = {**GOOD_DOC, "id": "d2"}
+        unjudged = {**GOOD_QUERY, "required": ["d1", "d2"]}
+        d = _write_dataset(tmp_path, [GOOD_DOC, unjudged_doc], [unjudged])
+        assert any(
+            "required 'd2' is not in qrels at grade >= 1" in p for p in validate(d)
+        )
+
+    def test_present_but_empty_required_is_caught(self, tmp_path):
+        bad_query = {**GOOD_QUERY, "required": []}
+        d = _write_dataset(tmp_path, [GOOD_DOC], [bad_query])
+        assert any("required is present but empty" in p for p in validate(d))
+
+    def test_support_set_category_without_required_is_caught(self, tmp_path):
+        bad_query = {**GOOD_QUERY, "category": "multi-hop"}
+        d = _write_dataset(tmp_path, [GOOD_DOC], [bad_query])
+        assert any("has no required support set" in p for p in validate(d))
+
+    def test_a_one_document_support_set_is_caught(self, tmp_path):
+        bad_query = {**GOOD_QUERY, "category": "aggregation", "required": ["d1"]}
+        d = _write_dataset(tmp_path, [GOOD_DOC], [bad_query])
+        assert any("at least two required documents" in p for p in validate(d))
+
+    def test_manifest_naming_a_missing_file_is_caught(self, tmp_path):
+        d = _write_dataset(tmp_path, [GOOD_DOC], [GOOD_QUERY])
+        manifest = json.loads((d / "MANIFEST.json").read_text(encoding="utf-8"))
+        manifest["sha256"]["gold_subgraph.json"] = "0" * 64
+        (d / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
+        assert any("gold_subgraph.json: named by the manifest" in p for p in validate(d))
 
     def test_malformed_jsonl_names_file_and_line(self, tmp_path):
         d = _write_dataset(tmp_path, [GOOD_DOC], [GOOD_QUERY])

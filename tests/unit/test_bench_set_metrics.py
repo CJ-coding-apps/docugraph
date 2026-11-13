@@ -39,7 +39,18 @@ class TestSetRecallEqualsExistingRecall:
         """
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
         queries = {query.id: query for query in load_queries(DATASET)}
-        assert len(queries) == 56, f"{DATASET}/queries.jsonl has {len(queries)} queries, expected 56"
+
+        # C3 edit (WP 0.5.0): the dataset gained support-set queries after the
+        # 0.4.0 baseline was recorded. The invariant is the metric equivalence
+        # on the queries that baseline scored, so resolve its ids instead of
+        # pinning the file's total at 56.
+        baseline_ids = {
+            row["query_id"]
+            for arm in baseline["arms"].values()
+            for row in arm["per_query"]
+        }
+        missing = sorted(baseline_ids - set(queries))
+        assert not missing, f"baseline names queries absent from the dataset: {missing}"
 
         for arm_name, arm in baseline["arms"].items():
             for row in arm["per_query"]:
