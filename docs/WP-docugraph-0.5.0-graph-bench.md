@@ -108,7 +108,9 @@ After the gate is registered (§5), run every arm on all categories and commit t
 
 **Gate arm:** `rrf+graph-2hop` if Phase 0 shows `graph-2hop` available; otherwise `rrf+graph` (1-hop). The plan records which, from the Phase 0 results, before the gate is committed.
 
-**Statistics:** for each gate metric, d = gate arm − `rrf` per query, on **multi-hop**. Paired bootstrap over queries, 10,000 resamples, fixed seed, 95% percentile CI. The thresholds are **+0.05 nDCG@10** and **+0.10 set_recall@10**. Both metrics must pass (an intersection test), so no multiplicity correction is applied.
+**Statistics:** for each gate metric, d = gate arm − `rrf` per query, on **multi-hop**. Paired bootstrap, 10,000 resamples, fixed seed, 95% percentile CI. The thresholds are **+0.05 nDCG@10** and **+0.10 set_recall@10**. Both metrics must pass (an intersection test), so no multiplicity correction is applied.
+
+*D-8 amendment (CJ, 2026-11-13, before any bench run):* the resampling unit is the **evidence cluster**, not the query — 16 multi-hop document pairs (all queries in a drawn cluster enter), 10,000 resamples, seed `20261113`, nearest-rank 95% percentile — with the per-query bootstrap reported as the anti-conservative secondary figure. See `docs/graph-bench-preregistration-2026-11-13.md` §1, which is authoritative when this paragraph and it differ.
 
 **Regression check (within this run, on the new corpus):** on the existing 56 queries, the gate arm's overall nDCG@10 minus `rrf`'s must be ≥ **−0.02**. Per-category differences are reported with CIs. Any category whose CI lies entirely below −0.05 is **flagged**. Adding documents changes `corpus_sha256`, so the report compares the two arms within this run. It doesn't present the existing categories' numbers as unchanged from the 0.4.0 baseline, and it states the corpus hash of both.
 
@@ -117,7 +119,7 @@ After the gate is registered (§5), run every arm on all categories and commit t
 - **NOT MET:** for at least one metric, the CI upper bound is below its threshold (the effect size is ruled out); or the overall regression check fails. *Exception:* if the gate arm is the 1-hop fallback, a NOT MET on the multi-hop metrics is recorded as **INCONCLUSIVE** (a 1-hop arm isn't a fair test of multi-hop).
 - **INCONCLUSIVE:** everything else, including the CI containing 0 while the point estimate clears the threshold, an unavailable gate arm, and a flagged category (until explained).
 
-With 16 queries the intervals will be wide, and INCONCLUSIVE is a likely outcome. The report says so plainly and includes, per multi-hop query, entity-linking recall and fidelity-row coverage, so that a NOT MET or INCONCLUSIVE can be diagnosed (retriever vs extractor), not just recorded.
+With 32 multi-hop queries in 16 clusters (D-8) the intervals will still be wide, and INCONCLUSIVE is a likely outcome. The report says so plainly and includes, per multi-hop query, entity-linking recall and fidelity-row coverage, so that a NOT MET or INCONCLUSIVE can be diagnosed (retriever vs extractor), not just recorded.
 
 **Aggregation** is reported with the same statistics against `rrf`, but is not part of the gate. It informs D2: summary nodes vs graphiti communities.
 
@@ -148,9 +150,9 @@ With 16 queries the intervals will be wide, and INCONCLUSIVE is a likely outcome
 | F2 | a manifest graphiti version that differs from the installed one | the check fails, naming both |
 | M1 | `set_recall` on single-chunk queries | equals today's recall on all 56 |
 | M2 | `full_support@10` with one of two required chunks found | 0; `set_recall@10` = 0.5 |
-| G1 | the bootstrap with a fixed seed | reproducible CI bounds |
-| G2 | the gate evaluated on synthetic arms (one clearly better, one noise) | MET for the better one, NOT MET or INCONCLUSIVE for noise |
-| G3 | the outcome mapping on synthetic deltas: (a) CI above 0 and point ≥ threshold; (b) CI upper < threshold; (c) CI spans 0, point ≥ threshold; (d) 1-hop fallback with (b) | MET; NOT MET; INCONCLUSIVE; INCONCLUSIVE |
+| G1 | the bootstrap with a fixed seed, per-query and clustered | reproducible CI bounds; a query-resampled mutant changes them |
+| G2 | the gate evaluated on synthetic arms (one clearly better, one noise), per-query and clustered | MET for the better one, NOT MET or INCONCLUSIVE for noise |
+| G3 | the outcome mapping on synthetic deltas: (a) CI above 0 and point ≥ threshold; (b) CI upper < threshold; (c) CI spans 0, point ≥ threshold; (d) 1-hop fallback with (b), each clustered | MET; NOT MET; INCONCLUSIVE; INCONCLUSIVE |
 | P1 | the fidelity row on a fixture missing one gold entity | reports the miss; the gate is unaffected |
 | N1 | the fixture plus a decoy episode under `group_id = "other"` that matches a query strongly | no graph arm returns it |
 | R1 | export → import round-trip | node/edge embeddings and temporal fields equal field by field; P0-4 output identical |

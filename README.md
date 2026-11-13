@@ -399,10 +399,11 @@ keyword-stuffed distractor pages, near-sibling semantic distractors, version-
 pinned questions, acronym/synonym gaps, and "X without Y" constraint queries.
 Each query records the trap it sets in a `design_note`, and a manifest pins the
 dataset by hash — editing it is a deliberate act that invalidates baselines.
-The corpus holds 91 documents and 88 queries: 56 eight-per-failure-mode
-queries, plus 16 multi-hop and 16 aggregation queries added for the graph
-benchmark. Support-set queries declare a `required` set — every document a
-complete answer needs — which `set_recall@k` and `full_support@k` score; the
+The corpus holds 107 documents and 104 queries: 56 eight-per-failure-mode
+queries, plus 32 multi-hop (16 document pairs) and 16 aggregation queries
+added for the graph benchmark. Support-set queries declare a `required` set —
+every document a complete answer needs — which `set_recall@k` and
+`full_support@k` score; the
 same set is recorded in `gold_subgraph.json` together with the joining entity
 and required facts. They also carry a `cluster` id (one per multi-hop document
 pair, one per aggregation group): the graph benchmark's bootstrap resamples
