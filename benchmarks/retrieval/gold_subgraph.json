@@ -71,8 +71,8 @@
       ],
       "facts": [
         "In mutual TLS the client presents a certificate issued by CertificateAuthority before any request is accepted.",
-        "Workload identity lets a service authenticate with the platform instead of a shared secret.",
-        "OIDC authentication is for interactive and CI clients that already have an identity provider."
+        "WorkloadIdentity issues an access token valid for 1 hour when the process starts, and the token rotates automatically on every restart; there is no manual rotation step.",
+        "OidcBroker exchanges an authorization code for an access token, and the token lifetime is 10 minutes."
       ]
     },
     "q-agg-13": {
@@ -106,7 +106,8 @@
         "Pub/Sub"
       ],
       "facts": [
-        "The maximum message size is 1 MiB, and a larger record fails the batch with QRV-4012.",
+        "The maximum message size is 1 MiB, and a larger record fails the batch.",
+        "The maximum record size is 1 MiB.",
         "The maximum message size is 10 MiB."
       ]
     },
@@ -343,8 +344,8 @@
       ],
       "joining_entity": "quorva-edge-ap",
       "facts": [
-        "The regional edge endpoint is quorva-edge-ap, and it terminates TLS for all regional traffic.",
-        "The trigger was a zone failure in the APAC region."
+        "The ap-southeast-2 region serves Asia Pacific customers from two availability zones.",
+        "Traffic failed over to ap-northeast-1, and the cross-region hop added roughly 130 ms per request."
       ]
     },
     "q-mh-12": {
@@ -464,7 +465,7 @@
       "joining_entity": "quorva-edge-eu",
       "facts": [
         "The latency SLA is p95 120 ms for in-region requests.",
-        "On 3 May 2026 quorva-edge-eu refused new TLS connections for 22 minutes."
+        "The cause was an expired TLS certificate."
       ]
     },
     "q-mh-5": {
@@ -479,7 +480,7 @@
       "joining_entity": "CertificateAuthority",
       "facts": [
         "In mutual TLS the client presents a certificate issued by CertificateAuthority before any request is accepted.",
-        "The intermediate certificate used by CertificateAuthority will be rotated on 1 December 2026."
+        "You only need to trust the new intermediate before the retirement date."
       ]
     },
     "q-mh-6": {
@@ -523,8 +524,8 @@
       ],
       "joining_entity": "KafkaPublisher",
       "facts": [
-        "The Kafka sink publishes records through KafkaPublisher.",
-        "KafkaPublisher retried a batch whose publish had actually succeeded, and because the destination consumer was not idempotent, the retry was visible downstream."
+        "The maximum message size is 1 MiB, and a larger record fails the batch.",
+        "No records were lost."
       ]
     },
     "q-mh-9": {
