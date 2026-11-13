@@ -30,7 +30,7 @@ ordering, and therefore the same metrics.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 
 
 def stable_ranking(scored: Sequence[tuple[str, float]]) -> list[str]:
@@ -121,3 +121,42 @@ def macro_average(values: Sequence[float | None]) -> float | None:
     if not kept:
         return None
     return sum(kept) / len(kept)
+
+
+def set_recall_at_k(
+    ranked: Sequence[str],
+    required: Collection[str],
+    k: int,
+) -> float | None:
+    """Fraction of a required support set that appears in the top k.
+
+    ``required`` is the set a complete answer needs -- for a multi-hop or
+    aggregation query, every chunk that must be joined or aggregated, not just
+    the documents that happen to be graded 2. Grade is not consulted here: the
+    support set is exhaustive by construction, so a partial document does not
+    make the set smaller.
+
+    Returns None for an empty required set, matching ``recall_at_k``'s skip:
+    there is nothing to recall, and 1.0 would let an unjudged query inflate
+    the average.
+    """
+    if not required:
+        return None
+    hits = sum(1 for doc_id in ranked[:k] if doc_id in required)
+    return hits / len(required)
+
+
+def full_support_at_k(
+    ranked: Sequence[str],
+    required: Collection[str],
+    k: int,
+) -> float | None:
+    """1.0 iff the entire required set is inside the top k, else 0.0.
+
+    A missing member is total failure for a support set: the answer cannot be
+    assembled from part of it. None for an empty set, for the same reason as
+    ``set_recall_at_k``.
+    """
+    if not required:
+        return None
+    return 1.0 if set(required).issubset(ranked[:k]) else 0.0
