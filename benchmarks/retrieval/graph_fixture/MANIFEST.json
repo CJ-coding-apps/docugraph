@@ -1,0 +1,23 @@
+{
+  "corpus_sha256": {
+    "corpus.jsonl": "0200c2def73c6849f41684ca381fcf16de048eb81a22c16e6d1c8866daea1e2b"
+  },
+  "embedder": {
+    "dimensions": 384,
+    "model": "BAAI/bge-small-en-v1.5"
+  },
+  "extraction_git_sha": "67b84fc54b6bea96467054e5bfd9741e6bd1097c",
+  "fixture": "docugraph-graph-fixture/1",
+  "graphiti_version": "0.30.2",
+  "group_id": "bench",
+  "ingest_reference_time": "2026-01-01T00:00:00Z",
+  "llm_model": "deepseek-v4.1-flash:cloud",
+  "llm_provider": "ollama",
+  "prompt_sha256": "be06747674f79139566ae27d48476bcb512e25c3db45d58cac940a250e6e14dd",
+  "provenance_note": "built from the working tree that became 67b84fc54b6bea96467054e5bfd9741e6bd1097c; llm.py unchanged after 21:10:36 UTC; the original manifest recorded 4f27730",
+  "reproducibility_note": "llm_model is a remotely served ':cloud' tag and may resolve to different weights or serving behaviour later. This committed fixture (identified by its sha256 map) is the reproducible artifact; regenerating it is not guaranteed to produce the same graph.",
+  "sha256": {
+    "graph.jsonl": "f6a8c8e3808b2fe5430e582caccf956c9efb7cd67b6a8867fb63e56f7d9d9e46",
+    "schema.cypher": "8256908614c2532e630457166a2d9f72af9b6d9a3894d328ed7405c59d075fce"
+  }
+}
