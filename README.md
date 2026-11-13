@@ -408,7 +408,11 @@ same set is recorded in `gold_subgraph.json` together with the joining entity
 and required facts. They also carry a `cluster` id (one per multi-hop document
 pair, one per aggregation group): the graph benchmark's bootstrap resamples
 clusters rather than queries, because two questions about the same documents
-are not independent evidence. The keyword-trap distractors are built to cover many
+are not independent evidence. Multi-hop queries additionally carry a
+`multihop_shape` frozen from the text — `bridge` when one required document is
+reachable only through the joining entity, `two-facet` otherwise; two pairs are
+bridge and fourteen two-facet, and the graph benchmark reports the gate metrics
+split by shape descriptively, without gating on the split. The keyword-trap distractors are built to cover many
 *distinct* query terms rather than repeat one (BM25 saturates a repeated term,
 so a one-token trap does not bind), and the semantic-distractor queries share
 few exact tokens with their target so that only meaning — not lexical overlap —

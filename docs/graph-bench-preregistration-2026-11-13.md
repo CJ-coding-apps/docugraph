@@ -60,6 +60,33 @@ are frozen with the queries at C4. G1–G3 cover cluster resampling, including a
 mutation check: resampling by query instead of by cluster changes the interval
 and turns the test red.
 
+### Multi-hop shape (frozen at C4, CJ 2026-11-13)
+
+Every multi-hop query carries `multihop_shape`, read from the committed text
+alone before any arm ran; it is never derived from a retrieval result:
+
+- **bridge** — one required document is reachable only through the joining
+  entity. The query names the other document's facet and refers to the second
+  only by that entity, or by an anaphor to it, never by the second document's
+  own domain vocabulary.
+- **two-facet** — the query names a facet of each required document
+  independently of the joining entity.
+
+Frozen labels: `mh-replay-ephemeral` and `mh-eu-05` are **bridge**; the other
+14 clusters (28 queries) are **two-facet**. Both queries of a cluster carry its
+shape, and a dataset test pins the two bridge ids and the 16/14 split.
+
+**Shape breakdown (descriptive, non-gating).** The report lists, per shape, the
+gate arm's `ndcg@10` and `set_recall@10` deltas against `rrf`, using the same
+paired cluster bootstrap restricted to that shape's clusters (10,000 resamples,
+seed `20261113`, nearest-rank 95% percentile), with the per-query bootstrap
+alongside labelled anti-conservative, plus the query and cluster counts. The
+bridge group holds only two clusters, so its interval will be very wide; it is
+reported as found. The breakdown is fixed here, before any arm runs, so it
+cannot be chosen after seeing results. No threshold applies to it, and it
+cannot change or refine the gate outcome: the gate remains over all 32
+multi-hop queries.
+
 Thresholds — both must pass (intersection-union test, no multiplicity
 correction):
 

@@ -112,6 +112,8 @@ After the gate is registered (§5), run every arm on all categories and commit t
 
 *D-8 amendment (CJ, 2026-11-13, before any bench run):* the resampling unit is the **evidence cluster**, not the query — 16 multi-hop document pairs (all queries in a drawn cluster enter), 10,000 resamples, seed `20261113`, nearest-rank 95% percentile — with the per-query bootstrap reported as the anti-conservative secondary figure. See `docs/graph-bench-preregistration-2026-11-13.md` §1, which is authoritative when this paragraph and it differ.
 
+*C4 amendment (CJ, 2026-11-13):* every multi-hop query carries a frozen `multihop_shape`, read from the text before any arm ran — `mh-replay-ephemeral` and `mh-eu-05` are **bridge**, the other 14 pairs **two-facet**. The report breaks the gate metrics down by shape descriptively; no threshold applies to that breakdown and it cannot change the outcome. The gate itself is unchanged.
+
 **Regression check (within this run, on the new corpus):** on the existing 56 queries, the gate arm's overall nDCG@10 minus `rrf`'s must be ≥ **−0.02**. Per-category differences are reported with CIs. Any category whose CI lies entirely below −0.05 is **flagged**. Adding documents changes `corpus_sha256`, so the report compares the two arms within this run. It doesn't present the existing categories' numbers as unchanged from the 0.4.0 baseline, and it states the corpus hash of both.
 
 **Outcome mapping (pre-registered):**

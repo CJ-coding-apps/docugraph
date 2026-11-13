@@ -87,6 +87,30 @@ class TestCommittedDataset:
                         f"{category}: {doc_id} is in {other} and {cluster}"
                     )
 
+    def test_multihop_shape_is_the_preregistered_one(self):
+        """C4 (CJ, 2026-11-13): two bridge clusters, fourteen two-facet.
+
+        The shape is read from the committed text, before any arm runs. It is a
+        property of the cluster, so both queries of a pair carry the same value,
+        and only multi-hop queries carry it at all.
+        """
+        queries = load_queries(DATASET)
+        multi_hop = [q for q in queries if q.category == "multi-hop"]
+        by_cluster: dict[str, set] = {}
+        for q in multi_hop:
+            by_cluster.setdefault(q.cluster, set()).add(q.multihop_shape)
+        assert len(by_cluster) == 16
+        assert all(len(shapes) == 1 for shapes in by_cluster.values()), (
+            "a cluster mixes multihop_shape values"
+        )
+        shapes = {cluster: next(iter(values)) for cluster, values in by_cluster.items()}
+        assert {cluster for cluster, shape in shapes.items() if shape == "bridge"} == {
+            "mh-replay-ephemeral",
+            "mh-eu-05",
+        }, "the bridge clusters are not the two frozen at C4"
+        assert set(shapes.values()) == {"bridge", "two-facet"}
+        assert all(q.multihop_shape is None for q in queries if q.category != "multi-hop")
+
     def test_gold_subgraph_covers_exactly_the_support_set_queries(self):
         """The gold subgraph and the queries must name the same queries/docs.
 
@@ -158,12 +182,15 @@ class TestClusterField:
                 "qrels": {"d1": 2, "d2": 1},
                 "required": ["d1", "d2"],
                 "cluster": "d1+d2",
+                "multihop_shape": "bridge",
             },
         ]
         d = _write_dataset(tmp_path, corpus, queries)
         loaded = {q.id: q for q in load_queries(d)}
         assert loaded["q1"].cluster is None
         assert loaded["q2"].cluster == "d1+d2"
+        assert loaded["q1"].multihop_shape is None
+        assert loaded["q2"].multihop_shape == "bridge"
 
 
 def _write_dataset(tmp_path: Path, corpus: list[dict], queries: list[dict]) -> Path:
@@ -356,6 +383,59 @@ class TestValidatorCatches:
         }
         d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [bad_query])
         assert any("has no cluster id" in p for p in validate(d))
+
+    def test_a_multi_hop_query_without_a_shape_is_caught(self, tmp_path):
+        """C4: the bridge/two-facet breakdown needs a shape on every pair."""
+        bad_query = {
+            **GOOD_QUERY,
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+            "cluster": "d1+d2",
+        }
+        d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [bad_query])
+        assert any("has no multihop_shape" in p for p in validate(d))
+
+    def test_an_unknown_multihop_shape_is_caught(self, tmp_path):
+        bad_query = {
+            **GOOD_QUERY,
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+            "cluster": "d1+d2",
+            "multihop_shape": "bridgey",
+        }
+        d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [bad_query])
+        assert any("invalid multihop_shape" in p for p in validate(d))
+
+    def test_one_cluster_with_two_shapes_is_caught(self, tmp_path):
+        """The shape describes the evidence cluster, not the individual query."""
+        base = {
+            **GOOD_QUERY,
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+            "cluster": "d1+d2",
+        }
+        first = {**base, "id": "q1", "multihop_shape": "bridge"}
+        second = {**base, "id": "q2", "multihop_shape": "two-facet"}
+        d = _write_dataset(
+            tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [first, second]
+        )
+        assert any("mixes multihop_shape" in p for p in validate(d))
+
+    def test_a_shape_on_a_non_multi_hop_query_is_caught(self, tmp_path):
+        bad_query = {
+            **GOOD_QUERY,
+            "id": "q1",
+            "category": "aggregation",
+            "qrels": {"d1": 2, "d2": 2},
+            "required": ["d1", "d2"],
+            "cluster": "group",
+            "multihop_shape": "bridge",
+        }
+        d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [bad_query])
+        assert any("non-multi-hop query carries multihop_shape" in p for p in validate(d))
 
     def test_manifest_naming_a_missing_file_is_caught(self, tmp_path):
         d = _write_dataset(tmp_path, [GOOD_DOC], [GOOD_QUERY])

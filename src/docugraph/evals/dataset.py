@@ -15,7 +15,9 @@ The dataset is three committed files under ``benchmarks/retrieval/``:
   recorded in ``gold_subgraph.json``. ``cluster`` names the evidence cluster
   (one per multi-hop document pair, one per aggregation group): the gate's
   bootstrap resamples clusters, not queries, because several questions about
-  one document pair are not independent evidence (D-8). ``design_note``
+  one document pair are not independent evidence (D-8). ``multihop_shape``
+  records whether a multi-hop pair is a bridge or two-facet (C4); it feeds a
+  descriptive breakdown, never the gate. ``design_note``
   records the trap the query sets, so a future editor knows what a change
   would un-measure.
 - ``gold_subgraph.json`` -- the support graph for multi-hop and aggregation
@@ -58,6 +60,13 @@ CATEGORIES = (
 # implicit cannot be scored by the set metrics, only silently skipped.
 SUPPORT_SET_CATEGORIES = ("multi-hop", "aggregation")
 
+# Multi-hop evidence shapes, frozen at C4 (CJ, 2026-11-13) from the committed
+# text alone, before any arm ran. A *bridge* pair has one required document
+# reachable only through the joining entity; a *two-facet* pair names a facet
+# of each document independently. The report breaks the gate metrics down by
+# shape descriptively; the field never enters the gate.
+MULTIHOP_SHAPES = ("bridge", "two-facet")
+
 ROLES = ("target", "distractor", "background")
 
 
@@ -94,6 +103,10 @@ class BenchQuery:
     # queries, because two questions about one document pair are not
     # independent evidence. Required exactly for support-set categories.
     cluster: str | None = None
+    # Required exactly for multi-hop queries: ``bridge`` or ``two-facet``,
+    # read from the text at C4 and frozen with the queries. Both queries of a
+    # pair carry the cluster's shape.
+    multihop_shape: str | None = None
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -143,6 +156,7 @@ def load_queries(dataset_dir: Path) -> list[BenchQuery]:
             design_note=r.get("design_note", ""),
             required=(None if "required" not in r else tuple(r["required"])),
             cluster=r.get("cluster"),
+            multihop_shape=r.get("multihop_shape"),
         )
         for r in rows
     ]
@@ -210,6 +224,7 @@ def validate(dataset_dir: Path) -> list[str]:
     # resamples as independent).
     cluster_documents: dict[str, frozenset[str]] = {}
     cluster_categories: dict[str, str] = {}
+    cluster_shapes: dict[str, str] = {}
     document_clusters: dict[str, dict[str, str]] = {}
 
     for q in queries:
@@ -300,6 +315,40 @@ def validate(dataset_dir: Path) -> list[str]:
             problems.append(
                 f"{q.id}: non-support-set query carries a cluster id -- cluster "
                 "ids describe support-set evidence units (D-8)"
+            )
+
+        # C4: the shape is a property of the multi-hop cluster, read from the
+        # text before any arm ran. It feeds a descriptive breakdown only.
+        shape = q.multihop_shape
+        if q.category == "multi-hop":
+            if not isinstance(shape, str):
+                if shape is None:
+                    problems.append(
+                        f"{q.id}: multi-hop query has no multihop_shape -- the "
+                        "bridge/two-facet breakdown is pre-registered at C4"
+                    )
+                else:
+                    problems.append(
+                        f"{q.id}: invalid multihop_shape {shape!r} -- it must "
+                        f"be one of {MULTIHOP_SHAPES}"
+                    )
+            elif shape not in MULTIHOP_SHAPES:
+                problems.append(
+                    f"{q.id}: invalid multihop_shape {shape!r} -- it must be "
+                    f"one of {MULTIHOP_SHAPES}"
+                )
+            elif isinstance(q.cluster, str) and q.cluster.strip():
+                previous_shape = cluster_shapes.setdefault(q.cluster, shape)
+                if previous_shape != shape:
+                    problems.append(
+                        f"{q.id}: cluster {q.cluster!r} mixes multihop_shape "
+                        f"{previous_shape!r} and {shape!r} -- the shape "
+                        "describes the evidence unit, not the query"
+                    )
+        elif shape is not None:
+            problems.append(
+                f"{q.id}: non-multi-hop query carries multihop_shape -- the "
+                "field describes multi-hop evidence units only"
             )
 
     for d in corpus:
