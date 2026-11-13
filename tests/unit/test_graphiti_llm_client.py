@@ -73,3 +73,40 @@ class TestLoadsTolerant:
         client = _client()
         text = 'Sure! [\n  {"name": "FastAPI"}\n]'
         assert client._loads_tolerant(text) == [{"name": "FastAPI"}]
+
+
+class TestSchemaInjection:
+    def test_schema_travels_in_the_prompt(self):
+        """The schema must reach a model that ignores ``response_format``.
+
+        Measured on deepseek-v4.1-flash:cloud through Ollama: both the native
+        ``/api/chat`` ``format`` field and the OpenAI-compatible
+        ``response_format`` are ignored, and the extraction prompt came back as
+        a bare list of ``{name, type}`` objects -- no ``entity_type_id``, so
+        Graphiti's ``Model(**json.loads(...))`` raised. Graphiti's own fix is
+        ``structured_output_mode='json_object'``, which appends the response
+        model's schema to the last message. This client must select that mode.
+        """
+        import asyncio
+
+        from graphiti_core.prompts.models import Message
+
+        client = _client()
+        assert client.structured_output_mode == "json_object"
+        captured = {}
+
+        async def fake_generate(messages, response_model=None, max_tokens=None, model_size=None):
+            captured["last"] = messages[-1].content
+            return {"extracted_entities": []}
+
+        client._generate_response = fake_generate  # type: ignore[method-assign]
+        out = asyncio.run(
+            client.generate_response(
+                [Message(role="system", content="sys"), Message(role="user", content="user")],
+                response_model=_ExtractedEntities,
+            )
+        )
+
+        assert out == {"extracted_entities": []}
+        assert "extracted_entities" in captured["last"]
+        assert "entity_type_id" in captured["last"]

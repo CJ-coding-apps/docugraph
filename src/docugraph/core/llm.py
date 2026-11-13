@@ -243,7 +243,17 @@ def _make_resilient_graphiti_client(llm_config: Any) -> Any:
                         break
             return out
 
-    return ResilientGraphitiClient(config=llm_config)
+    # `json_object` is not a downgrade here, it is the mode this client needs.
+    # In `json_schema` mode Graphiti relies on the server to enforce the schema;
+    # Ollama's OpenAI-compatible endpoint ignores `response_format` for several
+    # models (measured: deepseek-v4.1-flash:cloud returned prose, and a bare
+    # list of `{name, type}` objects for the extraction prompt), so the required
+    # `entity_type_id` never arrives and `Model(**json.loads(...))` fails. In
+    # `json_object` mode Graphiti appends the response model's JSON schema to
+    # the prompt, which those models do follow, and this class's tolerant parser
+    # is what makes the result safe to validate. The override above replaces
+    # only the request loop, so the injection in `generate_response` still runs.
+    return ResilientGraphitiClient(config=llm_config, structured_output_mode="json_object")
 
 
 def _graphiti_temperature(value: float | None) -> float:
