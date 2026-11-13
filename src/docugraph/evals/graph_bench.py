@@ -721,6 +721,12 @@ def metric_result(
     independent evidence, and treating them as independent understates the
     interval. Without ``clusters`` the per-query bootstrap is the
     anti-conservative secondary figure, never the primary one.
+
+    At least two distinct clusters are required: a single cluster makes every
+    resample identical, which would report a zero-width interval as if the
+    effect were known exactly. The resampled statistic is the mean over every
+    drawn query, which assumes equal cluster sizes; the committed bench has
+    them (2 per multi-hop pair, 4 per aggregation group).
     """
     values = [float(delta) for delta in deltas]
     if not values:
@@ -742,7 +748,18 @@ def metric_result(
             )
         groups: dict[str, list[float]] = {}
         for cluster, value in zip(clusters, values, strict=True):
-            groups.setdefault(str(cluster), []).append(value)
+            if not isinstance(cluster, str) or not cluster:
+                raise ValueError(
+                    f"cluster ids must be non-empty strings, got {cluster!r}"
+                )
+            groups.setdefault(cluster, []).append(value)
+        if len(groups) < 2:
+            raise ValueError(
+                "the cluster bootstrap needs at least two distinct clusters; "
+                f"got {len(groups)}"
+            )
+        # The resampled statistic is the mean over every drawn query, exactly
+        # as the pre-registration words it (equal cluster sizes in the bench).
         members = list(groups.values())
         means = []
         for _ in range(BOOTSTRAP_RESAMPLES):
@@ -760,8 +777,16 @@ def metric_result(
 
 
 def _percentile(sorted_values: Sequence[float], quantile: float) -> float:
-    index = min(len(sorted_values) - 1, max(0, int(round(quantile * (len(sorted_values) - 1)))))
-    return float(sorted_values[index])
+    """Nearest-rank percentile: the value at rank ``ceil(q * n)`` (1-based).
+
+    ``n = 10_000`` and ``q = 0.025`` therefore take the 250th smallest value
+    (index 249), and ``q = 0.975`` the 9,750th (index 9,749). This is the
+    method the pre-registration fixes; it is not interpolated.
+    """
+    if not sorted_values:
+        raise ValueError("no values to take a percentile of")
+    rank = max(1, math.ceil(quantile * len(sorted_values)))
+    return float(sorted_values[rank - 1])
 
 
 def metric_outcome(result: MetricResult) -> str:
@@ -940,6 +965,9 @@ def fidelity_row(fixture_dir: Path | str, gold_path: Path | str) -> dict[str, An
 
 
 __all__ = [
+    "BOOTSTRAP_RESAMPLES",
+    "BOOTSTRAP_SEED",
+    "CATEGORY_FLAG_FLOOR",
     "EDGE_CAP",
     "FALLBACK_GATE_ARM",
     "FIXTURE_FORMAT",

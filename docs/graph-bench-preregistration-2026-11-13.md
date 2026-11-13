@@ -45,17 +45,20 @@ only**.
 Queries are not independent evidence when several ask about the same document
 pair. The primary interval is therefore a **paired cluster bootstrap over
 evidence clusters**: each new query carries a `cluster` id (one id per
-multi-hop document pair, one per aggregation group), the 8 (later 16) multi-hop
-clusters are resampled with replacement, and **every query in a drawn cluster
-enters the resample**. **10,000 resamples**, **seed `20261113`**, 95% percentile
-CI — the numbers are unchanged; only the resampling unit and the number of
-independent units change. The per-query bootstrap is still reported, labelled
-**anti-conservative**, and is not the primary result.
+multi-hop document pair, one per aggregation group), the 16 multi-hop clusters
+are resampled with replacement, and **every query in a drawn cluster enters the
+resample**. **10,000 resamples**, **seed `20261113`**, 95% percentile CI using
+the **nearest-rank** method (rank `ceil(q·N)`), as D-8 fixes. The resample count
+and seed are unchanged; only the resampling unit, the number of independent
+units and the percentile method change. The per-query bootstrap is still
+reported, labelled **anti-conservative**, and is not the primary result.
 
-Aggregation clusters (non-gating) use the same method over their groups. The
-cluster ids are frozen with the queries at C4. G1–G3 cover cluster resampling,
-including a mutation check: resampling by query instead of by cluster changes
-the interval and turns the test red.
+The optional expansion was taken: the multi-hop corpus now holds 16 document
+pairs and 32 queries, drafted in C3 and frozen with the rest at C4. Aggregation
+clusters (non-gating) use the same method over their groups. The cluster ids
+are frozen with the queries at C4. G1–G3 cover cluster resampling, including a
+mutation check: resampling by query instead of by cluster changes the interval
+and turns the test red.
 
 Thresholds — both must pass (intersection-union test, no multiplicity
 correction):
@@ -86,8 +89,9 @@ numbers as unchanged from the 0.4.0 baseline.
   point estimate clears the threshold, an unavailable gate arm, and a flagged
   category until it is explained.
 
-With 16–20 queries the interval will be wide; INCONCLUSIVE is a likely outcome
-and must be reported as such, not reframed.
+With 32 multi-hop queries in 16 clusters the interval will still be wide;
+INCONCLUSIVE remains a likely outcome and must be reported as such, not
+reframed.
 
 Aggregation queries get the same statistics against `rrf` and are **not** part
 of the gate.

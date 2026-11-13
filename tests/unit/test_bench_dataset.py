@@ -54,6 +54,39 @@ class TestCommittedDataset:
                     f"{q.id}: required {doc_id} is not judged relevant"
                 )
 
+    def test_cluster_shape_is_the_preregistered_one(self):
+        """D-8 fixes 16 multi-hop clusters (32 queries) and 4 aggregation groups.
+
+        Also the structural assumptions the bootstrap relies on: one support
+        set per cluster, and no document shared between clusters of a category.
+        """
+        queries = load_queries(DATASET)
+        by_category = {
+            category: [q for q in queries if q.category == category]
+            for category in SUPPORT_SET_CATEGORIES
+        }
+        multi_hop = by_category["multi-hop"]
+        aggregation = by_category["aggregation"]
+        assert len(multi_hop) == 32, f"{len(multi_hop)} multi-hop queries"
+        assert len({q.cluster for q in multi_hop}) == 16, "multi-hop clusters"
+        assert len(aggregation) == 16, f"{len(aggregation)} aggregation queries"
+        assert len({q.cluster for q in aggregation}) == 4, "aggregation clusters"
+
+        for category, in_category in by_category.items():
+            by_cluster: dict[str, list] = {}
+            for q in in_category:
+                by_cluster.setdefault(q.cluster, []).append(q)
+            documents_seen: dict[str, str] = {}
+            for cluster, members in by_cluster.items():
+                assert len(members) > 1, f"{cluster} is a singleton, not a cluster"
+                support_sets = {frozenset(q.required or ()) for q in members}
+                assert len(support_sets) == 1, f"{cluster} has more than one support set"
+                for doc_id in next(iter(support_sets)):
+                    other = documents_seen.setdefault(doc_id, cluster)
+                    assert other == cluster, (
+                        f"{category}: {doc_id} is in {other} and {cluster}"
+                    )
+
     def test_gold_subgraph_covers_exactly_the_support_set_queries(self):
         """The gold subgraph and the queries must name the same queries/docs.
 
@@ -244,6 +277,85 @@ class TestValidatorCatches:
         bad_query = {**GOOD_QUERY, "cluster": "d1+d1"}
         d = _write_dataset(tmp_path, [GOOD_DOC], [bad_query])
         assert any("cluster" in p and "non-support-set" in p for p in validate(d))
+
+    def test_one_cluster_id_with_two_support_sets_is_caught(self, tmp_path):
+        """A cluster is one evidence unit: its queries must ask the same pair."""
+        corpus = [GOOD_DOC, {**GOOD_DOC, "id": "d2"}, {**GOOD_DOC, "id": "d3"}]
+        first = {
+            **GOOD_QUERY,
+            "id": "q1",
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+            "cluster": "shared",
+        }
+        second = {
+            **first,
+            "id": "q2",
+            "qrels": {"d2": 2, "d3": 1},
+            "required": ["d2", "d3"],
+        }
+        d = _write_dataset(tmp_path, corpus, [first, second])
+        assert any("different support sets" in p for p in validate(d))
+
+    def test_a_document_in_two_clusters_of_one_category_is_caught(self, tmp_path):
+        """Shared documents correlate the units the bootstrap calls independent."""
+        corpus = [GOOD_DOC, {**GOOD_DOC, "id": "d2"}, {**GOOD_DOC, "id": "d3"}]
+        first = {
+            **GOOD_QUERY,
+            "id": "q1",
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+            "cluster": "c1",
+        }
+        second = {
+            **first,
+            "id": "q2",
+            "qrels": {"d2": 2, "d3": 1},
+            "required": ["d2", "d3"],
+            "cluster": "c2",
+        }
+        d = _write_dataset(tmp_path, corpus, [first, second])
+        assert any("not independent" in p for p in validate(d))
+
+    def test_a_cluster_id_shared_across_categories_is_caught(self, tmp_path):
+        """One cluster id is one kind of evidence unit, never two."""
+        corpus = [GOOD_DOC, {**GOOD_DOC, "id": "d2"}]
+        multi_hop = {
+            **GOOD_QUERY,
+            "id": "q1",
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+            "cluster": "shared",
+        }
+        aggregation = {**multi_hop, "id": "q2", "category": "aggregation"}
+        d = _write_dataset(tmp_path, corpus, [multi_hop, aggregation])
+        assert any("used by both" in p for p in validate(d))
+
+    def test_a_non_string_cluster_id_is_caught(self, tmp_path):
+        """A JSON number would be coerced by a naive loader."""
+        bad_query = {
+            **GOOD_QUERY,
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+            "cluster": 5,
+        }
+        d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [bad_query])
+        assert any("has no cluster id" in p for p in validate(d))
+
+    def test_a_whitespace_cluster_id_is_caught(self, tmp_path):
+        bad_query = {
+            **GOOD_QUERY,
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+            "cluster": "   ",
+        }
+        d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [bad_query])
+        assert any("has no cluster id" in p for p in validate(d))
 
     def test_manifest_naming_a_missing_file_is_caught(self, tmp_path):
         d = _write_dataset(tmp_path, [GOOD_DOC], [GOOD_QUERY])

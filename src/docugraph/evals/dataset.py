@@ -204,6 +204,14 @@ def validate(dataset_dir: Path) -> list[str]:
     if dupq:
         problems.append(f"duplicate query ids: {sorted(dupq)}")
 
+    # Cluster registries: within a category, one cluster id must mean one
+    # evidence unit -- the same support set, and no document shared with
+    # another cluster (a shared document would correlate the units D-8
+    # resamples as independent).
+    cluster_documents: dict[str, frozenset[str]] = {}
+    cluster_categories: dict[str, str] = {}
+    document_clusters: dict[str, dict[str, str]] = {}
+
     for q in queries:
         for doc_id, grade in q.qrels.items():
             if doc_id not in id_set:
@@ -244,11 +252,39 @@ def validate(dataset_dir: Path) -> list[str]:
                 )
             # D-8: the gate's primary interval resamples clusters; a query with
             # no cluster id would silently be its own independent unit.
-            if not q.cluster:
+            if not isinstance(q.cluster, str) or not q.cluster.strip():
                 problems.append(
                     f"{q.id}: {q.category} query has no cluster id -- the "
                     "bootstrap would resample it as independent evidence"
                 )
+            else:
+                documents = frozenset(q.required or ())
+                previous_documents = cluster_documents.setdefault(
+                    q.cluster, documents
+                )
+                if previous_documents != documents:
+                    problems.append(
+                        f"{q.id}: cluster {q.cluster!r} groups queries with "
+                        f"different support sets ({sorted(previous_documents)} vs "
+                        f"{sorted(documents)})"
+                    )
+                previous_category = cluster_categories.setdefault(
+                    q.cluster, q.category
+                )
+                if previous_category != q.category:
+                    problems.append(
+                        f"{q.id}: cluster {q.cluster!r} is used by both "
+                        f"{previous_category} and {q.category} queries"
+                    )
+                seen = document_clusters.setdefault(q.category, {})
+                for doc_id in documents:
+                    other = seen.setdefault(doc_id, q.cluster)
+                    if other != q.cluster:
+                        problems.append(
+                            f"{q.id}: document '{doc_id}' is in clusters "
+                            f"{other!r} and {q.cluster!r} of the same category -- "
+                            "the units are not independent"
+                        )
         elif q.cluster is not None:
             problems.append(
                 f"{q.id}: non-support-set query carries a cluster id -- cluster "

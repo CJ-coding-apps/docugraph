@@ -10,6 +10,8 @@ statistics and the outcome mapping on their own.
 """
 
 import json
+import random
+from types import SimpleNamespace
 
 import pytest
 
@@ -73,15 +75,23 @@ class TestBootstrap:
 class TestClusterBootstrap:
     """D-8: the resampling unit is the evidence cluster, not the query.
 
-    These deltas are deliberately correlated *within* a cluster: both queries of
-    each pair carry the same delta, exactly the pattern the multi-hop queries
-    have (two questions about one document pair). Treating them as independent
-    understates the interval; resampling the cluster keeps the pair together.
+    Each cluster's two deltas differ slightly but move together, the pattern
+    the multi-hop queries have (two questions about one document pair). The
+    small within-cluster difference is deliberate: with identical members, an
+    implementation that lets only the first member of each drawn cluster enter
+    is indistinguishable from the correct one.
     """
 
-    DELTAS = [-0.10, -0.10, -0.05, -0.05, 0.00, 0.00, 0.05, 0.05,
-              0.10, 0.10, 0.15, 0.15, 0.20, 0.20, 0.25, 0.25]
+    DELTAS = [-0.10, -0.06, -0.05, -0.01, 0.00, 0.04, 0.05, 0.09,
+              0.10, 0.14, 0.15, 0.19, 0.20, 0.24, 0.25, 0.29]
     CLUSTERS = [f"cluster-{index // 2}" for index in range(16)]
+
+    # Pinned bounds. They pin the output; the seed and the resample count are
+    # pinned separately (several wrong seeds and counts reproduce these bounds
+    # on a fixture this small), and the percentile by its contract test.
+    # Recompute only with a change to the pre-registration.
+    GOLDEN_CLUSTERED = (0.01375, 0.17625)
+    GOLDEN_PER_QUERY = (0.03875, 0.15125)
 
     def _clustered(self) -> gb.MetricResult:
         return gb.metric_result(
@@ -94,6 +104,72 @@ class TestClusterBootstrap:
         second = self._clustered()
         assert (first.ci_lower, first.ci_upper) == (second.ci_lower, second.ci_upper)
         assert first.ci_lower <= first.point <= first.ci_upper
+
+    def test_registered_bounds_are_pinned(self):
+        """G1: the registered seed, resample count and percentile, not just
+        reproducibility -- a wrong seed is perfectly reproducible."""
+        clustered = self._clustered()
+        assert (clustered.ci_lower, clustered.ci_upper) == self.GOLDEN_CLUSTERED
+        per_query = gb.metric_result(self.DELTAS, threshold=gb.NDCG_THRESHOLD)
+        assert (per_query.ci_lower, per_query.ci_upper) == self.GOLDEN_PER_QUERY
+
+    def test_the_registered_seed_and_resample_count_are_used(self, monkeypatch):
+        """G1: record what ``metric_result`` asks the generator for.
+
+        The golden bounds alone cannot pin these: on a fixture this small,
+        several wrong seeds and resample counts reproduce them exactly. A spy
+        on the generator closes that hole.
+        """
+        created = []
+
+        class Recording:
+            def __init__(self, seed):
+                self.seed = seed
+                self.calls = 0
+                self._inner = random.Random(seed)
+
+            def randrange(self, stop):
+                self.calls += 1
+                return self._inner.randrange(stop)
+
+        def factory(seed):
+            instance = Recording(seed)
+            created.append(instance)
+            return instance
+
+        monkeypatch.setattr(gb, "random", SimpleNamespace(Random=factory))
+        clustered = self._clustered()
+        per_query = gb.metric_result(self.DELTAS, threshold=gb.NDCG_THRESHOLD)
+
+        assert [instance.seed for instance in created] == [
+            gb.BOOTSTRAP_SEED,
+            gb.BOOTSTRAP_SEED,
+        ], "the registered seed is not what the bootstrap is constructed with"
+        # One draw per cluster per resample, then one draw per query per resample.
+        assert created[0].calls == gb.BOOTSTRAP_RESAMPLES * 8
+        assert created[1].calls == gb.BOOTSTRAP_RESAMPLES * len(self.DELTAS)
+        # The spy delegates to the real generator, so the bounds are unchanged.
+        assert (clustered.ci_lower, clustered.ci_upper) == self.GOLDEN_CLUSTERED
+        assert (per_query.ci_lower, per_query.ci_upper) == self.GOLDEN_PER_QUERY
+
+    def test_percentiles_are_nearest_rank(self):
+        """The registered method: rank ceil(q*n), 1-based, not interpolated."""
+        values = [float(index) for index in range(10_000)]
+        assert gb._percentile(values, 0.025) == 249.0
+        assert gb._percentile(values, 0.975) == 9749.0
+
+    def test_a_single_cluster_is_refused(self):
+        """One cluster resamples to itself: a zero-width, false-certainty CI."""
+        with pytest.raises(ValueError, match="at least two distinct clusters"):
+            gb.metric_result(
+                self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=["only"] * 16
+            )
+
+    def test_cluster_ids_must_be_non_empty_strings(self):
+        with pytest.raises(ValueError, match="non-empty strings"):
+            gb.metric_result(
+                self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=[None] * 16
+            )
 
     def test_point_estimate_stays_the_mean_over_queries(self):
         clustered = self._clustered()
@@ -144,6 +220,35 @@ class TestGateOnSyntheticArms:
         noise_outcome = gb.evaluate_gate(
             ndcg=gb.metric_result(noise, threshold=gb.NDCG_THRESHOLD),
             set_recall=gb.metric_result(noise, threshold=gb.SET_RECALL_THRESHOLD),
+            regression_ok=True,
+        )
+        assert noise_outcome in {gb.OUTCOME_NOT_MET, gb.OUTCOME_INCONCLUSIVE}
+
+    def test_clustered_arms_map_the_same_way(self):
+        """G2 (D-8): the outcome mapping is the same under cluster resampling."""
+        clusters = [f"pair-{index // 2}" for index in range(16)]
+        # Two queries per pair; pairs vary only mildly, so the effect is real.
+        better = [0.15 + 0.1 * (index // 8) for index in range(16)]
+        noise = [0.3 if (index // 2) % 2 == 0 else -0.3 for index in range(16)]
+
+        better_outcome = gb.evaluate_gate(
+            ndcg=gb.metric_result(
+                better, threshold=gb.NDCG_THRESHOLD, clusters=clusters
+            ),
+            set_recall=gb.metric_result(
+                better, threshold=gb.SET_RECALL_THRESHOLD, clusters=clusters
+            ),
+            regression_ok=True,
+        )
+        assert better_outcome == gb.OUTCOME_MET
+
+        noise_outcome = gb.evaluate_gate(
+            ndcg=gb.metric_result(
+                noise, threshold=gb.NDCG_THRESHOLD, clusters=clusters
+            ),
+            set_recall=gb.metric_result(
+                noise, threshold=gb.SET_RECALL_THRESHOLD, clusters=clusters
+            ),
             regression_ok=True,
         )
         assert noise_outcome in {gb.OUTCOME_NOT_MET, gb.OUTCOME_INCONCLUSIVE}
@@ -203,6 +308,39 @@ class TestOutcomeMapping:
                 gate_arm=gb.FALLBACK_GATE_ARM,
             )
             == gb.OUTCOME_INCONCLUSIVE
+        )
+
+    def test_e_fully_bootstrapped_outcomes_match_the_mapping(self):
+        """G3 (D-8): (a)-(d) end to end through the cluster bootstrap.
+
+        The earlier tests feed hand-written intervals; these feed deltas and
+        let the registered machinery produce the intervals, so the mapping is
+        proven against the real statistic, not a stand-in.
+        """
+        clusters = [f"pair-{index // 2}" for index in range(16)]
+
+        def outcome(deltas, *, gate_arm=gb.GATE_ARM):
+            return gb.evaluate_gate(
+                ndcg=gb.metric_result(
+                    deltas, threshold=gb.NDCG_THRESHOLD, clusters=clusters
+                ),
+                set_recall=gb.metric_result(
+                    deltas, threshold=gb.SET_RECALL_THRESHOLD, clusters=clusters
+                ),
+                regression_ok=True,
+                gate_arm=gate_arm,
+            )
+
+        # (a) every pair clearly positive.
+        assert outcome([0.19, 0.29] * 8) == gb.OUTCOME_MET
+        # (b) every pair near zero: the effect size is ruled out.
+        assert outcome([0.00, 0.02] * 8) == gb.OUTCOME_NOT_MET
+        # (c) pairs disagree in sign: the interval spans zero.
+        disagreement = [0.6 if (index // 2) % 2 == 0 else -0.4 for index in range(16)]
+        assert outcome(disagreement) == gb.OUTCOME_INCONCLUSIVE
+        # (d) the same (b) under the 1-hop fallback is not a fair test.
+        assert outcome([0.00, 0.02] * 8, gate_arm=gb.FALLBACK_GATE_ARM) == (
+            gb.OUTCOME_INCONCLUSIVE
         )
 
     def test_regression_failure_is_not_met(self):
