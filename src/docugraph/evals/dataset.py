@@ -14,7 +14,10 @@ The dataset is three committed files under ``benchmarks/retrieval/``:
   what the set metrics score; it is the same set recorded in
   ``gold_subgraph.json``. ``design_note`` records the trap the query sets, so
   a future editor knows what a change would un-measure.
-- ``MANIFEST.json`` -- sha256 of both files, counts, and a dataset version.
+- ``gold_subgraph.json`` -- the support graph for multi-hop and aggregation
+  queries: required documents, joining/aggregated entities, required facts.
+- ``MANIFEST.json`` -- sha256 of every committed dataset file, counts, and a
+  dataset version.
   Metrics are only comparable against the same judgments, so editing the
   dataset is a deliberate act: it must update the manifest, and it
   invalidates committed baselines.
