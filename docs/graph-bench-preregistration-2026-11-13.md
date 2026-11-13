@@ -163,6 +163,12 @@ every arm and every category. On the existing seven categories a test proves
   dimension; ingest reference time; group id `bench`.
 - Nothing is re-embedded or recomputed at import. FTS indexes are recreated by
   `_ensure_fts_indexes`.
+- `MANIFEST.json` also notes that the extraction model is a remotely served
+  `:cloud` tag. The **committed fixture** is the reproducible artifact; a
+  regeneration under the same tag is not guaranteed to produce the same graph,
+  because the tag can point at different weights or serving behaviour over time.
+  The manifest's content hash identifies what is committed, not what a rebuild
+  would yield.
 - The query embedder's id and dimension must equal the manifest's, or the graph
   arms **refuse** with a status (R-1). Same dimension with a different id is also
   refused.
@@ -192,9 +198,43 @@ After C5 (CJ regenerates the fixture) and the first gate run:
 - Any diagnostic change (e.g. a different fan-out) is a separate, later
   experiment with its own pre-registration.
 
+The one exception is §6. It is a fixture-quality decision taken on the frozen
+corpus before any arm is run, so it cannot be tuned on performance.
+
 ---
 
-## 6. Not fixed here
+## 6. One-time extractor check (CJ-approved 2026-11-13)
+
+Phase 0 found zero cross-document entity links on a probe corpus that does
+share three domain terms across documents (results §6.1). A fixture that sparse
+would make the bench measure the extractor, not graph retrieval — and the later
+D2 decision on graphiti versus an own schema would rest on it. This check
+decides the extraction model once, before any results exist.
+
+Sequence:
+
+1. C4 freezes the corpus; CJ builds the fixture (C5).
+2. Compute **only the fidelity row** (WP §4.3). No graph arm is run, no qrels
+   are scored, no retrieval metric is computed.
+3. The deciding quantity is the fidelity row's multi-hop component: the
+   fraction of multi-hop queries whose joining entity exists in the fixture
+   (after name normalisation) **and** connects the required documents.
+4. If that fraction is **< 0.50**, CJ may switch the extraction model **once**,
+   before C6. The replacement model id is recorded before the second fidelity
+   row is computed; CJ rebuilds the fixture with it; the fidelity row is
+   computed again. Nothing is ranked in either pass.
+5. Record in the PR body: both fidelity rows, both fixture manifest content
+   hashes, both model ids, the commit of the superseded fixture, and the
+   reason. If the first coverage is ≥ 0.50, the fixture stands and C6 proceeds.
+6. If the second coverage is still < 0.50, the bench proceeds as pre-registered
+   and reports it; there is no third model.
+
+The superseded fixture's manifest and commit remain in git history; the
+recorded content hashes identify both.
+
+---
+
+## 7. Not fixed here
 
 - The multi-hop and aggregation queries and their qrels (C3, frozen at C4 after
   independent review + CJ approval).

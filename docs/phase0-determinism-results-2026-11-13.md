@@ -187,6 +187,38 @@ full-corpus fixture is equally sparse, the gate arm cannot win, and the
 fidelity row will show why. The report must present this as extractor weakness,
 not retriever weakness, and §5's INCONCLUSIVE is a likely outcome.
 
+### 6.1 Measured: do the probe documents share entities?
+
+Zero links has two possible causes — the documents share no entities, or they
+share entities the extractor missed. Measured on the built graph:
+
+- every entity node is mentioned by exactly one episode (33 `MENTIONS`, 33
+  entities; no entity with more than one episode, no name owned by two nodes);
+- **three domain terms do appear in more than one of the ten documents**:
+
+| term | probe documents |
+|---|---|
+| `QRV-4012` | `qrv-err-4012`, `qrv-err-index` |
+| `qv.Sink` | `qrv-sink-postgres`, `qrv-sinks-overview` |
+| `Quorva` | `qrv-architecture`, `qrv-guide-checkpointing`, `qrv-troubleshooting` |
+
+In each case the graph holds the entity (or a name variant) from only one of
+them: `QRV-4012` is extracted only from `qrv-err-index` (the err-4012 document
+extracted 0 entities); `qv.Sink` only from `qrv-sinks-overview` (the
+sink-postgres document extracted `qv.sinks.PostgresSink` instead); `quorva`
+only from `qrv-troubleshooting`, while the architecture document has a distinct
+node `Quorva pipeline`. The one further string overlap, `JSON`
+(observability + sources-overview), is a generic term, not a joinable entity.
+
+So the probe documents are **not entity-disjoint**, but with three shared terms
+they are close to it, and every shared term is registered in only one document.
+The missing cross-document links are therefore at least partly extraction misses
+rather than an absence of shared entities — but three terms are too few to say
+how a richer corpus behaves. That is why the real corpus gets its own
+measurement: the one-time extractor check, pre-registered in
+`docs/graph-bench-preregistration-2026-11-13.md` §6, run after the corpus is
+frozen and before any arm is scored.
+
 ## 7. Reproduction
 
 ```
