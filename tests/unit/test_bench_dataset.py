@@ -344,7 +344,7 @@ class TestValidatorCatches:
             "cluster": 5,
         }
         d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [bad_query])
-        assert any("has no cluster id" in p for p in validate(d))
+        assert any("invalid cluster id" in p for p in validate(d))
 
     def test_a_whitespace_cluster_id_is_caught(self, tmp_path):
         bad_query = {

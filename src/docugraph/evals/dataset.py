@@ -252,7 +252,18 @@ def validate(dataset_dir: Path) -> list[str]:
                 )
             # D-8: the gate's primary interval resamples clusters; a query with
             # no cluster id would silently be its own independent unit.
-            if not isinstance(q.cluster, str) or not q.cluster.strip():
+            if not isinstance(q.cluster, str):
+                if q.cluster is None:
+                    problems.append(
+                        f"{q.id}: {q.category} query has no cluster id -- the "
+                        "bootstrap would resample it as independent evidence"
+                    )
+                else:
+                    problems.append(
+                        f"{q.id}: {q.category} query has an invalid cluster id "
+                        f"{q.cluster!r} -- it must be a non-empty string"
+                    )
+            elif not q.cluster.strip():
                 problems.append(
                     f"{q.id}: {q.category} query has no cluster id -- the "
                     "bootstrap would resample it as independent evidence"
