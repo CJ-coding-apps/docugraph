@@ -4,13 +4,16 @@
 
 This is bench tooling, not a CLI command, and it is destructive in the only
 sense that matters: it overwrites a committed artifact with the output of a
-live language model. The two refusals are the contract:
+live language model. The three refusals are the contract:
 
 1. Without ``--i-am-regenerating`` it exits non-zero and names the flag. There
    is no default output path and no "did you mean" prompt.
 2. Without a configured, reachable LLM it exits non-zero and says an LLM (and
    its key/configuration) is required -- before it writes anything, so a refused
    run cannot leave a half-built fixture behind.
+3. With uncommitted changes under ``src/`` it exits non-zero. The manifest
+   records the commit that built the fixture (``extraction_git_sha``), so
+   building from a working tree would make that record false.
 
 The regeneration itself is not reproducible: ``deepseek-v4.1-flash:cloud`` is
 served remotely and the same tag can mean different weights later. The manifest
@@ -83,6 +86,18 @@ def main(argv: list[str] | None = None) -> int:
             "refusing to regenerate the graph fixture: an LLM is required and "
             "none is available; configure a provider and its key "
             f"(DOCUGRAPH_LLM__PROVIDER, OPENAI_API_KEY, ...). Details: {exc}",
+            file=sys.stderr,
+        )
+        return 2
+
+    # Refuse an uncommitted extraction tree before any work: the manifest's
+    # extraction_git_sha must identify the code that actually built the graph.
+    dirty = _src_tree_dirty_reason()
+    if dirty is not None:
+        print(
+            "refusing to regenerate the graph fixture: the manifest records the "
+            "commit that built it, so src/ must be committed first. "
+            f"{dirty}\nCommit or stash src/ and rerun.",
             file=sys.stderr,
         )
         return 2
@@ -163,6 +178,28 @@ def _prompt_sha256() -> str:
         digest.update(path.relative_to(prompts).as_posix().encode("utf-8"))
         digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+def _src_tree_dirty_reason() -> str | None:
+    """Why ``src/`` is not a committed tree, or None when it is.
+
+    Fails closed: if git cannot be asked, the builder refuses rather than
+    guessing. Untracked files count -- they are code the commit does not name.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--", "src"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"git could not be run to check src/: {exc}"
+    if result.returncode != 0:
+        return f"git status failed (exit {result.returncode}): {result.stderr.strip()}"
+    dirty = result.stdout.strip()
+    return f"src/ has uncommitted changes:\n{dirty}" if dirty else None
 
 
 def _git_sha() -> str:

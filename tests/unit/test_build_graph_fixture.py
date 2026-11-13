@@ -83,3 +83,35 @@ def test_refuses_without_an_llm_configured(tmp_path):
     assert _fixture_dir_state() == before, (
         "a refused run wrote into benchmarks/retrieval/graph_fixture"
     )
+
+
+def test_refuses_a_dirty_src_tree(monkeypatch, tmp_path, capsys):
+    """The manifest's extraction_git_sha must name the code that built it.
+
+    The dirtiness is injected, so this runs in-process: a child process would
+    read the developer's real tree and could pass or fail by accident.
+    """
+    from types import SimpleNamespace
+
+    import docugraph.evals.build_graph_fixture as builder
+
+    monkeypatch.setattr(builder, "get_llm_provider", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        builder,
+        "_src_tree_dirty_reason",
+        lambda: "src/ has uncommitted changes:\n M src/docugraph/core/llm.py",
+    )
+
+    def _must_not_run(_coro):
+        raise AssertionError("the builder started regenerating from a dirty src/ tree")
+
+    monkeypatch.setattr(builder.asyncio, "run", _must_not_run)
+    output = tmp_path / "fixture"
+
+    rc = builder.main(["--i-am-regenerating", "--output", str(output)])
+
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "uncommitted changes" in err
+    assert "src/" in err
+    assert not output.exists()
