@@ -404,7 +404,10 @@ queries, plus 16 multi-hop and 16 aggregation queries added for the graph
 benchmark. Support-set queries declare a `required` set — every document a
 complete answer needs — which `set_recall@k` and `full_support@k` score; the
 same set is recorded in `gold_subgraph.json` together with the joining entity
-and required facts. The keyword-trap distractors are built to cover many
+and required facts. They also carry a `cluster` id (one per multi-hop document
+pair, one per aggregation group): the graph benchmark's bootstrap resamples
+clusters rather than queries, because two questions about the same documents
+are not independent evidence. The keyword-trap distractors are built to cover many
 *distinct* query terms rather than repeat one (BM25 saturates a repeated term,
 so a one-token trap does not bind), and the semantic-distractor queries share
 few exact tokens with their target so that only meaning — not lexical overlap —

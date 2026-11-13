@@ -70,6 +70,64 @@ class TestBootstrap:
         assert result.point == pytest.approx(0.3)
 
 
+class TestClusterBootstrap:
+    """D-8: the resampling unit is the evidence cluster, not the query.
+
+    These deltas are deliberately correlated *within* a cluster: both queries of
+    each pair carry the same delta, exactly the pattern the multi-hop queries
+    have (two questions about one document pair). Treating them as independent
+    understates the interval; resampling the cluster keeps the pair together.
+    """
+
+    DELTAS = [-0.10, -0.10, -0.05, -0.05, 0.00, 0.00, 0.05, 0.05,
+              0.10, 0.10, 0.15, 0.15, 0.20, 0.20, 0.25, 0.25]
+    CLUSTERS = [f"cluster-{index // 2}" for index in range(16)]
+
+    def _clustered(self) -> gb.MetricResult:
+        return gb.metric_result(
+            self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=self.CLUSTERS
+        )
+
+    def test_clustered_interval_is_reproducible(self):
+        """G1 for the primary interval: same clusters, same seed, same bounds."""
+        first = self._clustered()
+        second = self._clustered()
+        assert (first.ci_lower, first.ci_upper) == (second.ci_lower, second.ci_upper)
+        assert first.ci_lower <= first.point <= first.ci_upper
+
+    def test_point_estimate_stays_the_mean_over_queries(self):
+        clustered = self._clustered()
+        per_query = gb.metric_result(self.DELTAS, threshold=gb.NDCG_THRESHOLD)
+        assert clustered.point == per_query.point
+
+    def test_mutation_resampling_by_query_instead_of_by_cluster_turns_it_red(self):
+        """The mutation check the pre-registration names.
+
+        If ``clusters`` is ignored -- the interval resampled by query -- the
+        interval is narrower on correlated deltas. Requiring a strictly wider
+        clustered interval makes that mutation fail here, not in a report.
+        """
+        clustered = self._clustered()
+        per_query = gb.metric_result(self.DELTAS, threshold=gb.NDCG_THRESHOLD)
+
+        clustered_width = clustered.ci_upper - clustered.ci_lower
+        per_query_width = per_query.ci_upper - per_query.ci_lower
+        assert clustered_width > per_query_width, (
+            "the clustered interval is not wider than the per-query interval on "
+            "within-cluster correlated deltas: the resampling unit is ignored"
+        )
+        assert (clustered.ci_lower, clustered.ci_upper) != (
+            per_query.ci_lower,
+            per_query.ci_upper,
+        )
+
+    def test_one_cluster_id_per_query_is_required(self):
+        with pytest.raises(ValueError, match="one id per query"):
+            gb.metric_result(
+                self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=self.CLUSTERS[:-1]
+            )
+
+
 class TestGateOnSyntheticArms:
     def test_better_arm_is_met_and_noise_is_not(self):
         """G2: a clear effect passes; noise does not."""

@@ -39,8 +39,23 @@ apply. The 1-hop arm remains a diagnostic and is still run.
 ### Statistics
 
 For each gate metric, per query: `d = gate_arm − rrf`, over **multi-hop queries
-only**. Paired bootstrap over queries, **10,000 resamples**, **seed `20261113`**,
-95% percentile CI.
+only**.
+
+**D-8 amendment (CJ, 2026-11-13, before any graph search ran on the bench).**
+Queries are not independent evidence when several ask about the same document
+pair. The primary interval is therefore a **paired cluster bootstrap over
+evidence clusters**: each new query carries a `cluster` id (one id per
+multi-hop document pair, one per aggregation group), the 8 (later 16) multi-hop
+clusters are resampled with replacement, and **every query in a drawn cluster
+enters the resample**. **10,000 resamples**, **seed `20261113`**, 95% percentile
+CI — the numbers are unchanged; only the resampling unit and the number of
+independent units change. The per-query bootstrap is still reported, labelled
+**anti-conservative**, and is not the primary result.
+
+Aggregation clusters (non-gating) use the same method over their groups. The
+cluster ids are frozen with the queries at C4. G1–G3 cover cluster resampling,
+including a mutation check: resampling by query instead of by cluster changes
+the interval and turns the test red.
 
 Thresholds — both must pass (intersection-union test, no multiplicity
 correction):

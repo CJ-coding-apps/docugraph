@@ -7,13 +7,17 @@ The dataset is three committed files under ``benchmarks/retrieval/``:
   bypassed so that relevance judgments are pinned to stable ids and cannot
   rot when chunking changes. Chunking quality is a different benchmark.
 - ``queries.jsonl`` -- one query per line: ``{id, text, category, qrels,
-  design_note}``, plus ``required`` for multi-hop and aggregation queries.
-  ``qrels`` maps corpus ids to grades (1 partial, 2 answers the query);
-  everything absent is grade 0. ``required`` is the support set a complete
-  answer needs (every document that must be joined or aggregated), which is
-  what the set metrics score; it is the same set recorded in
-  ``gold_subgraph.json``. ``design_note`` records the trap the query sets, so
-  a future editor knows what a change would un-measure.
+  design_note}``, plus ``required`` and ``cluster`` for multi-hop and
+  aggregation queries. ``qrels`` maps corpus ids to grades (1 partial, 2
+  answers the query); everything absent is grade 0. ``required`` is the
+  support set a complete answer needs (every document that must be joined or
+  aggregated), which is what the set metrics score; it is the same set
+  recorded in ``gold_subgraph.json``. ``cluster`` names the evidence cluster
+  (one per multi-hop document pair, one per aggregation group): the gate's
+  bootstrap resamples clusters, not queries, because several questions about
+  one document pair are not independent evidence (D-8). ``design_note``
+  records the trap the query sets, so a future editor knows what a change
+  would un-measure.
 - ``gold_subgraph.json`` -- the support graph for multi-hop and aggregation
   queries: required documents, joining/aggregated entities, required facts.
 - ``MANIFEST.json`` -- sha256 of every committed dataset file, counts, and a
@@ -85,6 +89,11 @@ class BenchQuery:
     # None means the field is absent; an empty tuple means it was present but
     # empty, which is a dataset bug the validator reports rather than erasing.
     required: tuple[str, ...] | None = None
+    # The evidence cluster (D-8): one id per multi-hop document pair, one per
+    # aggregation group. The gate's primary interval resamples clusters, not
+    # queries, because two questions about one document pair are not
+    # independent evidence. Required exactly for support-set categories.
+    cluster: str | None = None
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -133,6 +142,7 @@ def load_queries(dataset_dir: Path) -> list[BenchQuery]:
             qrels={k: int(v) for k, v in r["qrels"].items()},
             design_note=r.get("design_note", ""),
             required=(None if "required" not in r else tuple(r["required"])),
+            cluster=r.get("cluster"),
         )
         for r in rows
     ]
@@ -232,6 +242,18 @@ def validate(dataset_dir: Path) -> list[str]:
                 problems.append(
                     f"{q.id}: {q.category} query needs at least two required documents"
                 )
+            # D-8: the gate's primary interval resamples clusters; a query with
+            # no cluster id would silently be its own independent unit.
+            if not q.cluster:
+                problems.append(
+                    f"{q.id}: {q.category} query has no cluster id -- the "
+                    "bootstrap would resample it as independent evidence"
+                )
+        elif q.cluster is not None:
+            problems.append(
+                f"{q.id}: non-support-set query carries a cluster id -- cluster "
+                "ids describe support-set evidence units (D-8)"
+            )
 
     for d in corpus:
         if d.role not in ROLES:

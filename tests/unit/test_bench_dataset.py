@@ -111,6 +111,28 @@ class TestRequiredField:
         assert loaded["q2"].required == ("d1", "d2")
 
 
+class TestClusterField:
+    """D-8: support-set queries carry the id of their evidence cluster."""
+
+    def test_cluster_is_loaded_and_absent_is_none(self, tmp_path):
+        corpus = [GOOD_DOC, {**GOOD_DOC, "id": "d2"}]
+        queries = [
+            GOOD_QUERY,
+            {
+                **GOOD_QUERY,
+                "id": "q2",
+                "category": "multi-hop",
+                "qrels": {"d1": 2, "d2": 1},
+                "required": ["d1", "d2"],
+                "cluster": "d1+d2",
+            },
+        ]
+        d = _write_dataset(tmp_path, corpus, queries)
+        loaded = {q.id: q for q in load_queries(d)}
+        assert loaded["q1"].cluster is None
+        assert loaded["q2"].cluster == "d1+d2"
+
+
 def _write_dataset(tmp_path: Path, corpus: list[dict], queries: list[dict]) -> Path:
     corpus_path = tmp_path / "corpus.jsonl"
     queries_path = tmp_path / "queries.jsonl"
@@ -205,6 +227,23 @@ class TestValidatorCatches:
         bad_query = {**GOOD_QUERY, "category": "aggregation", "required": ["d1"]}
         d = _write_dataset(tmp_path, [GOOD_DOC], [bad_query])
         assert any("at least two required documents" in p for p in validate(d))
+
+    def test_a_support_set_query_without_a_cluster_is_caught(self, tmp_path):
+        """D-8: without a cluster id every query is its own resampling unit."""
+        bad_query = {
+            **GOOD_QUERY,
+            "category": "multi-hop",
+            "qrels": {"d1": 2, "d2": 1},
+            "required": ["d1", "d2"],
+        }
+        d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [bad_query])
+        assert any("has no cluster" in p for p in validate(d))
+
+    def test_a_cluster_on_a_non_support_set_query_is_caught(self, tmp_path):
+        """A cluster id there would imply a resampling unit that does not exist."""
+        bad_query = {**GOOD_QUERY, "cluster": "d1+d1"}
+        d = _write_dataset(tmp_path, [GOOD_DOC], [bad_query])
+        assert any("cluster" in p and "non-support-set" in p for p in validate(d))
 
     def test_manifest_naming_a_missing_file_is_caught(self, tmp_path):
         d = _write_dataset(tmp_path, [GOOD_DOC], [GOOD_QUERY])

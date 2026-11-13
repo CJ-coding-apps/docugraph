@@ -703,12 +703,24 @@ def _fuse(*rankings: Sequence[tuple[str, float]], top_k: int) -> list[tuple[str,
 # ---------------------------------------------------------------------------
 
 
-def metric_result(deltas: Sequence[float], *, threshold: float) -> MetricResult:
+def metric_result(
+    deltas: Sequence[float],
+    *,
+    threshold: float,
+    clusters: Sequence[str] | None = None,
+) -> MetricResult:
     """Paired mean delta with a 95% percentile bootstrap interval.
 
     The resample order is fixed by ``BOOTSTRAP_SEED`` and the resampling uses
     one ``random.Random`` instance, so the same deltas produce the same bounds
     -- byte-for-byte -- on any machine and in any process (G1).
+
+    With ``clusters`` (D-8) the resampling unit is the evidence cluster:
+    clusters are drawn with replacement and *every* query in a drawn cluster
+    enters the resample. Two questions about one document pair are not
+    independent evidence, and treating them as independent understates the
+    interval. Without ``clusters`` the per-query bootstrap is the
+    anti-conservative secondary figure, never the primary one.
     """
     values = [float(delta) for delta in deltas]
     if not values:
@@ -716,11 +728,28 @@ def metric_result(deltas: Sequence[float], *, threshold: float) -> MetricResult:
     point = math.fsum(values) / len(values)
 
     generator = random.Random(BOOTSTRAP_SEED)
-    count = len(values)
-    means = [
-        math.fsum(values[generator.randrange(count)] for _ in range(count)) / count
-        for _ in range(BOOTSTRAP_RESAMPLES)
-    ]
+    if clusters is None:
+        count = len(values)
+        means = [
+            math.fsum(values[generator.randrange(count)] for _ in range(count)) / count
+            for _ in range(BOOTSTRAP_RESAMPLES)
+        ]
+    else:
+        if len(clusters) != len(values):
+            raise ValueError(
+                f"{len(clusters)} cluster ids for {len(values)} deltas: "
+                "one id per query"
+            )
+        groups: dict[str, list[float]] = {}
+        for cluster, value in zip(clusters, values, strict=True):
+            groups.setdefault(str(cluster), []).append(value)
+        members = list(groups.values())
+        means = []
+        for _ in range(BOOTSTRAP_RESAMPLES):
+            drawn = [members[generator.randrange(len(members))] for _ in members]
+            sample = [value for group in drawn for value in group]
+            means.append(math.fsum(sample) / len(sample))
+
     means.sort()
     return MetricResult(
         point=point,
