@@ -1,0 +1,793 @@
+{
+  "kind": "gold-subgraph",
+  "version": "1",
+  "description": "Hand-verified support subgraph for the multi-hop and aggregation queries. For each query: the required documents, the joining or aggregated entities, and the facts a complete answer needs. fidelity_row() reads this file; it diagnoses extraction coverage and never decides the gate.",
+  "queries": {
+    "q-agg-1": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-runner-fleet",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EmbeddedScheduler",
+        "RunnerLease",
+        "EphemeralMode"
+      ],
+      "facts": [
+        "Its checkpoint interval is 30 seconds, the in-flight batch cap is 8, and the memory ceiling is 512 MiB.",
+        "In fleet mode the checkpoint interval defaults to 10 seconds, overriding the pipeline-level `commit_interval_s` default of 30 seconds.",
+        "In this mode the checkpoint interval is not applicable, the in-flight batch cap is 4, and the memory ceiling is 256 MiB."
+      ]
+    },
+    "q-agg-10": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-auth-workload",
+        "qrv-auth-oidc"
+      ],
+      "entities": [
+        "CertificateAuthority",
+        "WorkloadIdentity",
+        "OidcBroker"
+      ],
+      "facts": [
+        "Client certificates rotate every 24 hours, and a certificate older than that is refused.",
+        "WorkloadIdentity issues an access token valid for 1 hour when the process starts, and the token rotates automatically on every restart; there is no manual rotation step.",
+        "OidcBroker rotates the token through the refresh token before it expires, so a long-running job does not see a gap."
+      ]
+    },
+    "q-agg-11": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-auth-workload",
+        "qrv-auth-oidc"
+      ],
+      "entities": [
+        "CertificateAuthority",
+        "WorkloadIdentity",
+        "OidcBroker"
+      ],
+      "facts": [
+        "Every audit record stores the peer_serial of the presented client certificate so that a request can be traced back to one certificate.",
+        "Audit records store the spiffe_id of the calling workload.",
+        "Audit records store the sub claim of the authenticated principal."
+      ]
+    },
+    "q-agg-12": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-auth-workload",
+        "qrv-auth-oidc"
+      ],
+      "entities": [
+        "CertificateAuthority",
+        "WorkloadIdentity",
+        "OidcBroker"
+      ],
+      "facts": [
+        "In mutual TLS the client presents a certificate issued by CertificateAuthority before any request is accepted.",
+        "WorkloadIdentity issues an access token valid for 1 hour when the process starts, and the token rotates automatically on every restart; there is no manual rotation step.",
+        "OidcBroker exchanges an authorization code for an access token, and the token lifetime is 10 minutes."
+      ]
+    },
+    "q-agg-13": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-sink-kinesis",
+        "qrv-sink-pubsub"
+      ],
+      "entities": [
+        "KafkaPublisher",
+        "Kinesis",
+        "Pub/Sub"
+      ],
+      "facts": [
+        "Delivery is at-least-once: a failed publish is retried, and a consumer may see a duplicate.",
+        "Delivery is at-least-once.",
+        "Delivery is at-least-once by default; exactly-once delivery is available only when the subscription is created with that option."
+      ]
+    },
+    "q-agg-14": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-sink-kinesis",
+        "qrv-sink-pubsub"
+      ],
+      "entities": [
+        "KafkaPublisher",
+        "Kinesis",
+        "Pub/Sub"
+      ],
+      "facts": [
+        "The maximum message size is 1 MiB, and a larger record fails the batch.",
+        "The maximum record size is 1 MiB.",
+        "The maximum message size is 10 MiB."
+      ]
+    },
+    "q-agg-15": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-sink-kinesis",
+        "qrv-sink-pubsub"
+      ],
+      "entities": [
+        "KafkaPublisher",
+        "Kinesis",
+        "Pub/Sub"
+      ],
+      "facts": [
+        "Ordering is preserved per partition, and records with the same key always land in the same partition.",
+        "Ordering is preserved per shard; records from different shards have no relative order guarantee.",
+        "Ordering is preserved when the publish carries an ordering key."
+      ]
+    },
+    "q-agg-16": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-sink-kinesis",
+        "qrv-sink-pubsub"
+      ],
+      "entities": [
+        "KafkaPublisher",
+        "Kinesis",
+        "Pub/Sub"
+      ],
+      "facts": [
+        "Retention is configured on the broker, not by the sink.",
+        "Default retention is 24 hours, which can be extended on the stream.",
+        "Default retention is 7 days, after which an unacknowledged message is dropped."
+      ]
+    },
+    "q-agg-2": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-runner-fleet",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EmbeddedScheduler",
+        "RunnerLease",
+        "EphemeralMode"
+      ],
+      "facts": [
+        "A failed batch is retried in place by the local runner.",
+        "A worker loss reassigns that worker's in-flight batches to another worker, so those batches execute a second time.",
+        "Every run starts again from the source offsets, so the same range can be executed more than once."
+      ]
+    },
+    "q-agg-3": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-runner-fleet",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EmbeddedScheduler",
+        "RunnerLease",
+        "EphemeralMode"
+      ],
+      "facts": [
+        "Its checkpoint interval is 30 seconds, the in-flight batch cap is 8, and the memory ceiling is 512 MiB.",
+        "Each worker may hold up to 64 in-flight batches and is limited to a 2 GiB memory ceiling.",
+        "In this mode the checkpoint interval is not applicable, the in-flight batch cap is 4, and the memory ceiling is 256 MiB."
+      ]
+    },
+    "q-agg-4": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-runner-fleet",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EmbeddedScheduler",
+        "RunnerLease",
+        "EphemeralMode"
+      ],
+      "facts": [
+        "Its checkpoint interval is 30 seconds, the in-flight batch cap is 8, and the memory ceiling is 512 MiB.",
+        "Each worker may hold up to 64 in-flight batches and is limited to a 2 GiB memory ceiling.",
+        "In this mode the checkpoint interval is not applicable, the in-flight batch cap is 4, and the memory ceiling is 256 MiB."
+      ]
+    },
+    "q-agg-5": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-region-us",
+        "qrv-region-ap",
+        "qrv-region-jp"
+      ],
+      "entities": [
+        "quorva-edge-eu",
+        "quorva-edge-us",
+        "quorva-edge-ap",
+        "quorva-edge-jp"
+      ],
+      "facts": [
+        "The latency SLA is p95 120 ms for in-region requests.",
+        "The latency SLA is p95 80 ms for in-region requests.",
+        "The latency SLA is p95 180 ms for in-region requests.",
+        "The latency SLA is p95 150 ms for in-region requests."
+      ]
+    },
+    "q-agg-6": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-region-us",
+        "qrv-region-ap",
+        "qrv-region-jp"
+      ],
+      "entities": [
+        "quorva-edge-eu",
+        "quorva-edge-us",
+        "quorva-edge-ap",
+        "quorva-edge-jp"
+      ],
+      "facts": [
+        "Default retention for stored records is 30 days.",
+        "Default retention for stored records is 30 days.",
+        "Default retention for stored records is 45 days.",
+        "Default retention for stored records is 45 days."
+      ]
+    },
+    "q-agg-7": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-region-us",
+        "qrv-region-ap",
+        "qrv-region-jp"
+      ],
+      "entities": [
+        "quorva-edge-eu",
+        "quorva-edge-us",
+        "quorva-edge-ap",
+        "quorva-edge-jp"
+      ],
+      "facts": [
+        "Data residency is in-region only: payloads, indexes, and backups never leave the region.",
+        "Data residency is the United States: payloads, indexes, and backups stay in the region.",
+        "Data residency is Asia Pacific: payloads, indexes, and backups stay in the region.",
+        "Data residency is Japan: payloads, indexes, and backups stay in the region."
+      ]
+    },
+    "q-agg-8": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-region-us",
+        "qrv-region-ap",
+        "qrv-region-jp"
+      ],
+      "entities": [
+        "quorva-edge-eu",
+        "quorva-edge-us",
+        "quorva-edge-ap",
+        "quorva-edge-jp"
+      ],
+      "facts": [
+        "The regional edge endpoint is quorva-edge-eu, and it terminates TLS for all regional traffic.",
+        "The regional edge endpoint is quorva-edge-us, and it terminates TLS for all regional traffic.",
+        "The regional edge endpoint is quorva-edge-ap, and it terminates TLS for all regional traffic.",
+        "The regional edge endpoint is quorva-edge-jp, and it terminates TLS for all regional traffic."
+      ]
+    },
+    "q-agg-9": {
+      "category": "aggregation",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-auth-workload",
+        "qrv-auth-oidc"
+      ],
+      "entities": [
+        "CertificateAuthority",
+        "WorkloadIdentity",
+        "OidcBroker"
+      ],
+      "facts": [
+        "Access tokens are valid for 15 minutes; a client renews them against the regional edge endpoint.",
+        "WorkloadIdentity issues an access token valid for 1 hour when the process starts, and the token rotates automatically on every restart; there is no manual rotation step.",
+        "OidcBroker exchanges an authorization code for an access token, and the token lifetime is 10 minutes."
+      ]
+    },
+    "q-mh-1": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-fleet",
+        "qrv-incident-2026-02-lease"
+      ],
+      "entities": [
+        "RunnerLease"
+      ],
+      "joining_entity": "RunnerLease",
+      "facts": [
+        "Workers coordinate through RunnerLease, which renews every 5 seconds.",
+        "The coordinator was not observing RunnerLease renewals."
+      ]
+    },
+    "q-mh-10": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-cli-replay",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EphemeralMode"
+      ],
+      "joining_entity": "EphemeralMode",
+      "facts": [
+        "Replay is a debugging tool, not a recovery tool: it runs the pipeline in EphemeralMode, and the run always starts from the beginning of the requested range.",
+        "In this mode the checkpoint interval is not applicable, the in-flight batch cap is 4, and the memory ceiling is 256 MiB."
+      ]
+    },
+    "q-mh-11": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-region-ap",
+        "qrv-incident-2026-09-ap"
+      ],
+      "entities": [
+        "quorva-edge-ap"
+      ],
+      "joining_entity": "quorva-edge-ap",
+      "facts": [
+        "The ap-southeast-2 region serves Asia Pacific customers from two availability zones.",
+        "Traffic failed over to ap-northeast-1, and the cross-region hop added roughly 130 ms per request."
+      ]
+    },
+    "q-mh-12": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-region-ap",
+        "qrv-incident-2026-09-ap"
+      ],
+      "entities": [
+        "quorva-edge-ap"
+      ],
+      "joining_entity": "quorva-edge-ap",
+      "facts": [
+        "The latency SLA is p95 180 ms for in-region requests.",
+        "quorva-edge-ap kept serving traffic, but p95 reached 310 ms."
+      ]
+    },
+    "q-mh-13": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-auth-oidc",
+        "qrv-incident-2026-10-oidc"
+      ],
+      "entities": [
+        "OidcBroker"
+      ],
+      "joining_entity": "OidcBroker",
+      "facts": [
+        "OidcBroker exchanges an authorization code for an access token, and the token lifetime is 10 minutes.",
+        "OidcBroker rejected refresh-token requests from one identity provider because the broker host clock had drifted 47 seconds behind."
+      ]
+    },
+    "q-mh-14": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-auth-oidc",
+        "qrv-incident-2026-10-oidc"
+      ],
+      "entities": [
+        "OidcBroker"
+      ],
+      "joining_entity": "OidcBroker",
+      "facts": [
+        "OidcBroker exchanges an authorization code for an access token, and the token lifetime is 10 minutes.",
+        "The access token lifetime was not the issue; the refresh request itself carried a timestamp the provider considered too old."
+      ]
+    },
+    "q-mh-15": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-tuning-scheduler"
+      ],
+      "entities": [
+        "EmbeddedScheduler"
+      ],
+      "joining_entity": "EmbeddedScheduler",
+      "facts": [
+        "Batch assignment is handled by EmbeddedScheduler, which always takes the oldest queued batch first and never preempts a batch that is already in flight.",
+        "A short interval makes EmbeddedScheduler pause assignment while a checkpoint is written, so a pipeline with many small batches sees lower throughput than its CPU headroom would suggest."
+      ]
+    },
+    "q-mh-16": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-embedded",
+        "qrv-tuning-scheduler"
+      ],
+      "entities": [
+        "EmbeddedScheduler"
+      ],
+      "joining_entity": "EmbeddedScheduler",
+      "facts": [
+        "Its checkpoint interval is 30 seconds, the in-flight batch cap is 8, and the memory ceiling is 512 MiB.",
+        "A short interval makes EmbeddedScheduler pause assignment while a checkpoint is written, so a pipeline with many small batches sees lower throughput than its CPU headroom would suggest."
+      ]
+    },
+    "q-mh-2": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-runner-fleet",
+        "qrv-incident-2026-02-lease"
+      ],
+      "entities": [
+        "RunnerLease"
+      ],
+      "joining_entity": "RunnerLease",
+      "facts": [
+        "Workers coordinate through RunnerLease, which renews every 5 seconds.",
+        "The fix serialises renewals with checkpoint writes and compares against the lease table only."
+      ]
+    },
+    "q-mh-3": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-incident-2026-05-eu"
+      ],
+      "entities": [
+        "quorva-edge-eu"
+      ],
+      "joining_entity": "quorva-edge-eu",
+      "facts": [
+        "The regional edge endpoint is quorva-edge-eu, and it terminates TLS for all regional traffic.",
+        "The cause was an expired TLS certificate."
+      ]
+    },
+    "q-mh-4": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-region-eu",
+        "qrv-incident-2026-05-eu"
+      ],
+      "entities": [
+        "quorva-edge-eu"
+      ],
+      "joining_entity": "quorva-edge-eu",
+      "facts": [
+        "The latency SLA is p95 120 ms for in-region requests.",
+        "The cause was an expired TLS certificate."
+      ]
+    },
+    "q-mh-5": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-security-advisory-ca"
+      ],
+      "entities": [
+        "CertificateAuthority"
+      ],
+      "joining_entity": "CertificateAuthority",
+      "facts": [
+        "In mutual TLS the client presents a certificate issued by CertificateAuthority before any request is accepted.",
+        "You only need to trust the new intermediate before the retirement date."
+      ]
+    },
+    "q-mh-6": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-auth-mtls",
+        "qrv-security-advisory-ca"
+      ],
+      "entities": [
+        "CertificateAuthority"
+      ],
+      "joining_entity": "CertificateAuthority",
+      "facts": [
+        "Client certificates rotate every 24 hours, and a certificate older than that is refused.",
+        "You only need to trust the new intermediate before the retirement date."
+      ]
+    },
+    "q-mh-7": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-incident-2026-07-kafka"
+      ],
+      "entities": [
+        "KafkaPublisher"
+      ],
+      "joining_entity": "KafkaPublisher",
+      "facts": [
+        "Delivery is at-least-once: a failed publish is retried, and a consumer may see a duplicate.",
+        "KafkaPublisher retried a batch whose publish had actually succeeded, and because the destination consumer was not idempotent, the retry was visible downstream."
+      ]
+    },
+    "q-mh-8": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-sink-kafka",
+        "qrv-incident-2026-07-kafka"
+      ],
+      "entities": [
+        "KafkaPublisher"
+      ],
+      "joining_entity": "KafkaPublisher",
+      "facts": [
+        "The maximum message size is 1 MiB, and a larger record fails the batch.",
+        "No records were lost."
+      ]
+    },
+    "q-mh-9": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-cli-replay",
+        "qrv-runner-ephemeral"
+      ],
+      "entities": [
+        "EphemeralMode"
+      ],
+      "joining_entity": "EphemeralMode",
+      "facts": [
+        "Ephemeral mode disables checkpoints.",
+        "Replay is a debugging tool, not a recovery tool: it runs the pipeline in EphemeralMode, and the run always starts from the beginning of the requested range."
+      ]
+    },
+    "q-mh-17": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-watermarks",
+        "qrv-incident-2026-04-watermark"
+      ],
+      "entities": [
+        "WatermarkTracker"
+      ],
+      "joining_entity": "WatermarkTracker",
+      "facts": [
+        "The default `watermark_delay_s` is 30 seconds; the minimum accepted value is 5 seconds.",
+        "The pipeline used the default watermark delay, but the transform buffered output for 90 seconds, so records stamped just before the buffered flush were already below the watermark when they reached the sink stage.",
+        "The pipeline had no consumer for the late-data side output, so the records routed there were discarded rather than delivered."
+      ]
+    },
+    "q-mh-18": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-watermarks",
+        "qrv-incident-2026-04-watermark"
+      ],
+      "entities": [
+        "WatermarkTracker"
+      ],
+      "joining_entity": "WatermarkTracker",
+      "facts": [
+        "The tracker embeds the watermark in every state checkpoint, so a restart resumes from the last committed position instead of replaying the whole window, and it emits a `watermark_lag` gauge every 10 batches.",
+        "The fix caps transform buffering at half the watermark delay and fails validation when a transform declares a longer buffer."
+      ]
+    },
+    "q-mh-19": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-secret-rotation",
+        "qrv-incident-2026-01-secret"
+      ],
+      "entities": [
+        "SecretRotationJob"
+      ],
+      "joining_entity": "SecretRotationJob",
+      "facts": [
+        "The SecretRotationJob re-reads the file every 15 minutes and swaps a credential in place when its version changes, without restarting the pipeline.",
+        "The credential file had been rotated at 08:40, but the pipeline was configured for ephemeral runs, so the SecretRotationJob was not active and the in-memory credential remained the expired one."
+      ]
+    },
+    "q-mh-20": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-secret-rotation",
+        "qrv-incident-2026-01-secret"
+      ],
+      "entities": [
+        "SecretRotationJob"
+      ],
+      "joining_entity": "SecretRotationJob",
+      "facts": [
+        "The SecretRotationJob re-reads the file every 15 minutes and swaps a credential in place when its version changes, without restarting the pipeline.",
+        "A swap takes effect from the next batch onward; in-flight batches keep the old credential.",
+        "The fix makes validation warn when a long-running ephemeral pipeline uses a file-backed credential."
+      ]
+    },
+    "q-mh-21": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-cdc-retention",
+        "qrv-incident-2026-06-cdc"
+      ],
+      "entities": [
+        "PostgresSource"
+      ],
+      "joining_entity": "PostgresSource",
+      "facts": [
+        "When a pipeline has not acknowledged a position within `cdc_slot_ttl_hours` -- default 24 hours -- the slot is released, and the next start performs a full snapshot instead of resuming.",
+        "The pipelines had been paused for maintenance for 31 hours, so their slots had been released and the database had already reclaimed their WAL."
+      ]
+    },
+    "q-mh-22": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-cdc-retention",
+        "qrv-incident-2026-06-cdc"
+      ],
+      "entities": [
+        "PostgresSource"
+      ],
+      "joining_entity": "PostgresSource",
+      "facts": [
+        "The PostgresSource uses the logical-replication slot named by its `slot` argument and confirms its log position once per committed checkpoint; the database retains WAL segments the slot has not confirmed.",
+        "A pipeline that checkpoints rarely therefore holds WAL longer than a short commit interval would suggest.",
+        "The fix requires an explicit `cdc_pause_acknowledged: true` before a pause longer than the retention window is planned."
+      ]
+    },
+    "q-mh-23": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-compression",
+        "qrv-incident-2026-08-compression"
+      ],
+      "entities": [
+        "CodecNegotiator"
+      ],
+      "joining_entity": "CodecNegotiator",
+      "facts": [
+        "Batch payloads are compressed with `compression.codec`, which defaults to `zstd` at level 3.",
+        "gzip's decompression cost more CPU per byte than zstd, and the team had assumed the two were comparable."
+      ]
+    },
+    "q-mh-24": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-compression",
+        "qrv-incident-2026-08-compression"
+      ],
+      "entities": [
+        "CodecNegotiator"
+      ],
+      "joining_entity": "CodecNegotiator",
+      "facts": [
+        "Compression is applied after batching and before encryption.",
+        "The fix adds a `compression.min_throughput_mbps` warning when a downgraded codec is in use."
+      ]
+    },
+    "q-mh-25": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-quotas",
+        "qrv-incident-2026-11-quota"
+      ],
+      "entities": [
+        "TenantQuota"
+      ],
+      "joining_entity": "TenantQuota",
+      "facts": [
+        "When the limit is reached, producers block for up to `quota_wait_s`, which defaults to 20 seconds, before the batch is rejected as `quota_exceeded`.",
+        "Raising the per-pipeline limit had no effect because the binding constraint was the per-group tenant quota."
+      ]
+    },
+    "q-mh-26": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-quotas",
+        "qrv-incident-2026-11-quota"
+      ],
+      "entities": [
+        "TenantQuota"
+      ],
+      "joining_entity": "TenantQuota",
+      "facts": [
+        "Quota consumption is released when the sink acknowledges the batch, not when the batch is produced.",
+        "The fix adds a warning when one pipeline in a group accounts for more than 60% of the group's in-flight batches."
+      ]
+    },
+    "q-mh-27": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-audit-log",
+        "qrv-security-advisory-audit"
+      ],
+      "entities": [
+        "AuditTrail"
+      ],
+      "joining_entity": "AuditTrail",
+      "facts": [
+        "Entries are append-only and are retained in the active store for 400 days, after which they are archived to cold storage; archived entries remain queryable through the `quorva audit` command.",
+        "Verification tools must accept both formats; an entry whose digest length matches neither format is rejected."
+      ]
+    },
+    "q-mh-28": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-audit-log",
+        "qrv-security-advisory-audit"
+      ],
+      "entities": [
+        "AuditTrail"
+      ],
+      "joining_entity": "AuditTrail",
+      "facts": [
+        "Each entry carries at least the actor identity, the resource, the action, and a digest of the request body; some authentication methods add their own identifiers.",
+        "On 1 December 2026 the AuditTrail digest changes from a SHA-256 digest truncated to 128 bits to the full 256-bit digest.",
+        "Entries written before that date remain verifiable with the old format and are not rewritten."
+      ]
+    },
+    "q-mh-29": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-cutover",
+        "qrv-incident-2026-09-cutover"
+      ],
+      "entities": [
+        "CutoverController"
+      ],
+      "joining_entity": "CutoverController",
+      "facts": [
+        "The CutoverController shifts traffic between blue and green fleets in steps controlled by `cutover_step_percent`, which defaults to 10 percent.",
+        "Each step is held for `cutover_hold_s` (default 300 seconds) while error rate and p99 latency are compared against the stable fleet.",
+        "Latency was not part of the automatic rollback condition, so the controller kept stepping forward and the operator kept rolling back manually."
+      ]
+    },
+    "q-mh-30": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-cutover",
+        "qrv-incident-2026-09-cutover"
+      ],
+      "entities": [
+        "CutoverController"
+      ],
+      "joining_entity": "CutoverController",
+      "facts": [
+        "A step is rolled back automatically when the new fleet's error rate exceeds the stable fleet's by more than 2 percentage points.",
+        "The fix adds a latency ratio to the rollback condition and refuses a manual rollback within one hold window of the previous one."
+      ]
+    },
+    "q-mh-31": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-backfill",
+        "qrv-incident-2026-03-backfill"
+      ],
+      "entities": [
+        "BackfillPlan"
+      ],
+      "joining_entity": "BackfillPlan",
+      "facts": [
+        "A BackfillPlan splits a requested date range into segments of at most 6 hours and runs them at `backfill_concurrency`, which defaults to 2.",
+        "The requested range ended two hours after the watermark, but the plan had been started with the overlap check disabled by an operator flag.",
+        "The sink's idempotency keys covered live writes but not backfill segments, so the duplicates were not collapsed."
+      ]
+    },
+    "q-mh-32": {
+      "category": "multi-hop",
+      "documents": [
+        "qrv-guide-backfill",
+        "qrv-incident-2026-03-backfill"
+      ],
+      "entities": [
+        "BackfillPlan"
+      ],
+      "joining_entity": "BackfillPlan",
+      "facts": [
+        "The plan refuses to start when the target sink's current watermark overlaps the requested range, because the replay would duplicate live records.",
+        "The fix removes the override flag so an overlapping range cannot start, and gives each backfill segment its own idempotency namespace so a retried segment collapses instead of duplicating."
+      ]
+    }
+  }
+}

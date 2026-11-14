@@ -7,10 +7,23 @@ The dataset is three committed files under ``benchmarks/retrieval/``:
   bypassed so that relevance judgments are pinned to stable ids and cannot
   rot when chunking changes. Chunking quality is a different benchmark.
 - ``queries.jsonl`` -- one query per line: ``{id, text, category, qrels,
-  design_note}``. ``qrels`` maps corpus ids to grades (1 partial, 2 answers
-  the query); everything absent is grade 0. ``design_note`` records the trap
-  the query sets, so a future editor knows what a change would un-measure.
-- ``MANIFEST.json`` -- sha256 of both files, counts, and a dataset version.
+  design_note}``, plus ``required`` and ``cluster`` for multi-hop and
+  aggregation queries. ``qrels`` maps corpus ids to grades (1 partial, 2
+  answers the query); everything absent is grade 0. ``required`` is the
+  support set a complete answer needs (every document that must be joined or
+  aggregated), which is what the set metrics score; it is the same set
+  recorded in ``gold_subgraph.json``. ``cluster`` names the evidence cluster
+  (one per multi-hop document pair, one per aggregation group): the gate's
+  bootstrap resamples clusters, not queries, because several questions about
+  one document pair are not independent evidence (D-8). ``multihop_shape``
+  records whether a multi-hop pair is a bridge or two-facet (C4); it feeds a
+  descriptive breakdown, never the gate. ``design_note``
+  records the trap the query sets, so a future editor knows what a change
+  would un-measure.
+- ``gold_subgraph.json`` -- the support graph for multi-hop and aggregation
+  queries: required documents, joining/aggregated entities, required facts.
+- ``MANIFEST.json`` -- sha256 of every committed dataset file, counts, and a
+  dataset version.
   Metrics are only comparable against the same judgments, so editing the
   dataset is a deliberate act: it must update the manifest, and it
   invalidates committed baselines.
@@ -36,7 +49,23 @@ CATEGORIES = (
     "version-pinning",
     "acronym-synonym",
     "negation-constraint",
+    # Support-set categories: the answer is not one document. The graph bench
+    # scores them with set recall / full support over an explicit required set.
+    "multi-hop",
+    "aggregation",
 )
+
+# Categories whose answer needs more than one document, and therefore must
+# declare ``required``. A query in one of these that leaves the support set
+# implicit cannot be scored by the set metrics, only silently skipped.
+SUPPORT_SET_CATEGORIES = ("multi-hop", "aggregation")
+
+# Multi-hop evidence shapes, frozen at C4 (CJ, 2026-11-13) from the committed
+# text alone, before any arm ran. A *bridge* pair has one required document
+# reachable only through the joining entity; a *two-facet* pair names a facet
+# of each document independently. The report breaks the gate metrics down by
+# shape descriptively; the field never enters the gate.
+MULTIHOP_SHAPES = ("bridge", "two-facet")
 
 ROLES = ("target", "distractor", "background")
 
@@ -66,6 +95,18 @@ class BenchQuery:
     category: str
     qrels: dict[str, int] = field(default_factory=dict)
     design_note: str = ""
+    # None means the field is absent; an empty tuple means it was present but
+    # empty, which is a dataset bug the validator reports rather than erasing.
+    required: tuple[str, ...] | None = None
+    # The evidence cluster (D-8): one id per multi-hop document pair, one per
+    # aggregation group. The gate's primary interval resamples clusters, not
+    # queries, because two questions about one document pair are not
+    # independent evidence. Required exactly for support-set categories.
+    cluster: str | None = None
+    # Required exactly for multi-hop queries: ``bridge`` or ``two-facet``,
+    # read from the text at C4 and frozen with the queries. Both queries of a
+    # pair carry the cluster's shape.
+    multihop_shape: str | None = None
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -113,6 +154,9 @@ def load_queries(dataset_dir: Path) -> list[BenchQuery]:
             category=r["category"],
             qrels={k: int(v) for k, v in r["qrels"].items()},
             design_note=r.get("design_note", ""),
+            required=(None if "required" not in r else tuple(r["required"])),
+            cluster=r.get("cluster"),
+            multihop_shape=r.get("multihop_shape"),
         )
         for r in rows
     ]
@@ -137,10 +181,16 @@ def validate(dataset_dir: Path) -> list[str]:
     queries = load_queries(dataset_dir)
     manifest = load_manifest(dataset_dir)
 
-    # Integrity: the files are what the manifest says they are.
-    for name in ("corpus.jsonl", "queries.jsonl"):
-        actual = sha256_file(dataset_dir / name)
-        expected = manifest["sha256"][name]
+    # Integrity: every file the manifest names is what the manifest says it
+    # is. Files are added to the map as they are committed (gold_subgraph.json,
+    # and later the staged graph fixture), so the loop follows the manifest
+    # rather than a hardcoded list.
+    for name, expected in manifest["sha256"].items():
+        path = dataset_dir / name
+        if not path.exists():
+            problems.append(f"{name}: named by the manifest but missing")
+            continue
+        actual = sha256_file(path)
         if actual != expected:
             problems.append(
                 f"{name}: sha256 {actual} != manifest {expected} -- the dataset "
@@ -168,6 +218,15 @@ def validate(dataset_dir: Path) -> list[str]:
     if dupq:
         problems.append(f"duplicate query ids: {sorted(dupq)}")
 
+    # Cluster registries: within a category, one cluster id must mean one
+    # evidence unit -- the same support set, and no document shared with
+    # another cluster (a shared document would correlate the units D-8
+    # resamples as independent).
+    cluster_documents: dict[str, frozenset[str]] = {}
+    cluster_categories: dict[str, str] = {}
+    cluster_shapes: dict[str, str] = {}
+    document_clusters: dict[str, dict[str, str]] = {}
+
     for q in queries:
         for doc_id, grade in q.qrels.items():
             if doc_id not in id_set:
@@ -180,6 +239,107 @@ def validate(dataset_dir: Path) -> list[str]:
             problems.append(f"{q.id}: unknown category '{q.category}'")
         if not q.design_note:
             problems.append(f"{q.id}: missing design_note -- the trap must be recorded")
+
+        # The support set: explicit, resolvable, judged relevant, and big
+        # enough to be a set. A required document at grade 0 would mean the
+        # set metrics demand something the judgments call irrelevant.
+        if q.required is not None:
+            if not q.required:
+                problems.append(
+                    f"{q.id}: required is present but empty -- omit the field "
+                    "or list the support set"
+                )
+            for doc_id in q.required:
+                if doc_id not in id_set:
+                    problems.append(f"{q.id}: required '{doc_id}' names no corpus doc")
+                elif q.qrels.get(doc_id, 0) < 1:
+                    problems.append(f"{q.id}: required '{doc_id}' is not in qrels at grade >= 1")
+        if q.category in SUPPORT_SET_CATEGORIES:
+            if q.required is None:
+                problems.append(f"{q.id}: {q.category} query has no required support set")
+            elif len(set(q.required)) < 2:
+                problems.append(f"{q.id}: {q.category} query needs at least two required documents")
+            # D-8: the gate's primary interval resamples clusters; a query with
+            # no cluster id would silently be its own independent unit.
+            if not isinstance(q.cluster, str):
+                if q.cluster is None:
+                    problems.append(
+                        f"{q.id}: {q.category} query has no cluster id -- the "
+                        "bootstrap would resample it as independent evidence"
+                    )
+                else:
+                    problems.append(
+                        f"{q.id}: {q.category} query has an invalid cluster id "
+                        f"{q.cluster!r} -- it must be a non-empty string"
+                    )
+            elif not q.cluster.strip():
+                problems.append(
+                    f"{q.id}: {q.category} query has no cluster id -- the "
+                    "bootstrap would resample it as independent evidence"
+                )
+            else:
+                documents = frozenset(q.required or ())
+                previous_documents = cluster_documents.setdefault(q.cluster, documents)
+                if previous_documents != documents:
+                    problems.append(
+                        f"{q.id}: cluster {q.cluster!r} groups queries with "
+                        f"different support sets ({sorted(previous_documents)} vs "
+                        f"{sorted(documents)})"
+                    )
+                previous_category = cluster_categories.setdefault(q.cluster, q.category)
+                if previous_category != q.category:
+                    problems.append(
+                        f"{q.id}: cluster {q.cluster!r} is used by both "
+                        f"{previous_category} and {q.category} queries"
+                    )
+                seen = document_clusters.setdefault(q.category, {})
+                for doc_id in documents:
+                    other = seen.setdefault(doc_id, q.cluster)
+                    if other != q.cluster:
+                        problems.append(
+                            f"{q.id}: document '{doc_id}' is in clusters "
+                            f"{other!r} and {q.cluster!r} of the same category -- "
+                            "the units are not independent"
+                        )
+        elif q.cluster is not None:
+            problems.append(
+                f"{q.id}: non-support-set query carries a cluster id -- cluster "
+                "ids describe support-set evidence units (D-8)"
+            )
+
+        # C4: the shape is a property of the multi-hop cluster, read from the
+        # text before any arm ran. It feeds a descriptive breakdown only.
+        shape = q.multihop_shape
+        if q.category == "multi-hop":
+            if not isinstance(shape, str):
+                if shape is None:
+                    problems.append(
+                        f"{q.id}: multi-hop query has no multihop_shape -- the "
+                        "bridge/two-facet breakdown is pre-registered at C4"
+                    )
+                else:
+                    problems.append(
+                        f"{q.id}: invalid multihop_shape {shape!r} -- it must "
+                        f"be one of {MULTIHOP_SHAPES}"
+                    )
+            elif shape not in MULTIHOP_SHAPES:
+                problems.append(
+                    f"{q.id}: invalid multihop_shape {shape!r} -- it must be "
+                    f"one of {MULTIHOP_SHAPES}"
+                )
+            elif isinstance(q.cluster, str) and q.cluster.strip():
+                previous_shape = cluster_shapes.setdefault(q.cluster, shape)
+                if previous_shape != shape:
+                    problems.append(
+                        f"{q.id}: cluster {q.cluster!r} mixes multihop_shape "
+                        f"{previous_shape!r} and {shape!r} -- the shape "
+                        "describes the evidence unit, not the query"
+                    )
+        elif shape is not None:
+            problems.append(
+                f"{q.id}: non-multi-hop query carries multihop_shape -- the "
+                "field describes multi-hop evidence units only"
+            )
 
     for d in corpus:
         if d.role not in ROLES:

@@ -1,13 +1,17 @@
 {
   "dataset": "docugraph-retrieval-bench",
-  "version": "0.2.0-full",
-  "description": "Hand-authored adversarial documentation corpus (fictional 'Quorva' SDK) with graded relevance judgments across seven retrieval failure modes. Full scale: keyword-trap distractors cover many distinct query terms (not one repeated token), semantic-distractor queries share few exact tokens with their target, and background is grown so top-10 is not near-saturated. See the benchmark README section for authoring rules.",
+  "version": "0.3.0-graph-bench",
+  "description": "Hand-authored adversarial documentation corpus (fictional 'Quorva' SDK) with graded relevance judgments across seven retrieval failure modes plus two support-set categories (multi-hop, aggregation) that declare an explicit required set. gold_subgraph.json records the support graph the graph-bench fidelity row checks against. See the benchmark README section for authoring rules.",
   "counts": {
-    "corpus": 70,
-    "queries": 56
+    "corpus": 107,
+    "queries": 104
   },
   "sha256": {
-    "corpus.jsonl": "edc8be7d9aefb93cc994e1d2e4cec0d2b08d1e786ce6df26c42e645626fd859f",
-    "queries.jsonl": "8ad5156171fb8d91a360f888c79fdc020c24711619c774daf5f22f566d1d3fe1"
+    "corpus.jsonl": "0200c2def73c6849f41684ca381fcf16de048eb81a22c16e6d1c8866daea1e2b",
+    "queries.jsonl": "529616c280461eb13cb9429eccb041e63ed9c1a6cae2fcc688c8b1a616875a87",
+    "gold_subgraph.json": "e33a628bec9ebbc366312a7ec2e16d6233731996271d0b90287a580432945c2a",
+    "graph_fixture/graph.jsonl": "f6a8c8e3808b2fe5430e582caccf956c9efb7cd67b6a8867fb63e56f7d9d9e46",
+    "graph_fixture/schema.cypher": "8256908614c2532e630457166a2d9f72af9b6d9a3894d328ed7405c59d075fce",
+    "graph_fixture/MANIFEST.json": "ea0ed10b3d23df3eb2b3222f1302fdcbe667ca1b4f86338b43bb980938c0da90"
   }
 }

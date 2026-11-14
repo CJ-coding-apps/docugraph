@@ -92,6 +92,13 @@ class LLMProviderBase(ABC):
         ...
 
 
+_SCHEMA_ECHO_CORRECTION = (
+    "Your previous reply repeated the JSON schema's field descriptions instead of "
+    "answering. Return only a JSON object with concrete values for every required "
+    "field; do not echo the schema or its descriptions."
+)
+
+
 def _make_resilient_graphiti_client(llm_config: Any) -> Any:
     """Build a Graphiti OpenAIGenericClient that tolerates loose JSON shapes.
 
@@ -162,12 +169,30 @@ def _make_resilient_graphiti_client(llm_config: Any) -> Any:
             if self.temperature is not None:
                 request["temperature"] = self.temperature
             try:
-                response = await self.client.chat.completions.create(**request)
-                text = response.choices[0].message.content or ""
-                if not text:
-                    raise EmptyResponseError("LLM returned an empty response")
-                parsed = self._loads_tolerant(self._strip_code_fences(text))
-                return self._coerce_to_schema(parsed, response_model)
+                # A schema-in-prompt model occasionally answers by repeating the
+                # schema (measured: deepseek-v4.1-flash:cloud returned the
+                # `EdgeDuplicate` property descriptions instead of idx lists).
+                # One corrective retry, then surface the failure rather than
+                # fabricating a value.
+                for attempt in range(2):
+                    response = await self.client.chat.completions.create(**request)
+                    text = response.choices[0].message.content or ""
+                    if not text:
+                        raise EmptyResponseError("LLM returned an empty response")
+                    parsed = self._loads_tolerant(self._strip_code_fences(text))
+                    if attempt == 0 and self._is_schema_echo(parsed, response_model):
+                        request["messages"] = [
+                            *request["messages"],
+                            {"role": "user", "content": _SCHEMA_ECHO_CORRECTION},
+                        ]
+                        continue
+                    if self._is_schema_echo(parsed, response_model):
+                        raise EmptyResponseError(
+                            "LLM repeated the response schema instead of answering, "
+                            "after a corrective retry"
+                        )
+                    return self._coerce_to_schema(parsed, response_model)
+                raise EmptyResponseError("LLM returned no usable response")
             except _openai.RateLimitError as e:
                 raise RateLimitError from e
 
@@ -204,16 +229,56 @@ def _make_resilient_graphiti_client(llm_config: Any) -> Any:
             if not isinstance(result, dict):
                 return {}
 
+            # A model shown the schema may echo the schema's own envelope,
+            # nesting the real payload under `properties` (measured:
+            # deepseek-v4.1-flash:cloud returned
+            # `{"properties": {"duplicate_facts": [...], "contradicted_facts": []}}`
+            # for Graphiti's `EdgeDuplicate`, whose two required fields then
+            # read as missing). Unwrap only that envelope -- a sibling `type`/
+            # `title` is part of the same echo -- and only when the target model
+            # does not itself declare a `properties` field.
+            payload: dict[str, Any] = result
+            if (
+                isinstance(result.get("properties"), dict)
+                and "properties" not in getattr(response_model, "model_fields", {})
+                and set(result)
+                <= {"properties", "type", "title", "required", "additionalProperties"}
+            ):
+                payload = result["properties"]
+
             # Normalize each list item's keys to the item model's field names
             # (e.g. models that emit `entity_name` where the schema wants
             # `name`). Only *missing* fields are filled, so exact-match fields
             # like `source_entity_name` are never disturbed.
-            if list_field and item_model and isinstance(result.get(list_field), list):
-                result[list_field] = [
+            if list_field and item_model and isinstance(payload.get(list_field), list):
+                payload[list_field] = [
                     cls._normalize_item(item, item_model) if isinstance(item, dict) else item
-                    for item in result[list_field]
+                    for item in payload[list_field]
                 ]
-            return result
+            return payload
+
+        @staticmethod
+        def _is_schema_echo(result: Any, response_model: Any) -> bool:
+            """True when a response repeated the schema's property descriptions.
+
+            With the schema in the prompt a model sometimes fills the envelope
+            with real values and sometimes with the schema fragment itself
+            (``{"duplicate_facts": {"type": "array", "description": ...}}``).
+            Only the latter is an echo -- a schema fragment where a value
+            belongs -- and it must not be coerced into a fabricated answer.
+            """
+            if response_model is None or not isinstance(result, dict):
+                return False
+            payload = result.get("properties", result)
+            if not isinstance(payload, dict):
+                return False
+            for name in getattr(response_model, "model_fields", {}):
+                value = payload.get(name)
+                if isinstance(value, dict) and {"type", "description", "items", "$ref"} & set(
+                    value
+                ):
+                    return True
+            return False
 
         @staticmethod
         def _list_field(model: Any) -> tuple[str | None, Any]:
@@ -243,7 +308,17 @@ def _make_resilient_graphiti_client(llm_config: Any) -> Any:
                         break
             return out
 
-    return ResilientGraphitiClient(config=llm_config)
+    # `json_object` is not a downgrade here, it is the mode this client needs.
+    # In `json_schema` mode Graphiti relies on the server to enforce the schema;
+    # Ollama's OpenAI-compatible endpoint ignores `response_format` for several
+    # models (measured: deepseek-v4.1-flash:cloud returned prose, and a bare
+    # list of `{name, type}` objects for the extraction prompt), so the required
+    # `entity_type_id` never arrives and `Model(**json.loads(...))` fails. In
+    # `json_object` mode Graphiti appends the response model's JSON schema to
+    # the prompt, which those models do follow, and this class's tolerant parser
+    # is what makes the result safe to validate. The override above replaces
+    # only the request loop, so the injection in `generate_response` still runs.
+    return ResilientGraphitiClient(config=llm_config, structured_output_mode="json_object")
 
 
 def _graphiti_temperature(value: float | None) -> float:

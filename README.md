@@ -399,11 +399,24 @@ keyword-stuffed distractor pages, near-sibling semantic distractors, version-
 pinned questions, acronym/synonym gaps, and "X without Y" constraint queries.
 Each query records the trap it sets in a `design_note`, and a manifest pins the
 dataset by hash — editing it is a deliberate act that invalidates baselines.
-The corpus holds 70 documents and 56 queries, eight per failure mode; the
-keyword-trap distractors are built to cover many *distinct* query terms rather
-than repeat one (BM25 saturates a repeated term, so a one-token trap does not
-bind), and the semantic-distractor queries share few exact tokens with their
-target so that only meaning — not lexical overlap — can recover them.
+The corpus holds 107 documents and 104 queries: 56 eight-per-failure-mode
+queries, plus 32 multi-hop (16 document pairs) and 16 aggregation queries
+added for the graph benchmark. Support-set queries declare a `required` set —
+every document a complete answer needs — which `set_recall@k` and
+`full_support@k` score; the
+same set is recorded in `gold_subgraph.json` together with the joining entity
+and required facts. They also carry a `cluster` id (one per multi-hop document
+pair, one per aggregation group): the graph benchmark's bootstrap resamples
+clusters rather than queries, because two questions about the same documents
+are not independent evidence. Multi-hop queries additionally carry a
+`multihop_shape` frozen from the text — `bridge` when one required document is
+reachable only through the joining entity, `two-facet` otherwise; two pairs are
+bridge and fourteen two-facet, and the graph benchmark reports the gate metrics
+split by shape descriptively, without gating on the split. The keyword-trap distractors are built to cover many
+*distinct* query terms rather than repeat one (BM25 saturates a repeated term,
+so a one-token trap does not bind), and the semantic-distractor queries share
+few exact tokens with their target so that only meaning — not lexical overlap —
+can recover them.
 
 ```bash
 # Score every arm (vector-only, BM25-only, LanceDB-native hybrid, RRF, weighted)

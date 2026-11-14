@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -205,13 +205,26 @@ class GraphStore:
     LLM-agnostic: Works with Ollama (local), OpenAI, or Anthropic.
     """
 
-    def __init__(self, db_path: Path | str | None = None) -> None:
+    def __init__(
+        self,
+        db_path: Path | str | None = None,
+        *,
+        llm_client: Any | None = None,
+        embedder: Any | None = None,
+    ) -> None:
         """Initialize the graph store.
 
         Args:
             db_path: Path to the graph directory. The database file or
                 directory inside it is chosen by the configured backend. If
                 None, uses the config default.
+            llm_client: A ready Graphiti ``LLMClient`` to use instead of
+                resolving one from config. Used by the benchmark, which must
+                open a graph with no LLM available at all.
+            embedder: The embedder to use for this store. Either a docugraph
+                ``EmbeddingProviderBase`` (wrapped for Graphiti) or a ready
+                Graphiti ``EmbedderClient``. Used by the benchmark so the
+                fixture's own embedder is the one attached to the graph.
         """
         config = get_config()
         if db_path is None:
@@ -222,6 +235,8 @@ class GraphStore:
         self._db_path = Path(db_path)
         self._db_path.mkdir(parents=True, exist_ok=True)
 
+        self._llm_override = llm_client
+        self._embedder_override = embedder
         self._graphiti: Any | None = None
         self._driver: Any | None = None
         self._initialized = False
@@ -230,6 +245,30 @@ class GraphStore:
     def backend(self) -> GraphBackend:
         """The backend this store was constructed for."""
         return self._backend
+
+    def _resolve_llm_client(self) -> Any:
+        """The injected LLM client, or the configured one (the normal path).
+
+        The override exists for the benchmark: it opens a graph with an LLM
+        that raises if anything tries to generate, which is how "no LLM at
+        query time" is proved rather than assumed.
+        """
+        if self._llm_override is not None:
+            return self._llm_override
+        return get_graphiti_llm_client()
+
+    def _resolve_embedder(self) -> Any:
+        """The injected embedder (wrapped for Graphiti), or the configured one.
+
+        A docugraph embedder is adapted rather than required to speak Graphiti's
+        interface, so the benchmark can attach the same embedder the fixture was
+        built with without constructing a second client.
+        """
+        if self._embedder_override is None:
+            return _get_embedder()
+        if isinstance(self._embedder_override, EmbeddingProviderBase):
+            return GraphitiEmbedderAdapter(self._embedder_override)
+        return self._embedder_override
 
     async def _ensure_initialized(self) -> Any:
         """Lazily initialize Graphiti; returns the ready Graphiti instance."""
@@ -247,8 +286,8 @@ class GraphStore:
         # not be reported as "no LLM is configured".
         if self._backend == GraphBackend.LADYBUG:
             artifact = self._resolve_ladybug_fts()
-            llm_client = get_graphiti_llm_client()
-            embedder = _get_embedder()
+            llm_client = self._resolve_llm_client()
+            embedder = self._resolve_embedder()
             self._driver = self._open_ladybug_driver(artifact)
         else:
             # Import the module that actually carries the feature: it is the
@@ -258,8 +297,8 @@ class GraphStore:
 
             from graphiti_core.driver.kuzu_driver import KuzuDriver
 
-            llm_client = get_graphiti_llm_client()
-            embedder = _get_embedder()
+            llm_client = self._resolve_llm_client()
+            embedder = self._resolve_embedder()
             self._driver = KuzuDriver(db=str(self._db_path / "graphiti.kuzu"))
 
         # graphiti-core 0.30's deprecated Kùzu backend never sets `_database`,
@@ -595,6 +634,131 @@ class GraphStore:
                         return entities
 
         return entities
+
+    # -- Benchmark read helpers: eval use; not a stable API ------------------
+
+    async def _search_nodes(
+        self,
+        group_ids: Sequence[str],
+        *,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Every entity in the named groups, with the episodes that mention it.
+
+        Eval use; not a stable API. The benchmark's entity-seeded arms rank
+        entities by embedding themselves, so they need the whole namespace as
+        rows, not a top-k from a search recipe. Group scoping happens in the
+        query (test N1 depends on it).
+
+        Returns rows ordered by uuid: ``{"uuid", "name", "group_id",
+        "name_embedding", "episodes": [{"uuid", "name"}]}``. ``limit`` is
+        applied after ordering, so a truncated read is deterministic.
+        """
+        await self._ensure_initialized()
+        driver = self._driver
+        assert driver is not None  # noqa: S101 -- set above
+
+        entities: dict[str, dict[str, Any]] = {}
+        for group_id in group_ids:
+            records, _, _ = await driver.execute_query(
+                "MATCH (n:Entity) WHERE n.group_id = $group_id "
+                "RETURN n.uuid, n.name, n.group_id, n.name_embedding "
+                "ORDER BY n.uuid",
+                group_id=group_id,
+            )
+            for row in records or []:
+                uuid = row["n.uuid"]
+                entities[uuid] = {
+                    "uuid": uuid,
+                    "name": row["n.name"],
+                    "group_id": row["n.group_id"],
+                    "name_embedding": list(row["n.name_embedding"] or []),
+                    "episodes": [],
+                }
+
+        for group_id in group_ids:
+            records, _, _ = await driver.execute_query(
+                "MATCH (ep:Episodic)-[:MENTIONS]->(n:Entity) "
+                "WHERE ep.group_id = $group_id AND n.group_id = $group_id "
+                "RETURN ep.uuid, ep.name, n.uuid "
+                "ORDER BY ep.name, ep.uuid, n.uuid",
+                group_id=group_id,
+            )
+            for row in records or []:
+                entity = entities.get(row["n.uuid"])
+                if entity is not None:
+                    entity["episodes"].append({"uuid": row["ep.uuid"], "name": row["ep.name"]})
+
+        rows = [entities[uuid] for uuid in sorted(entities)]
+        return rows[:limit] if limit is not None else rows
+
+    async def _list_episodes(self, group_ids: Sequence[str]) -> list[dict[str, str]]:
+        """Every episode in the named groups: ``{"uuid", "name"}``, by uuid.
+
+        Eval use; not a stable API. The benchmark maps an episode's ``name``
+        to a corpus chunk id, so it must be able to enumerate episodes that no
+        mention points at, not just the ones reached from an entity.
+        """
+        await self._ensure_initialized()
+        driver = self._driver
+        assert driver is not None  # noqa: S101 -- set above
+
+        episodes: dict[str, str] = {}
+        for group_id in group_ids:
+            records, _, _ = await driver.execute_query(
+                "MATCH (ep:Episodic) WHERE ep.group_id = $group_id "
+                "RETURN ep.uuid, ep.name ORDER BY ep.uuid",
+                group_id=group_id,
+            )
+            for row in records or []:
+                episodes[row["ep.uuid"]] = row["ep.name"]
+        return [{"uuid": uuid, "name": episodes[uuid]} for uuid in sorted(episodes)]
+
+    async def _edges_for_nodes(
+        self,
+        node_uuids: Sequence[str],
+        group_ids: Sequence[str],
+    ) -> list[dict[str, Any]]:
+        """Facts whose source entity is one of ``node_uuids``, with both ends.
+
+        Eval use; not a stable API. "Incident" means the fact's source entity
+        is in the set -- the same reading the Phase 0 probe used, and the one
+        the pre-registration's expansion defines.
+
+        Returns rows ordered by (fact uuid, source uuid): ``{"uuid", "fact",
+        "fact_embedding", "episodes", "source_uuid", "target_uuid"}``.
+        """
+        await self._ensure_initialized()
+        driver = self._driver
+        assert driver is not None  # noqa: S101 -- set above
+
+        rows: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for group_id in group_ids:
+            for node_uuid in node_uuids:
+                records, _, _ = await driver.execute_query(
+                    "MATCH (a:Entity {uuid: $uuid})-[:RELATES_TO]->(e:RelatesToNode_)"
+                    "-[:RELATES_TO]->(b:Entity) "
+                    "WHERE e.group_id = $group_id AND a.group_id = $group_id "
+                    "AND b.group_id = $group_id "
+                    "RETURN e.uuid, e.fact, e.fact_embedding, e.episodes, "
+                    "a.uuid, b.uuid ORDER BY e.uuid, a.uuid, b.uuid",
+                    uuid=node_uuid,
+                    group_id=group_id,
+                )
+                for row in records or []:
+                    key = (row["e.uuid"], row["a.uuid"], row["b.uuid"])
+                    rows.setdefault(
+                        key,
+                        {
+                            "uuid": row["e.uuid"],
+                            "fact": row["e.fact"],
+                            "fact_embedding": list(row["e.fact_embedding"] or []),
+                            "episodes": list(row["e.episodes"] or []),
+                            "source_uuid": row["a.uuid"],
+                            "target_uuid": row["b.uuid"],
+                        },
+                    )
+        return [rows[key] for key in sorted(rows)]
 
     async def get_related(
         self,
