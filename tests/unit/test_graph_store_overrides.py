@@ -6,6 +6,8 @@ change what an ordinary ``GraphStore()`` does: with no overrides it resolves the
 configured clients exactly as before, and those are the only configured lookups.
 """
 
+import pytest
+
 from docugraph.core.embeddings import EmbeddingProviderBase
 from docugraph.storage import graph_store as gs
 
@@ -77,6 +79,7 @@ def test_injected_clients_are_used_and_config_is_not_consulted(monkeypatch, tmp_
 
 def test_a_graphiti_embedder_is_passed_through_unchanged(tmp_path):
     """An already-Graphiti client is not wrapped (or rebuilt) a second time."""
+    pytest.importorskip("graphiti_core")
     from graphiti_core.embedder.client import EmbedderClient
 
     class GraphitiEmbedder(EmbedderClient):

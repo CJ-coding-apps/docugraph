@@ -57,6 +57,7 @@ _REQUIRED_EXTRA = {
     "test_graph_bench_fixture.py": "graph",
     "test_graph_bench_gate.py": "graph",
     "test_graph_bench_real_fixture.py": "graph",
+    "test_graph_report.py": "graph",
     "test_build_graph_fixture.py": "graph",
     "test_ladybug_driver.py": "ladybug",
     "test_graph_ladybug.py": "ladybug",

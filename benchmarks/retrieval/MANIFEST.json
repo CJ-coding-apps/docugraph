@@ -9,6 +9,9 @@
   "sha256": {
     "corpus.jsonl": "0200c2def73c6849f41684ca381fcf16de048eb81a22c16e6d1c8866daea1e2b",
     "queries.jsonl": "529616c280461eb13cb9429eccb041e63ed9c1a6cae2fcc688c8b1a616875a87",
-    "gold_subgraph.json": "e33a628bec9ebbc366312a7ec2e16d6233731996271d0b90287a580432945c2a"
+    "gold_subgraph.json": "e33a628bec9ebbc366312a7ec2e16d6233731996271d0b90287a580432945c2a",
+    "graph_fixture/graph.jsonl": "f6a8c8e3808b2fe5430e582caccf956c9efb7cd67b6a8867fb63e56f7d9d9e46",
+    "graph_fixture/schema.cypher": "8256908614c2532e630457166a2d9f72af9b6d9a3894d328ed7405c59d075fce",
+    "graph_fixture/MANIFEST.json": "ea0ed10b3d23df3eb2b3222f1302fdcbe667ca1b4f86338b43bb980938c0da90"
   }
 }
