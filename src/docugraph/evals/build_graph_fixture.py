@@ -139,9 +139,7 @@ def _manifest(output: Path, provider: Any) -> dict[str, Any]:
     return {
         "fixture": FIXTURE_FORMAT,
         "group_id": GRAPH_GROUP_ID,
-        "ingest_reference_time": INGEST_REFERENCE_TIME.isoformat().replace(
-            "+00:00", "Z"
-        ),
+        "ingest_reference_time": INGEST_REFERENCE_TIME.isoformat().replace("+00:00", "Z"),
         "llm_provider": str(getattr(provider, "provider_name", "")),
         "llm_model": str(getattr(provider, "model_name", "")),
         "prompt_sha256": _prompt_sha256(),

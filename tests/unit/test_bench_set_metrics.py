@@ -45,9 +45,7 @@ class TestSetRecallEqualsExistingRecall:
         # on the queries that baseline scored, so resolve its ids instead of
         # pinning the file's total at 56.
         baseline_ids = {
-            row["query_id"]
-            for arm in baseline["arms"].values()
-            for row in arm["per_query"]
+            row["query_id"] for arm in baseline["arms"].values() for row in arm["per_query"]
         }
         missing = sorted(baseline_ids - set(queries))
         assert not missing, f"baseline names queries absent from the dataset: {missing}"
@@ -82,7 +80,6 @@ class TestFullSupport:
     def test_full_support_needs_the_whole_set_inside_the_cutoff(self):
         assert full_support_at_k(["a", "b"], {"a", "b"}, 10) == 1.0
         assert full_support_at_k(["a", "b"], {"a", "b"}, 1) == 0.0
-
 
     def test_empty_required_set_is_skipped_not_vacuously_full(self):
         """No support set means nothing to measure: None, like recall's skip.

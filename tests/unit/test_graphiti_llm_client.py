@@ -108,7 +108,9 @@ class TestSchemaEcho:
 
     def test_plain_payload_not_echo(self):
         client = _client()
-        assert not client._is_schema_echo({"duplicate_facts": [], "contradicted_facts": []}, _EdgeDuplicate)
+        assert not client._is_schema_echo(
+            {"duplicate_facts": [], "contradicted_facts": []}, _EdgeDuplicate
+        )
 
     def _with_fake_responses(self, client, responses):
         from types import SimpleNamespace

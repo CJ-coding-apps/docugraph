@@ -310,6 +310,81 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -m "not requires_extras" -v
 
+  # WP-docugraph-0.5.0 §6: the fixture's integrity, the graph arms run from the
+  # committed export, and determinism. There is no LLM key here and none is
+  # needed: the fixture is the export of one extraction that happened offline,
+  # and the query path is proved not to reach an LLM by tests (D2). A run that
+  # needed a key would be measuring an extraction nobody can reproduce.
+  #
+  # The outcome is not asserted. A gate that reports NOT MET is a result, not a
+  # build failure; what must hold is that the same inputs produce the same
+  # bytes, because the numbers the gate is computed from are those bytes.
+  graph-bench:
+    name: Graph bench (fixture + determinism)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dependencies
+        run: uv sync --extra dev --extra graph
+
+      - name: Cache fastembed models
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+
+      # F1/F2: every content hash and every recorded version in the manifest.
+      # Its own step so a bad fixture names itself here rather than surfacing as
+      # a parser error from whichever arm read it first.
+      - name: Verify the fixture manifest
+        run: |
+          uv run python - <<'PY'
+          import sys
+          from pathlib import Path
+
+          from docugraph.evals.graph_bench import verify_fixture_manifest
+
+          fixture = Path("benchmarks/retrieval/graph_fixture")
+          problems = verify_fixture_manifest(fixture)
+          if problems:
+              print("\n".join(problems))
+              sys.exit(f"{len(problems)} problem(s) in {fixture}/MANIFEST.json")
+          print(f"{fixture}/MANIFEST.json verifies")
+          PY
+
+      # D1 in two fresh processes: the same inputs must produce the same bytes
+      # under a different hash seed. A tie broken by set-iteration order would
+      # move the numbers without moving the code.
+      - name: Run the bench (PYTHONHASHSEED=0)
+        env:
+          PYTHONHASHSEED: "0"
+        run: uv run python -m docugraph.evals.graph_report --output "$RUNNER_TEMP/graph-bench-0.json"
+
+      - name: Run the bench again (PYTHONHASHSEED=12345, fresh process)
+        env:
+          PYTHONHASHSEED: "12345"
+        run: uv run python -m docugraph.evals.graph_report --output "$RUNNER_TEMP/graph-bench-1.json"
+
+      - name: Assert the two runs are byte-identical
+        run: |
+          if ! cmp "$RUNNER_TEMP/graph-bench-0.json" "$RUNNER_TEMP/graph-bench-1.json"; then
+            echo "::error::the graph bench is not deterministic: two runs under different PYTHONHASHSEED values differed"
+            exit 1
+          fi
+          sha256sum "$RUNNER_TEMP/graph-bench-0.json" "$RUNNER_TEMP/graph-bench-1.json"
+
   docker:
     # Builds the image but never publishes it: docker-publish.yml owns pushing,
     # and that only triggers on a tag. This job exists so a dependency change
@@ -706,6 +781,7 @@ jobs:
       - test-minimal-macos
       - integration-browser
       - integration-browser-macos
+      - graph-bench
       - graph-ladybug
       - graphiti-conformance-ladybug
       - migration-ladybug
@@ -725,6 +801,7 @@ jobs:
           check test-minimal-macos "${{ needs['test-minimal-macos'].result }}"
           check integration-browser "${{ needs['integration-browser'].result }}"
           check integration-browser-macos "${{ needs['integration-browser-macos'].result }}"
+          check graph-bench "${{ needs['graph-bench'].result }}"
           check graph-ladybug "${{ needs['graph-ladybug'].result }}"
           check graphiti-conformance-ladybug "${{ needs['graphiti-conformance-ladybug'].result }}"
           check migration-ladybug "${{ needs['migration-ladybug'].result }}"

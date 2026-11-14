@@ -49,9 +49,7 @@ FIXTURE_FORMAT = "docugraph-graph-fixture/1"
 # The corpus document ids the synthetic fixture stands for. The graph arms
 # map an episode's ``name`` to a chunk id and must refuse a name outside this
 # set (pre-registration, "Mapping to chunks/units of relevance").
-SYNTH_DOC_IDS = frozenset(
-    {"bench-doc-a", "bench-doc-b", "bench-doc-c", "bench-doc-d"}
-)
+SYNTH_DOC_IDS = frozenset({"bench-doc-a", "bench-doc-b", "bench-doc-c", "bench-doc-d"})
 
 # Every arm the work order defines. The fused arms are included: a test that
 # says "every graph arm" means all five.
@@ -508,10 +506,7 @@ def run_fixture_arms(
         )
         if names is not None:
             arms = {name: arms[name] for name in names}
-        return {
-            name: [arm(query, top_k) for query in queries]
-            for name, arm in arms.items()
-        }
+        return {name: [arm(query, top_k) for query in queries] for name, arm in arms.items()}
     finally:
         loop.run_until_complete(store.close())
         loop.close()
@@ -522,10 +517,7 @@ def canonical_rankings(
 ) -> str:
     """Ranked ids and scores rounded to 1e-6, in canonical JSON (P0-4 form)."""
     payload = {
-        name: [
-            [[chunk_id, round(float(score), 6)] for chunk_id, score in row]
-            for row in rows
-        ]
+        name: [[[chunk_id, round(float(score), 6)] for chunk_id, score in row] for row in rows]
         for name, rows in rankings.items()
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -557,9 +549,7 @@ def require_real_graph_fixture() -> Path:
 
     manifest_path = GRAPH_FIXTURE / "MANIFEST.json"
     if not manifest_path.is_file():
-        pytest.fail(
-            f"{manifest_path} is listed in {corpus_manifest_path} but does not exist"
-        )
+        pytest.fail(f"{manifest_path} is listed in {corpus_manifest_path} but does not exist")
     try:
         problems = verify_fixture_manifest(GRAPH_FIXTURE)
     except Exception as exc:  # noqa: BLE001 - any read failure is a hard failure

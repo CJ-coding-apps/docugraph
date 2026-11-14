@@ -253,18 +253,12 @@ def validate(dataset_dir: Path) -> list[str]:
                 if doc_id not in id_set:
                     problems.append(f"{q.id}: required '{doc_id}' names no corpus doc")
                 elif q.qrels.get(doc_id, 0) < 1:
-                    problems.append(
-                        f"{q.id}: required '{doc_id}' is not in qrels at grade >= 1"
-                    )
+                    problems.append(f"{q.id}: required '{doc_id}' is not in qrels at grade >= 1")
         if q.category in SUPPORT_SET_CATEGORIES:
             if q.required is None:
-                problems.append(
-                    f"{q.id}: {q.category} query has no required support set"
-                )
+                problems.append(f"{q.id}: {q.category} query has no required support set")
             elif len(set(q.required)) < 2:
-                problems.append(
-                    f"{q.id}: {q.category} query needs at least two required documents"
-                )
+                problems.append(f"{q.id}: {q.category} query needs at least two required documents")
             # D-8: the gate's primary interval resamples clusters; a query with
             # no cluster id would silently be its own independent unit.
             if not isinstance(q.cluster, str):
@@ -285,18 +279,14 @@ def validate(dataset_dir: Path) -> list[str]:
                 )
             else:
                 documents = frozenset(q.required or ())
-                previous_documents = cluster_documents.setdefault(
-                    q.cluster, documents
-                )
+                previous_documents = cluster_documents.setdefault(q.cluster, documents)
                 if previous_documents != documents:
                     problems.append(
                         f"{q.id}: cluster {q.cluster!r} groups queries with "
                         f"different support sets ({sorted(previous_documents)} vs "
                         f"{sorted(documents)})"
                     )
-                previous_category = cluster_categories.setdefault(
-                    q.cluster, q.category
-                )
+                previous_category = cluster_categories.setdefault(q.cluster, q.category)
                 if previous_category != q.category:
                     problems.append(
                         f"{q.id}: cluster {q.cluster!r} is used by both "

@@ -47,9 +47,7 @@ def _doc_ids() -> set[str]:
     return {doc.id for doc in load_corpus(DATASET)}
 
 
-def _rank_real_fixture(
-    fixture: Path, manifest: dict, queries: list[str], db_path: Path
-) -> dict:
+def _rank_real_fixture(fixture: Path, manifest: dict, queries: list[str], db_path: Path) -> dict:
     return run_fixture_arms(
         fixture,
         queries,
@@ -59,7 +57,7 @@ def _rank_real_fixture(
     )
 
 
-_CHILD_SCRIPT = '''\
+_CHILD_SCRIPT = """\
 import asyncio
 import hashlib
 import json
@@ -166,7 +164,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
+"""
 
 
 class TestDeterminismAcrossProcesses:
@@ -301,9 +299,9 @@ class TestManifestIntegrity:
         from docugraph.evals.graph_bench import verify_fixture_manifest
 
         problems = verify_fixture_manifest(tampered)
-        assert any(
-            "graph.jsonl" in problem and "sha256" in problem for problem in problems
-        ), f"tampering with graph.jsonl was not reported as a sha256 mismatch: {problems}"
+        assert any("graph.jsonl" in problem and "sha256" in problem for problem in problems), (
+            f"tampering with graph.jsonl was not reported as a sha256 mismatch: {problems}"
+        )
 
     def test_staged_fixture_manifest_verifies_clean(self):
         """Once staged, the committed fixture must pass its own check."""
@@ -316,9 +314,7 @@ class TestManifestIntegrity:
     def test_staged_fixture_hash_is_in_the_corpus_manifest(self):
         """The staging marker is itself an integrity-checked corpus file."""
         fixture = require_real_graph_fixture()
-        corpus_manifest = json.loads(
-            (DATASET / "MANIFEST.json").read_text(encoding="utf-8")
-        )
+        corpus_manifest = json.loads((DATASET / "MANIFEST.json").read_text(encoding="utf-8"))
         expected = corpus_manifest["sha256"]["graph_fixture/MANIFEST.json"]
         actual = sha256_file(fixture / "MANIFEST.json")
         assert actual == expected, (

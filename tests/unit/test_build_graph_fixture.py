@@ -71,12 +71,8 @@ def test_refuses_without_an_llm_configured(tmp_path):
     before = _fixture_dir_state()
     proc = _run(["--i-am-regenerating"], tmp_path)
     combined = (proc.stdout + proc.stderr).lower()
-    assert proc.returncode != 0, (
-        f"the builder exited 0 with no LLM configured; output:\n{combined}"
-    )
-    assert "llm" in combined, (
-        f"the refusal does not say an LLM is required; output:\n{combined}"
-    )
+    assert proc.returncode != 0, f"the builder exited 0 with no LLM configured; output:\n{combined}"
+    assert "llm" in combined, f"the refusal does not say an LLM is required; output:\n{combined}"
     assert "key" in combined or "configur" in combined, (
         f"the refusal does not say how to configure the LLM; output:\n{combined}"
     )

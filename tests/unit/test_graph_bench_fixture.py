@@ -31,9 +31,7 @@ def synthetic(tmp_path_factory):
 
 
 class TestManifestIntegrity:
-    def test_manifest_graphiti_version_must_match_the_installed_one(
-        self, synthetic, tmp_path
-    ):
+    def test_manifest_graphiti_version_must_match_the_installed_one(self, synthetic, tmp_path):
         """F2: a version mismatch fails, naming both versions."""
         tampered = copy_fixture(synthetic, tmp_path / "graph_fixture")
         manifest_path = tampered / "MANIFEST.json"
@@ -85,12 +83,8 @@ class TestExportImportRoundTrip:
             (synthetic / "MANIFEST.json").read_text(encoding="utf-8"), encoding="utf-8"
         )
 
-        source = {
-            record_key(record): record for record in gb.load_graph_fixture(synthetic)
-        }
-        round_trip = {
-            record_key(record): record for record in gb.load_graph_fixture(exported)
-        }
+        source = {record_key(record): record for record in gb.load_graph_fixture(synthetic)}
+        round_trip = {record_key(record): record for record in gb.load_graph_fixture(exported)}
         assert set(round_trip) == set(source), (
             "export/import changed the record set: "
             f"missing={sorted(set(source) - set(round_trip))}, "

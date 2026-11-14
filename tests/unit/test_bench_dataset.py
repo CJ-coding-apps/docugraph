@@ -83,9 +83,7 @@ class TestCommittedDataset:
                 assert len(support_sets) == 1, f"{cluster} has more than one support set"
                 for doc_id in next(iter(support_sets)):
                     other = documents_seen.setdefault(doc_id, cluster)
-                    assert other == cluster, (
-                        f"{category}: {doc_id} is in {other} and {cluster}"
-                    )
+                    assert other == cluster, f"{category}: {doc_id} is in {other} and {cluster}"
 
     def test_multihop_shape_is_the_preregistered_one(self):
         """C4 (CJ, 2026-11-13): two bridge clusters, fourteen two-facet.
@@ -120,10 +118,7 @@ class TestCommittedDataset:
         gold_path = DATASET / "gold_subgraph.json"
         assert gold_path.exists(), "gold_subgraph.json is missing"
         gold = json.loads(gold_path.read_text(encoding="utf-8"))["queries"]
-        support = {
-            q.id: q for q in load_queries(DATASET)
-            if q.category in SUPPORT_SET_CATEGORIES
-        }
+        support = {q.id: q for q in load_queries(DATASET) if q.category in SUPPORT_SET_CATEGORIES}
         assert set(gold) == set(support)
         for query_id, record in gold.items():
             q = support[query_id]
@@ -269,9 +264,7 @@ class TestValidatorCatches:
         unjudged_doc = {**GOOD_DOC, "id": "d2"}
         unjudged = {**GOOD_QUERY, "required": ["d1", "d2"]}
         d = _write_dataset(tmp_path, [GOOD_DOC, unjudged_doc], [unjudged])
-        assert any(
-            "required 'd2' is not in qrels at grade >= 1" in p for p in validate(d)
-        )
+        assert any("required 'd2' is not in qrels at grade >= 1" in p for p in validate(d))
 
     def test_present_but_empty_required_is_caught(self, tmp_path):
         bad_query = {**GOOD_QUERY, "required": []}
@@ -419,9 +412,7 @@ class TestValidatorCatches:
         }
         first = {**base, "id": "q1", "multihop_shape": "bridge"}
         second = {**base, "id": "q2", "multihop_shape": "two-facet"}
-        d = _write_dataset(
-            tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [first, second]
-        )
+        d = _write_dataset(tmp_path, [GOOD_DOC, {**GOOD_DOC, "id": "d2"}], [first, second])
         assert any("mixes multihop_shape" in p for p in validate(d))
 
     def test_a_shape_on_a_non_multi_hop_query_is_caught(self, tmp_path):

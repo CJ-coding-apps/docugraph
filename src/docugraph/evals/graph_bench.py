@@ -36,7 +36,7 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
 
-from docugraph.evals.dataset import sha256_file
+from docugraph.evals.dataset import BenchQuery, sha256_file
 
 # --- Registered numbers (docs/graph-bench-preregistration-2026-11-13.md) ---
 
@@ -156,8 +156,7 @@ def verify_fixture_manifest(fixture_dir: Path | str) -> list[str]:
     problems: list[str] = []
     if manifest.get("fixture") != FIXTURE_FORMAT:
         problems.append(
-            f"{manifest_path}: fixture format {manifest.get('fixture')!r} "
-            f"!= {FIXTURE_FORMAT!r}"
+            f"{manifest_path}: fixture format {manifest.get('fixture')!r} != {FIXTURE_FORMAT!r}"
         )
     for field in _REQUIRED_MANIFEST_FIELDS:
         if field not in manifest:
@@ -165,8 +164,7 @@ def verify_fixture_manifest(fixture_dir: Path | str) -> list[str]:
 
     if manifest.get("group_id") != GRAPH_GROUP_ID:
         problems.append(
-            f"{manifest_path}: group_id {manifest.get('group_id')!r} "
-            f"!= {GRAPH_GROUP_ID!r}"
+            f"{manifest_path}: group_id {manifest.get('group_id')!r} != {GRAPH_GROUP_ID!r}"
         )
 
     hashes = manifest.get("sha256")
@@ -180,9 +178,7 @@ def verify_fixture_manifest(fixture_dir: Path | str) -> list[str]:
                 continue
             actual = sha256_file(path)
             if actual != expected:
-                problems.append(
-                    f"{path}: sha256 {actual} != manifest {expected}"
-                )
+                problems.append(f"{path}: sha256 {actual} != manifest {expected}")
 
     installed = _installed_graphiti_version()
     declared = manifest.get("graphiti_version")
@@ -297,17 +293,14 @@ async def export_graph_fixture(store: Any, out_dir: Path | str) -> None:
     records: list[dict[str, Any]] = []
     for table in sorted(kinds):
         if kinds[table] == "NODE":
-            rows, _, _ = await driver.execute_query(
-                f"MATCH (n:`{table}`) RETURN n.*;"
-            )
+            rows, _, _ = await driver.execute_query(f"MATCH (n:`{table}`) RETURN n.*;")
             for row in rows or []:
                 records.append(
                     {
                         "kind": "node",
                         "table": table,
                         "row": {
-                            key.split(".", 1)[-1]: _jsonable(value)
-                            for key, value in row.items()
+                            key.split(".", 1)[-1]: _jsonable(value) for key, value in row.items()
                         },
                     }
                 )
@@ -332,8 +325,7 @@ async def export_graph_fixture(store: Any, out_dir: Path | str) -> None:
                         "src_label": src_label,
                         "dst_label": dst_label,
                         "row": {
-                            key.split(".", 1)[-1]: _jsonable(value)
-                            for key, value in row.items()
+                            key.split(".", 1)[-1]: _jsonable(value) for key, value in row.items()
                         },
                     }
                 )
@@ -412,9 +404,7 @@ def _from_json(value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _embedder_refusal(
-    fixture_manifest: Mapping[str, Any], embedder: Any
-) -> str | None:
+def _embedder_refusal(fixture_manifest: Mapping[str, Any], embedder: Any) -> str | None:
     """Why this embedder cannot stand in for the fixture's, or ``None``.
 
     Both the model id and the dimension must match: the same width with a
@@ -445,8 +435,7 @@ def graph_arm_statuses(
     """Every graph arm with its availability, so a report can list them all."""
     refusal = _embedder_refusal(fixture_manifest, embedder)
     return {
-        name: GraphArmStatus(available=refusal is None, reason=refusal)
-        for name in GRAPH_ARM_NAMES
+        name: GraphArmStatus(available=refusal is None, reason=refusal) for name in GRAPH_ARM_NAMES
     }
 
 
@@ -486,15 +475,17 @@ def build_graph_arms(
         return asyncio.run(_fact_arm(store, get_snapshot(), query, top_k))
 
     def rrf_plus_graph_2hop(query: str, top_k: int) -> list[tuple[str, float]]:
+        """The gate arm: RRF over ``vector``, ``fts`` and ``graph-2hop`` (§4.5)."""
         return _fuse(
-            _base_rrf(base_arms, query, top_k),
+            *_base_legs(base_arms, query, top_k),
             graph_2hop(query, top_k),
             top_k=top_k,
         )
 
     def rrf_plus_graph(query: str, top_k: int) -> list[tuple[str, float]]:
+        """The fallback gate arm: the same fusion with ``graph-entity``."""
         return _fuse(
-            _base_rrf(base_arms, query, top_k),
+            *_base_legs(base_arms, query, top_k),
             graph_entity(query, top_k),
             top_k=top_k,
         )
@@ -536,12 +527,8 @@ async def _load_snapshot(store: Any, doc_ids: frozenset[str]) -> _GraphSnapshot:
             )
 
     entities = await store._search_nodes([GRAPH_GROUP_ID])
-    mentions = {
-        entity["uuid"]: entity.pop("episodes", []) for entity in entities
-    }
-    facts = await store._edges_for_nodes(
-        [entity["uuid"] for entity in entities], [GRAPH_GROUP_ID]
-    )
+    mentions = {entity["uuid"]: entity.pop("episodes", []) for entity in entities}
+    facts = await store._edges_for_nodes([entity["uuid"] for entity in entities], [GRAPH_GROUP_ID])
     return _GraphSnapshot(
         entities=entities,
         facts=facts,
@@ -634,10 +621,7 @@ def _expand(
 
     ranked = sorted(chunk.items(), key=lambda item: (item[1][0], -item[1][1], -item[1][2], item[0]))
     ordered = ranked[:top_k]
-    return [
-        (name, float(len(ordered) - index))
-        for index, (name, _) in enumerate(ordered)
-    ]
+    return [(name, float(len(ordered) - index)) for index, (name, _) in enumerate(ordered)]
 
 
 async def _fact_arm(
@@ -656,9 +640,7 @@ async def _fact_arm(
 
     graphiti = await store._ensure_initialized()
     config = EDGE_HYBRID_SEARCH_RRF.model_copy(update={"limit": top_k})
-    result = await graphiti.search_(
-        query, config=config, group_ids=[GRAPH_GROUP_ID]
-    )
+    result = await graphiti.search_(query, config=config, group_ids=[GRAPH_GROUP_ID])
 
     ordered: list[str] = []
     seen: set[str] = set()
@@ -677,15 +659,18 @@ async def _fact_arm(
     return [(name, float(len(ordered) - index)) for index, name in enumerate(ordered)]
 
 
-def _base_rrf(base_arms: Mapping[str, Any], query: str, top_k: int) -> list[tuple[str, float]]:
-    """The comparator leg: the ``rrf`` arm when built, else vector+fts fused."""
-    if "rrf" in base_arms:
-        return list(base_arms["rrf"](query, top_k))
-    legs = [base_arms[name](query, top_k) for name in ("vector", "fts") if name in base_arms]
-    if not legs:
-        return []
-    fused = _fuse(*legs, top_k=top_k)
-    return fused
+def _base_legs(
+    base_arms: Mapping[str, Any], query: str, top_k: int
+) -> list[list[tuple[str, float]]]:
+    """The two base legs the fused arms add the graph leg to (WP §4.5).
+
+    ``rrf+graph-2hop`` is RRF over ``vector``, ``fts`` and ``graph-2hop``: the
+    pre-registration's "the only difference from the comparator is the added
+    leg" holds only if the comparator's own fusion is recomputed here rather
+    than reused. Fusing the ``rrf`` arm's truncated output with the graph leg
+    would give the graph leg half the weight instead of a third.
+    """
+    return [list(base_arms[name](query, top_k)) for name in ("vector", "fts") if name in base_arms]
 
 
 def _fuse(*rankings: Sequence[tuple[str, float]], top_k: int) -> list[tuple[str, float]]:
@@ -743,20 +728,16 @@ def metric_result(
     else:
         if len(clusters) != len(values):
             raise ValueError(
-                f"{len(clusters)} cluster ids for {len(values)} deltas: "
-                "one id per query"
+                f"{len(clusters)} cluster ids for {len(values)} deltas: one id per query"
             )
         groups: dict[str, list[float]] = {}
         for cluster, value in zip(clusters, values, strict=True):
             if not isinstance(cluster, str) or not cluster:
-                raise ValueError(
-                    f"cluster ids must be non-empty strings, got {cluster!r}"
-                )
+                raise ValueError(f"cluster ids must be non-empty strings, got {cluster!r}")
             groups.setdefault(cluster, []).append(value)
         if len(groups) < 2:
             raise ValueError(
-                "the cluster bootstrap needs at least two distinct clusters; "
-                f"got {len(groups)}"
+                f"the cluster bootstrap needs at least two distinct clusters; got {len(groups)}"
             )
         # The resampled statistic is the mean over every drawn query, exactly
         # as the pre-registration words it (equal cluster sizes in the bench).
@@ -838,20 +819,24 @@ def evaluate_gate(
 # ---------------------------------------------------------------------------
 
 
-def fidelity_row(fixture_dir: Path | str, gold_path: Path | str) -> dict[str, Any]:
-    """Extraction fidelity against the hand-verified gold subgraph.
+def _fixture_index(fixture_dir: Path | str) -> dict[str, Any]:
+    """Name maps, fact texts, and the documents each entity reaches.
 
-    Reports, over the whole gold file: the fraction of gold entity names present
-    after case-folding, the fraction of gold fact texts present, and (for
-    multi-hop queries) the fraction whose joining entity exists and reaches all
-    of the query's required documents through its extracted facts.
+    Scoped to the bench group: the fixture's other namespaces are not the graph
+    the arms search, so a gold name that exists only as a decoy elsewhere has
+    not been extracted for this bench.
 
-    ``gating`` is ``False`` and ``evaluate_gate`` takes nothing from this row:
-    the row diagnoses extractor weakness, it never decides the gate.
+    What a joining entity connects: the documents that mention it, plus the
+    documents reachable through the facts it takes part in -- the fact's own
+    episode and the documents mentioning the entity at its far end. That is
+    what "the entity connects two documents" means in a graph the extractor
+    built; a name that merely exists in one episode joins nothing.
     """
-    records = load_graph_fixture(fixture_dir)
-    gold = json.loads(Path(gold_path).read_text(encoding="utf-8"))
-    queries = gold.get("queries") or {}
+    records = [
+        record
+        for record in load_graph_fixture(fixture_dir)
+        if record.get("kind") != "node" or record["row"].get("group_id") in (None, GRAPH_GROUP_ID)
+    ]
 
     entity_names = {
         str(record["row"].get("name", "")).casefold()
@@ -870,17 +855,14 @@ def fidelity_row(fixture_dir: Path | str, gold_path: Path | str) -> dict[str, An
     }
 
     entity_by_name: dict[str, str] = {}
+    entities: dict[str, tuple[str, Sequence[float]]] = {}
     for record in records:
         if record["kind"] == "node" and record["table"] == "Entity":
-            entity_by_name[str(record["row"].get("name", "")).casefold()] = str(
-                record["row"].get("uuid")
-            )
+            name = str(record["row"].get("name", ""))
+            uuid = str(record["row"].get("uuid"))
+            entity_by_name[name.casefold()] = uuid
+            entities[uuid] = (name, record["row"].get("name_embedding") or ())
 
-    # What a joining entity connects: the documents that mention it, plus the
-    # documents reachable through the facts it takes part in -- the fact's own
-    # episode and the documents mentioning the entity at its far end. That is
-    # what "the entity connects two documents" means in a graph the extractor
-    # built; a name that merely exists in one episode joins nothing.
     mentions: dict[str, set[str]] = {}
     for record in records:
         if record["kind"] == "rel" and record["table"] == "MENTIONS":
@@ -892,8 +874,7 @@ def fidelity_row(fixture_dir: Path | str, gold_path: Path | str) -> dict[str, An
     for record in records:
         if record["kind"] == "node" and record["table"] == "RelatesToNode_":
             fact_episodes[str(record["row"].get("uuid"))] = {
-                episode_names.get(str(uuid), "")
-                for uuid in record["row"].get("episodes") or []
+                episode_names.get(str(uuid), "") for uuid in record["row"].get("episodes") or []
             }
 
     fact_ends: dict[str, tuple[str, str]] = {}
@@ -917,10 +898,36 @@ def fidelity_row(fixture_dir: Path | str, gold_path: Path | str) -> dict[str, An
             entity_docs.setdefault(entity_uuid, set()).update(episodes)
             entity_docs[entity_uuid].update(mentions.get(other, set()))
 
+    return {
+        "entity_names": entity_names,
+        "fact_texts": fact_texts,
+        "entity_by_name": entity_by_name,
+        "entities": entities,
+        "entity_docs": entity_docs,
+    }
+
+
+def fidelity_row(fixture_dir: Path | str, gold_path: Path | str) -> dict[str, Any]:
+    """Extraction fidelity against the hand-verified gold subgraph.
+
+    Reports, over the whole gold file: the fraction of gold entity names present
+    after case-folding, the fraction of gold fact texts present, and (for
+    multi-hop queries) the fraction whose joining entity exists and reaches all
+    of the query's required documents through its extracted facts.
+
+    ``gating`` is ``False`` and ``evaluate_gate`` takes nothing from this row:
+    the row diagnoses extractor weakness, it never decides the gate.
+    """
+    index = _fixture_index(fixture_dir)
+    entity_names = index["entity_names"]
+    fact_texts = index["fact_texts"]
+    entity_by_name = index["entity_by_name"]
+    entity_docs = index["entity_docs"]
+    gold = json.loads(Path(gold_path).read_text(encoding="utf-8"))
+    queries = gold.get("queries") or {}
+
     gold_entities = {
-        str(name).casefold()
-        for query in queries.values()
-        for name in query.get("entities") or []
+        str(name).casefold() for query in queries.values() for name in query.get("entities") or []
     }
     gold_facts = {
         str(fact).casefold().strip()
@@ -950,18 +957,99 @@ def fidelity_row(fixture_dir: Path | str, gold_path: Path | str) -> dict[str, An
             connected += 1
 
     return {
-        "entities_present": (
-            len(present_entities) / len(gold_entities) if gold_entities else 1.0
-        ),
+        "entities_present": (len(present_entities) / len(gold_entities) if gold_entities else 1.0),
         "missing_entities": missing_entities,
         "missing_facts": sorted(gold_facts - present_facts),
-        "facts_present": (
-            len(present_facts) / len(gold_facts) if gold_facts else 1.0
-        ),
+        "facts_present": (len(present_facts) / len(gold_facts) if gold_facts else 1.0),
         "joins_connected": (connected / len(multi_hop)) if multi_hop else 1.0,
         "multi_hop_queries": len(multi_hop),
         "gating": False,
     }
+
+
+def fidelity_per_query(fixture_dir: Path | str, gold_path: Path | str) -> dict[str, dict[str, Any]]:
+    """The fidelity row's components for each multi-hop query, one row each.
+
+    The aggregate row says the extractor missed something; this says *which*
+    pair, and whether the naming failure and the connectivity failure are the
+    same one. Descriptive and non-gating, like the row it decomposes.
+    """
+    index = _fixture_index(fixture_dir)
+    gold = json.loads(Path(gold_path).read_text(encoding="utf-8"))
+
+    rows: dict[str, dict[str, Any]] = {}
+    for query_id, query in (gold.get("queries") or {}).items():
+        if query.get("category") != "multi-hop" or not query.get("joining_entity"):
+            continue
+        joining = str(query["joining_entity"])
+        joining_uuid = index["entity_by_name"].get(joining.casefold())
+        required = {str(doc) for doc in query.get("documents") or []}
+        connected = index["entity_docs"].get(joining_uuid, set()) if joining_uuid else set()
+        gold_entities = {str(name).casefold() for name in query.get("entities") or []}
+        gold_facts = {str(fact).casefold().strip() for fact in query.get("facts") or []}
+        rows[query_id] = {
+            "joining_entity": joining,
+            "joining_present": joining_uuid is not None,
+            "documents": sorted(required),
+            "documents_connected": sorted(required & connected),
+            "joins_connected": bool(joining_uuid and required and required <= connected),
+            "missing_entities": sorted(gold_entities - index["entity_names"]),
+            "missing_facts": sorted(gold_facts - index["fact_texts"]),
+        }
+    return rows
+
+
+def entity_linking_recall(
+    fixture_dir: Path | str,
+    *,
+    embedder: Any,
+    queries: Sequence[BenchQuery],
+    gold_path: Path | str,
+) -> dict[str, dict[str, Any]]:
+    """Whether each multi-hop query's gold joining entity is among its seeds.
+
+    The seed rule is the arm's: the top ``SEED_CAP`` bench entities by
+    ``(-cosine(query, name_embedding), uuid)``. An entity the extractor never
+    named cannot be linked by any arm, so this is the diagnostic that tells a
+    retriever miss apart from an extractor miss. Descriptive, never gating.
+    """
+    index = _fixture_index(fixture_dir)
+    gold = json.loads(Path(gold_path).read_text(encoding="utf-8"))
+    gold_queries = gold.get("queries") or {}
+
+    rows: dict[str, dict[str, Any]] = {}
+    for query in queries:
+        gold_row = gold_queries.get(query.id)
+        if not gold_row or gold_row.get("category") != "multi-hop":
+            continue
+        joining = gold_row.get("joining_entity")
+        joining_folded = str(joining).casefold() if joining else ""
+
+        query_vector = embedder.embed_query(query.text)
+        scored = sorted(
+            (
+                (_cosine(query_vector, embedding), str(uuid), str(name))
+                for uuid, (name, embedding) in index["entities"].items()
+            ),
+            key=lambda item: (-item[0], item[1]),
+        )
+        seeds = scored[:SEED_CAP]
+        rank = next(
+            (
+                position
+                for position, (_, _, name) in enumerate(seeds, start=1)
+                if name.casefold() == joining_folded
+            ),
+            None,
+        )
+        rows[query.id] = {
+            "joining_entity": joining,
+            "joining_present": joining_folded in index["entity_names"],
+            "linked": rank is not None,
+            "seed_rank": rank,
+            "seeds": len(seeds),
+        }
+    return rows
 
 
 __all__ = [
@@ -987,8 +1075,10 @@ __all__ = [
     "SEED_CAP",
     "SET_RECALL_THRESHOLD",
     "build_graph_arms",
+    "entity_linking_recall",
     "evaluate_gate",
     "export_graph_fixture",
+    "fidelity_per_query",
     "fidelity_row",
     "graph_arm_statuses",
     "import_graph_fixture",

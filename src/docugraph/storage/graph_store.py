@@ -687,9 +687,7 @@ class GraphStore:
             for row in records or []:
                 entity = entities.get(row["n.uuid"])
                 if entity is not None:
-                    entity["episodes"].append(
-                        {"uuid": row["ep.uuid"], "name": row["ep.name"]}
-                    )
+                    entity["episodes"].append({"uuid": row["ep.uuid"], "name": row["ep.name"]})
 
         rows = [entities[uuid] for uuid in sorted(entities)]
         return rows[:limit] if limit is not None else rows

@@ -52,8 +52,24 @@ class TestPreregisteredNumbers:
 class TestBootstrap:
     def test_fixed_seed_reproduces_the_interval(self):
         """G1: same queries, same seed, same bounds -- exactly."""
-        deltas = [-0.1, 0.0, 0.05, 0.2, 0.3, 0.15, -0.02, 0.4,
-                  -0.2, 0.1, 0.25, 0.0, 0.05, 0.12, 0.3, 0.08]
+        deltas = [
+            -0.1,
+            0.0,
+            0.05,
+            0.2,
+            0.3,
+            0.15,
+            -0.02,
+            0.4,
+            -0.2,
+            0.1,
+            0.25,
+            0.0,
+            0.05,
+            0.12,
+            0.3,
+            0.08,
+        ]
         first = gb.metric_result(deltas, threshold=gb.NDCG_THRESHOLD)
         second = gb.metric_result(deltas, threshold=gb.NDCG_THRESHOLD)
         assert (
@@ -82,8 +98,24 @@ class TestClusterBootstrap:
     is indistinguishable from the correct one.
     """
 
-    DELTAS = [-0.10, -0.06, -0.05, -0.01, 0.00, 0.04, 0.05, 0.09,
-              0.10, 0.14, 0.15, 0.19, 0.20, 0.24, 0.25, 0.29]
+    DELTAS = [
+        -0.10,
+        -0.06,
+        -0.05,
+        -0.01,
+        0.00,
+        0.04,
+        0.05,
+        0.09,
+        0.10,
+        0.14,
+        0.15,
+        0.19,
+        0.20,
+        0.24,
+        0.25,
+        0.29,
+    ]
     CLUSTERS = [f"cluster-{index // 2}" for index in range(16)]
 
     # Pinned bounds. They pin the output; the seed and the resample count are
@@ -94,9 +126,7 @@ class TestClusterBootstrap:
     GOLDEN_PER_QUERY = (0.03875, 0.15125)
 
     def _clustered(self) -> gb.MetricResult:
-        return gb.metric_result(
-            self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=self.CLUSTERS
-        )
+        return gb.metric_result(self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=self.CLUSTERS)
 
     def test_clustered_interval_is_reproducible(self):
         """G1 for the primary interval: same clusters, same seed, same bounds."""
@@ -161,15 +191,11 @@ class TestClusterBootstrap:
     def test_a_single_cluster_is_refused(self):
         """One cluster resamples to itself: a zero-width, false-certainty CI."""
         with pytest.raises(ValueError, match="at least two distinct clusters"):
-            gb.metric_result(
-                self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=["only"] * 16
-            )
+            gb.metric_result(self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=["only"] * 16)
 
     def test_cluster_ids_must_be_non_empty_strings(self):
         with pytest.raises(ValueError, match="non-empty strings"):
-            gb.metric_result(
-                self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=[None] * 16
-            )
+            gb.metric_result(self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=[None] * 16)
 
     def test_point_estimate_stays_the_mean_over_queries(self):
         clustered = self._clustered()
@@ -199,9 +225,7 @@ class TestClusterBootstrap:
 
     def test_one_cluster_id_per_query_is_required(self):
         with pytest.raises(ValueError, match="one id per query"):
-            gb.metric_result(
-                self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=self.CLUSTERS[:-1]
-            )
+            gb.metric_result(self.DELTAS, threshold=gb.NDCG_THRESHOLD, clusters=self.CLUSTERS[:-1])
 
 
 class TestGateOnSyntheticArms:
@@ -232,9 +256,7 @@ class TestGateOnSyntheticArms:
         noise = [0.3 if (index // 2) % 2 == 0 else -0.3 for index in range(16)]
 
         better_outcome = gb.evaluate_gate(
-            ndcg=gb.metric_result(
-                better, threshold=gb.NDCG_THRESHOLD, clusters=clusters
-            ),
+            ndcg=gb.metric_result(better, threshold=gb.NDCG_THRESHOLD, clusters=clusters),
             set_recall=gb.metric_result(
                 better, threshold=gb.SET_RECALL_THRESHOLD, clusters=clusters
             ),
@@ -243,9 +265,7 @@ class TestGateOnSyntheticArms:
         assert better_outcome == gb.OUTCOME_MET
 
         noise_outcome = gb.evaluate_gate(
-            ndcg=gb.metric_result(
-                noise, threshold=gb.NDCG_THRESHOLD, clusters=clusters
-            ),
+            ndcg=gb.metric_result(noise, threshold=gb.NDCG_THRESHOLD, clusters=clusters),
             set_recall=gb.metric_result(
                 noise, threshold=gb.SET_RECALL_THRESHOLD, clusters=clusters
             ),
@@ -265,10 +285,7 @@ class TestOutcomeMapping:
         ndcg = self._met(gb.NDCG_THRESHOLD)
         recall = self._met(gb.SET_RECALL_THRESHOLD)
         assert gb.metric_outcome(ndcg) == gb.OUTCOME_MET
-        assert (
-            gb.evaluate_gate(ndcg=ndcg, set_recall=recall, regression_ok=True)
-            == gb.OUTCOME_MET
-        )
+        assert gb.evaluate_gate(ndcg=ndcg, set_recall=recall, regression_ok=True) == gb.OUTCOME_MET
 
     def test_b_ci_upper_bound_below_threshold_is_not_met(self):
         """G3(b)."""
@@ -278,15 +295,12 @@ class TestOutcomeMapping:
         recall = self._met(gb.SET_RECALL_THRESHOLD)
         assert gb.metric_outcome(ndcg) == gb.OUTCOME_NOT_MET
         assert (
-            gb.evaluate_gate(ndcg=ndcg, set_recall=recall, regression_ok=True)
-            == gb.OUTCOME_NOT_MET
+            gb.evaluate_gate(ndcg=ndcg, set_recall=recall, regression_ok=True) == gb.OUTCOME_NOT_MET
         )
 
     def test_c_ci_spanning_zero_with_point_above_threshold_is_inconclusive(self):
         """G3(c): the point estimate clears the bar, the interval does not."""
-        ndcg = gb.MetricResult(
-            point=0.2, ci_lower=-0.1, ci_upper=0.4, threshold=gb.NDCG_THRESHOLD
-        )
+        ndcg = gb.MetricResult(point=0.2, ci_lower=-0.1, ci_upper=0.4, threshold=gb.NDCG_THRESHOLD)
         recall = self._met(gb.SET_RECALL_THRESHOLD)
         assert gb.metric_outcome(ndcg) == gb.OUTCOME_INCONCLUSIVE
         assert (
@@ -321,9 +335,7 @@ class TestOutcomeMapping:
 
         def outcome(deltas, *, gate_arm=gb.GATE_ARM):
             return gb.evaluate_gate(
-                ndcg=gb.metric_result(
-                    deltas, threshold=gb.NDCG_THRESHOLD, clusters=clusters
-                ),
+                ndcg=gb.metric_result(deltas, threshold=gb.NDCG_THRESHOLD, clusters=clusters),
                 set_recall=gb.metric_result(
                     deltas, threshold=gb.SET_RECALL_THRESHOLD, clusters=clusters
                 ),
@@ -339,9 +351,7 @@ class TestOutcomeMapping:
         disagreement = [0.6 if (index // 2) % 2 == 0 else -0.4 for index in range(16)]
         assert outcome(disagreement) == gb.OUTCOME_INCONCLUSIVE
         # (d) the same (b) under the 1-hop fallback is not a fair test.
-        assert outcome([0.00, 0.02] * 8, gate_arm=gb.FALLBACK_GATE_ARM) == (
-            gb.OUTCOME_INCONCLUSIVE
-        )
+        assert outcome([0.00, 0.02] * 8, gate_arm=gb.FALLBACK_GATE_ARM) == (gb.OUTCOME_INCONCLUSIVE)
 
     def test_regression_failure_is_not_met(self):
         assert (
@@ -355,9 +365,7 @@ class TestOutcomeMapping:
 
 
 class TestFidelityRow:
-    def test_missing_gold_entity_is_reported_and_the_gate_is_unaffected(
-        self, synthetic, tmp_path
-    ):
+    def test_missing_gold_entity_is_reported_and_the_gate_is_unaffected(self, synthetic, tmp_path):
         """P1: the fidelity row diagnoses the extractor; it never gates.
 
         Gold names are lowercase on purpose: the row normalises names, so the
@@ -387,13 +395,10 @@ class TestFidelityRow:
         assert row["gating"] is False, "the fidelity row is declared non-gating"
 
         # The gate ignores the row entirely: full fidelity is not an input.
-        met = gb.MetricResult(
-            point=0.2, ci_lower=0.1, ci_upper=0.4, threshold=gb.NDCG_THRESHOLD
-        )
+        met = gb.MetricResult(point=0.2, ci_lower=0.1, ci_upper=0.4, threshold=gb.NDCG_THRESHOLD)
         met_recall = gb.MetricResult(
             point=0.2, ci_lower=0.1, ci_upper=0.4, threshold=gb.SET_RECALL_THRESHOLD
         )
         assert (
-            gb.evaluate_gate(ndcg=met, set_recall=met_recall, regression_ok=True)
-            == gb.OUTCOME_MET
+            gb.evaluate_gate(ndcg=met, set_recall=met_recall, regression_ok=True) == gb.OUTCOME_MET
         )

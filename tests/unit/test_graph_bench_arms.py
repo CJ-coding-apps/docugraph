@@ -54,9 +54,7 @@ class TestNoLLMInTheQueryPath:
 
 class TestEmbedderRefusal:
     def _assert_all_refused(self, manifest, embedder):
-        statuses = gb.graph_arm_statuses(
-            fixture_manifest=manifest, embedder=embedder
-        )
+        statuses = gb.graph_arm_statuses(fixture_manifest=manifest, embedder=embedder)
         assert set(statuses) == ALL_GRAPH_ARMS
         for arm_name, status in statuses.items():
             assert status.available is False, f"{arm_name} accepted a bad embedder"
@@ -93,11 +91,48 @@ class TestEmbedderRefusal:
         name must be refused exactly like a cloud one.
         """
         manifest = gb.load_fixture_manifest(synthetic)
-        impostor = KeywordEmbedder(
-            model_name="bench-embedder-impostor", dimensions=SYNTH_DIM
-        )
+        impostor = KeywordEmbedder(model_name="bench-embedder-impostor", dimensions=SYNTH_DIM)
         assert impostor.dimensions == manifest["embedder"]["dimensions"]
         self._assert_all_refused(manifest, impostor)
+
+
+class TestFusionIsThreeLegs:
+    def test_the_fused_arms_fuse_vector_fts_and_the_graph_leg(self, synthetic, tmp_path):
+        """§4.5: ``rrf+graph-2hop`` is RRF over ``vector``, ``fts`` and the arm.
+
+        The comparator's own truncated output is not a leg. Fusing it with the
+        graph leg gives that leg half the weight instead of a third, and is not
+        the registered recipe. The ``rrf`` arm below returns a sentinel that
+        appears nowhere else, so its presence proves the wrong recipe ran.
+        """
+
+        def vector(query: str, top_k: int) -> list[tuple[str, float]]:
+            return [("bench-doc-c", 1.0)]
+
+        def fts(query: str, top_k: int) -> list[tuple[str, float]]:
+            return [("bench-doc-d", 0.5)]
+
+        def rrf(query: str, top_k: int) -> list[tuple[str, float]]:
+            return [("sentinel-rrf-only", 1.0)]
+
+        results = run_fixture_arms(
+            synthetic,
+            ["alpha"],
+            db_path=tmp_path / "db-fusion",
+            embedder=KeywordEmbedder(),
+            doc_ids=SYNTH_DOC_IDS,
+            base_arms={"vector": vector, "fts": fts, "rrf": rrf},
+        )
+
+        for arm_name in ("rrf+graph", "rrf+graph-2hop"):
+            returned = [chunk_id for chunk_id, _ in results[arm_name][0]]
+            assert "sentinel-rrf-only" not in returned, (
+                f"{arm_name} fused the comparator's output; §4.5 fuses "
+                "vector, fts and the graph leg"
+            )
+            assert {"bench-doc-c", "bench-doc-d"} <= set(returned), (
+                f"{arm_name} dropped a base leg: {returned}"
+            )
 
 
 class TestNamespace:
@@ -121,11 +156,7 @@ class TestNamespace:
                 f"{arm_name} returned the group_id='other' decoy episode"
             )
 
-        entity_ids = {
-            chunk_id
-            for row in results["graph-entity"]
-            for chunk_id, _ in row
-        }
+        entity_ids = {chunk_id for row in results["graph-entity"] for chunk_id, _ in row}
         assert "bench-doc-a" in entity_ids, (
             "the bench episode that mentions the matching entity was not returned; "
             "the arm is not searching the bench graph"
