@@ -385,6 +385,18 @@ jobs:
           fi
           sha256sum "$RUNNER_TEMP/graph-bench-0.json" "$RUNNER_TEMP/graph-bench-1.json"
 
+      # The report is a diagnostic even when the gate is not asserted, and it
+      # is the only way to compare a runner's numbers against the committed
+      # baseline (the environment block records the interpreter and library
+      # versions, so a cross-machine byte match is not expected).
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graph-bench-report
+          path: ${{ runner.temp }}/graph-bench-0.json
+          if-no-files-found: ignore
+
   docker:
     # Builds the image but never publishes it: docker-publish.yml owns pushing,
     # and that only triggers on a tag. This job exists so a dependency change
