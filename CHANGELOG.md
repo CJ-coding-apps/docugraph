@@ -11,6 +11,41 @@ module under `docugraph.*` is internal.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
+### Added
+
+- **A retrieval-quality benchmark, and its committed baseline.**
+  `python -m docugraph.evals.graph_report` scores the retrieval arms (vector, FTS, the RRF hybrids,
+  the weighted fusion and the graph variants) over a 104-query corpus and writes
+  `benchmarks/retrieval/baselines/bge-small-en-v1.5-graph.json`; the corpus and the extraction
+  fixture it reads are committed under `benchmarks/retrieval/`, so the bench runs with no key and no
+  network reachability to an LLM. `python -m docugraph.evals.build_graph_fixture` builds that
+  fixture. CI runs the bench on every push and asserts that two fresh processes in the same job are
+  byte-identical.
+
+### Fixed
+
+- **Extraction with an Ollama model writes nodes again.** Graphiti's client defaulted to
+  `json_schema` output enforcement, which Ollama ignores for the configured model; extraction failed
+  with a pydantic `ValidationError` before any node was written. The Ollama path now requests
+  `json_object` mode, where Graphiti appends the response schema to the prompt.
+- **A model that repeats the schema is retried once, then reported.** A `properties` echo envelope is
+  unwrapped (only when the target model declares no `properties` field and the envelope carries
+  nothing but schema keys), one corrective message is sent, and a second echo raises
+  `EmptyResponseError` instead of ingesting a fabricated value.
+
+### Notes
+
+- **The multi-hop retrieval gate is NOT MET, and the ceiling is recorded with it.** The
+  pre-registered comparison of `rrf+graph-2hop` against `rrf` measured nDCG@10 −0.0056
+  [−0.0194, +0.0050] and set_recall@10 +0.0000, against thresholds of +0.05 and +0.10. The
+  comparator already reaches set_recall@10 = 1.000, full_support@10 = 1.000 and nDCG@10 = 0.984 on
+  the 32 multi-hop queries, so the maximum attainable gain was +0.016 nDCG@10 and 0 set_recall@10:
+  the set is saturated at k=10 over 107 documents, which is not evidence that graph retrieval cannot
+  help multi-hop. No headroom rule was pre-registered, so the outcome is not relabelled. Nothing is
+  built on the graph leg in this release.
+
 ## [0.4.0] - 2026-11-09
 
 ### Added
@@ -187,7 +222,8 @@ First public release, on PyPI.
   as a migration boundary rather than a floor.
 - URL crawling needs Playwright's Chromium (`playwright install chromium`).
 
-[Unreleased]: https://github.com/CJ-coding-apps/docugraph/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/CJ-coding-apps/docugraph/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/CJ-coding-apps/docugraph/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CJ-coding-apps/docugraph/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/CJ-coding-apps/docugraph/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/CJ-coding-apps/docugraph/compare/v0.2.0...v0.2.1
